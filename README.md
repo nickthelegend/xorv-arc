@@ -50,7 +50,7 @@ deployed on a public network yet: the shared deployer is unfunded (see [Status](
 | Piece | What it does in Xorv | Contract / file | How verified |
 |---|---|---|---|
 | **USDC gas + sub-second finality** | One token for everything. Buyers hold USDC only and sign typed data; the broker's facilitator, keeper and relayer pay gas in USDC (≈ 0.01 USDC of gas per job). Releases are final on inclusion. | `packages/protocol/src/chains.ts` (native USDC 18-dec / ERC-20 6-dec), `x402.ts` | Arc-fork e2e: buyer nonce stays 0, balances checked in both views |
-| **x402 in USDC** | Per-request payment for each job: `escrow` scheme (EIP-3009 `receiveWithAuthorization` into XorvEscrow, nonce bound to the job) and `exact`. The broker self-hosts the facilitator (Arc has no public one). | `packages/protocol/src/{x402,x402-client,escrow}.ts`, `services/broker/src/app.ts` | 281 protocol + 300 broker tests; Arc-fork e2e pays through Circle's real FiatToken (`"USDC"`/`"2"`) |
+| **x402 in USDC** | Per-request payment for each job: `escrow` scheme (EIP-3009 `receiveWithAuthorization` into XorvEscrow, nonce bound to the job) and `exact`. The broker self-hosts the facilitator (Arc has no public one). | `packages/protocol/src/{x402,x402-client,escrow}.ts`, `services/broker/src/app.ts` | 284 protocol + 300 broker tests; Arc-fork e2e pays through Circle's real FiatToken (`"USDC"`/`"2"`) |
 | **XorvEscrow** | Holds each job's USDC: release on delivery, refund on failure/cancel/deadline, reassign to another provider. Per-job cap (100 USDC), fee capped at 5 % (0 live), owner can never move escrowed funds. | [`contracts/src/XorvEscrow.sol`](contracts/src/XorvEscrow.sol) | 62 unit + 4 invariant Foundry tests; Arc testnet fork tests with real USDC |
 | **ERC-8004 (headline)** | Every provider is an agent in Arc's Identity Registry. **XorvReputation** writes each escrow release (100) and at-fault refund (0) to the Reputation Registry (`successRate` / `xorv-escrow`, feedbackHash = job id); XorvLedger relays buyer ratings (`starred`); the Kimi verifier writes `xorv-verified`. The Qwen router reads all of it to pick providers. | [`contracts/src/XorvReputation.sol`](contracts/src/XorvReputation.sol), `packages/contracts/contracts/XorvLedger.sol`, `services/broker/src/{arc,ratings}.ts`, `services/indexer` | 18 unit tests; fork tests against the **real** Arc testnet registries; Arc-fork e2e: register → bind → release writes value 100 from XorvReputation, rating 95 from XorvLedger |
 | **Circle Gateway** | A buyer's unified USDC balance on Base, Ethereum, Arbitrum, OP, Polygon, Avalanche or Arc; one EIP-712 burn intent, Circle attests, the broker calls `GatewayMinter.gatewayMint` on Arc, then the buyer pays. | `packages/protocol/src/gateway.ts`, `services/broker/src/arc.ts` (`/api/gateway*`), app top-up panel | Unit tests (intent built and checked field by field, forged signature refused before Circle); **live against Circle's testnet Gateway API** (balances; a correctly signed intent refused only for the empty balance). Spending a real balance is user-run |
@@ -134,11 +134,16 @@ Faucet: <https://faucet.circle.com> ("Arc Testnet"); that USDC is also your gas.
 |---|---|---:|
 | Solidity (escrow, reputation, CCIP via Chainlink Local) | `cd contracts && forge test` | 105 |
 | Solidity on an Arc testnet fork (real USDC, ERC-8004, CCIP router, CCTP) | `cd contracts && ARC_FORK_TESTS=1 arc-forge test --network arc` | +10 |
-| `@xorv/protocol` | `pnpm --filter @xorv/protocol test` | 281 |
+| `@xorv/protocol` | `pnpm --filter @xorv/protocol test` | 284 |
 | `@xorv/broker` | `pnpm --filter @xorv/broker test` | 300 |
+| `@xorv/cli` (incl. `xorv withdraw`, `xorv identity bind`) | `pnpm --filter @xorv/cli test` | 300 |
+| `@xorv/mcp` (incl. `xorv_ccip_quote`) | `pnpm --filter @xorv/mcp test` | 93 |
+| `@xorv/mm-plugin` | `pnpm --filter @xorv/mm-plugin test` | 74 |
+| XorvLedger (Hardhat, real ERC-8004 v2 code) | `pnpm --filter @xorv/contracts test` | 48 |
+| `xorv-app` / `xorv-landing` | `pnpm --filter xorv-app test` | 148 / 24 |
 | Indexer | `cd services/indexer && pnpm check` | 69 |
-| CLI, MCP, MetaMask plugin, XorvLedger (Hardhat), apps | `pnpm test` | see each package |
-| Arc-fork end to end | `pnpm e2e:arc` | 68 on-chain checks |
+| Arc-fork end to end: escrow, Memo, ERC-8004, CCIP, keeper, CCTP, Gateway | `pnpm e2e:arc` | 68 on-chain checks |
+| Arc-fork end to end: CLI, MCP, private jobs, AI roles | `pnpm e2e` | 195 on-chain checks |
 
 ## Deploy to mainnet
 
