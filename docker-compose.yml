@@ -1,29 +1,38 @@
-# Xorv broker on Monad.
+# Xorv broker on Arc.
 #
 #   docker compose up --build           broker only (SQLite in the xorv-data volume)
 #   docker compose --profile mongo up   plus MongoDB; set XORV_MONGO_URI=mongodb://mongo:27017
 #
 # Compose reads the root .env for the ${…} values below, so `cp .env.example
 # .env` and fill in what you have. No variable is required: with none set the
-# broker boots on Monad testnet, settles payments through the hosted
-# facilitator and runs the ledger read-only. .env.example says what each key
-# adds. Only the variables listed here reach the container.
+# broker boots on Arc testnet read-only (no facilitator key = payments off).
+# .env.example says what each key adds. Only the variables listed here reach
+# the container.
 services:
   broker:
     build: .
     ports:
       - "8402:8402"
     environment:
-      XORV_NETWORK: ${XORV_NETWORK:-eip155:10143}
+      XORV_NETWORK: ${XORV_NETWORK:-eip155:5042002}
       XORV_RPC_URL: ${XORV_RPC_URL:-}
       XORV_EXPLORER_URL: ${XORV_EXPLORER_URL:-}
-      # Broker EOA (ledger writes, rating relays) and the facilitator EOA
-      # (settlement gas; defaults to the operator). Both need MON, above
-      # Monad's ~10 MON per-account reserve.
+      # Broker EOA (ledger writes, rating relays, Gateway mints) and the
+      # facilitator EOA (the escrow's attester; settlement gas; defaults to the
+      # operator). Arc pays gas in USDC: both need a little USDC.
       XORV_OPERATOR_KEY: ${XORV_OPERATOR_KEY:-}
       XORV_FACILITATOR_KEY: ${XORV_FACILITATOR_KEY:-}
       XORV_FACILITATOR: ${XORV_FACILITATOR:-}
       XORV_LEDGER_ADDRESS: ${XORV_LEDGER_ADDRESS:-}
+      XORV_ESCROW_ADDRESS: ${XORV_ESCROW_ADDRESS:-}
+      XORV_ESCROW_DEADLINE_S: ${XORV_ESCROW_DEADLINE_S:-}
+      XORV_REPUTATION_ADDRESS: ${XORV_REPUTATION_ADDRESS:-}
+      XORV_CCIP_RECEIVER_ADDRESS: ${XORV_CCIP_RECEIVER_ADDRESS:-}
+      XORV_CCIP_SENDERS: ${XORV_CCIP_SENDERS:-}
+      XORV_CCIP_DEADLINE_S: ${XORV_CCIP_DEADLINE_S:-}
+      XORV_KEEPER: ${XORV_KEEPER:-on}
+      XORV_KEEPER_KEY: ${XORV_KEEPER_KEY:-}
+      XORV_MEMO: ${XORV_MEMO:-on}
       XORV_LEDGER_FROM_BLOCK: ${XORV_LEDGER_FROM_BLOCK:-}
       XORV_HEARTBEAT_PUBLISH_EVERY: ${XORV_HEARTBEAT_PUBLISH_EVERY:-20}
       XORV_RECEIPT_BATCH_MS: ${XORV_RECEIPT_BATCH_MS:-4000}
@@ -43,7 +52,7 @@ services:
       XORV_STABLECOIN_NAME: ${XORV_STABLECOIN_NAME:-}
       XORV_STABLECOIN_VERSION: ${XORV_STABLECOIN_VERSION:-}
       XORV_MONGO_URI: ${XORV_MONGO_URI:-}
-      XORV_MONGO_DB: ${XORV_MONGO_DB:-xorv_monad}
+      XORV_MONGO_DB: ${XORV_MONGO_DB:-xorv_arc}
       # AI roles — each on when its key is set (auto); see .env.example.
       XORV_ROUTER: ${XORV_ROUTER:-auto}
       XORV_SCREENER: ${XORV_SCREENER:-auto}
@@ -64,16 +73,6 @@ services:
       XORV_HUNYUAN_API_KEY: ${XORV_HUNYUAN_API_KEY:-}
       XORV_HUNYUAN_BASE_URL: ${XORV_HUNYUAN_BASE_URL:-}
       XORV_HUNYUAN_MODEL: ${XORV_HUNYUAN_MODEL:-}
-      # Nansen wallet trust — off unless asked for; see .env.example and docs/NANSEN.md.
-      XORV_NANSEN_MODE: ${XORV_NANSEN_MODE:-off}
-      XORV_NANSEN_PAYER_KEY: ${XORV_NANSEN_PAYER_KEY:-}
-      NANSEN_API_KEY: ${NANSEN_API_KEY:-}
-      XORV_NANSEN_PER_CALL_CAP: ${XORV_NANSEN_PER_CALL_CAP:-50000}
-      XORV_NANSEN_DAILY_CAP: ${XORV_NANSEN_DAILY_CAP:-1000000}
-      XORV_NANSEN_PIN_PAYTO: ${XORV_NANSEN_PIN_PAYTO:-}
-      XORV_NANSEN_SMART_MONEY: ${XORV_NANSEN_SMART_MONEY:-on}
-      XORV_NANSEN_RATING_GUARD: ${XORV_NANSEN_RATING_GUARD:-on}
-      XORV_NANSEN_REFRESH_MINUTES: ${XORV_NANSEN_REFRESH_MINUTES:-360}
       # XORV_DB and XORV_BROKER_PORT are fixed by the image (/data, 8402).
     volumes:
       # Jobs, lifetime earnings and private-job vaults. Without this they go

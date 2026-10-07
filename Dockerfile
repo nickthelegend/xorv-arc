@@ -1,4 +1,4 @@
-# Xorv broker on Monad.
+# Xorv broker on Arc.
 #
 #   docker build -t xorv-broker .
 #   docker run -p 8402:8402 -v xorv-data:/data --env-file .env xorv-broker
@@ -64,10 +64,10 @@ COPY --from=build /app/services/broker/package.json services/broker/
 COPY --from=build /app/services/broker/dist services/broker/dist
 
 # Jobs, lifetime earnings and private-job vaults live here; mount a volume or
-# they go with the container. A Monad-specific file name, so a volume that
+# they go with the container. An Arc-specific file name, so a volume that
 # held the Hedera broker's xorv.db is never read as this one.
 RUN mkdir -p /data && chown node:node /data
-ENV XORV_DB=/data/xorv-monad.db \
+ENV XORV_DB=/data/xorv-arc.db \
     XORV_BROKER_PORT=8402
 VOLUME ["/data"]
 

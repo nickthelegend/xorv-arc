@@ -3,11 +3,13 @@
  *
  *   pnpm build && pnpm e2e
  *
- * 1. Forks Monad testnet locally (Hardhat 3 / EDR, chain id 5042002), so Circle's
- *    real USDC and the canonical ERC-8004 registries are there.
- * 2. Funds the parties (MON by hardhat_setBalance, USDC minted through the
- *    token's own masterMinter) and deploys XorvLedger with the contracts
- *    package's deploy script.
+ * 1. Forks Arc testnet locally (Arc Foundry's arc-anvil, chain id 5042002), so
+ *    Circle's real USDC (also the gas token), Arc's Memo and the canonical
+ *    ERC-8004 registries are there.
+ * 2. Funds the parties with USDC (anvil_setBalance: on Arc the native balance
+ *    is the USDC balance) and deploys with the real deploy script
+ *    (scripts/deploy.sh local). This run pays providers directly (x402
+ *    `exact`); `pnpm e2e:arc` covers the escrow, CCIP, CCTP and Gateway.
  * 3. Starts the real broker (services/broker/dist) against the fork, with a
  *    self-hosted facilitator, a ledger writer, and its three AI roles pointed
  *    at a local OpenAI-compatible mock.
@@ -19,8 +21,9 @@
  *    report to e2e/last-run.md, and tears every process down — on success,
  *    failure or Ctrl-C.
  *
- * Needs network access to the Monad testnet RPC (the fork reads state from
- * it); nothing else, and no keys: every key is generated for the run.
+ * Needs Arc Foundry (ARC_ANVIL / ARC_FORGE) and network access to the Arc
+ * testnet RPC (the fork reads state from it); no keys: every key is
+ * generated for the run.
  */
 
 import fs from "node:fs";
@@ -31,10 +34,11 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { getAddress, keccak256, parseAbi, toHex, type Address, type Hex } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import {
   ARC_TESTNET,
   REPUTATION_ABI,
+  memoEventsIn,
   capabilityString,
   deriveInboxKeys,
   formatUsdc,
@@ -52,7 +56,7 @@ import {
   type QuoteResponse,
 } from "@xorv/protocol";
 import { brokerApi, getJob, payQuote, waitForJob } from "./api.js";
-import { FIAT_TOKEN_ABI, deployLedger, fundUsdc, setMon, startFork, waitUntil, type Fork } from "./chain.js";
+import { FIAT_TOKEN_ABI, deployArc, setUsdc, startFork, waitUntil, type Fork } from "./chain.js";
 import { cleanEnv, sealedBrokerEnv } from "./env.js";
 import { BLOCK_MARKER, VERIFIER_SCORE, answerToken, startMockLlm, type MockLlm } from "./mock-llm.js";
 import {
@@ -70,7 +74,6 @@ import { Report, bold, dim } from "./report.js";
 
 const REPO = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const E2E_DIR = path.join(REPO, "e2e");
-const CONTRACTS_DIR = path.join(REPO, "packages", "contracts");
 const BROKER_ENTRY = path.join(REPO, "services", "broker", "dist", "index.js");
 const CLI_ENTRY = path.join(REPO, "packages", "cli", "dist", "index.js");
 const MCP_ENTRY = path.join(REPO, "packages", "mcp", "dist", "index.js");
@@ -90,8 +93,14 @@ const USDC = NET.usdc.address;
 const IDENTITY = NET.erc8004.identity;
 const REPUTATION = NET.erc8004.reputation;
 
-/** What the buyer is minted, and what each job and rating is. */
+const ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
+/** anvil's dev account 0: the deployer on this fork only. */
+const DEPLOYER_KEY = toHex(mnemonicToAccount(ANVIL_MNEMONIC, { addressIndex: 0 }).getHdKey().privateKey!);
+
+/** What the buyer is funded with, and what each job and rating is. */
 const BUYER_USDC = 5_000_000n; // 5 USDC
+/** The provider's gas money for `xorv identity register` (Arc pays gas in USDC). */
+const PROVIDER_GAS_USDC = 2_000_000n;
 const CLI_RATING = 87;
 const MCP_RATING = 64;
 const PROVIDER_LABEL = "e2e-provider";
@@ -212,8 +221,8 @@ function party(): Party {
 }
 
 async function main(): Promise<void> {
-  const forkUrl = process.env.MONAD_FORK_URL?.trim() || NET.rpcUrl;
-  const forkBlock = process.env.MONAD_FORK_BLOCK?.trim() || null;
+  const forkUrl = process.env.ARC_FORK_URL?.trim() || NET.rpcUrl;
+  const forkBlock = process.env.ARC_FORK_BLOCK?.trim() || null;
 
   // ---------------------------------------------------------------------------
   await report.step("preflight", async (note) => {
@@ -235,7 +244,7 @@ async function main(): Promise<void> {
   report.fact("operator (broker EOA: ledger writes, rating relay, Kimi feedback)", parties.operator.address, "parties");
   report.fact("facilitator (submits EIP-3009 authorizations, pays settlement gas)", parties.facilitator.address, "parties");
   report.fact("provider (payout address = ERC-8004 agent wallet)", parties.provider.address, "parties");
-  report.fact("buyer (USDC only, no MON)", parties.buyer.address, "parties");
+  report.fact("buyer (holds USDC only, sends no transaction)", parties.buyer.address, "parties");
 
   const mockKeys = { qwen: `e2e-qwen-${rand()}`, kimi: `e2e-kimi-${rand()}`, hunyuan: `e2e-hunyuan-${rand()}` };
   mock = await report.step("start the mock OpenAI-compatible model server", async (note) => {
@@ -245,9 +254,9 @@ async function main(): Promise<void> {
   });
 
   // ---------------------------------------------------------------------------
-  const forkPort = await freePort();
-  const fork: Fork = await report.step("fork Monad testnet (Hardhat 3 / EDR, chain id 5042002)", async (note) => {
-    const f = await startFork({ group, contractsDir: CONTRACTS_DIR, port: forkPort, forkUrl, forkBlock, env: cleanEnv() });
+  const forkPort = Number(process.env.XORV_E2E_FORK_PORT ?? 8814);
+  const fork: Fork = await report.step("fork Arc testnet (arc-anvil --network arc, chain id 5042002)", async (note) => {
+    const f = await startFork({ group, port: forkPort, forkUrl, forkBlock, env: cleanEnv() });
     note(`serving ${f.url}, forked at block ${f.forkBlock}`);
     return f;
   });
@@ -279,25 +288,21 @@ async function main(): Promise<void> {
   report.fact("ERC-8004 Reputation Registry (forked)", REPUTATION, "chain");
 
   // ---------------------------------------------------------------------------
-  await report.step("fund the parties", async (note) => {
-    const mon = 10n ** 18n;
-    await setMon(fork, parties.operator.address, 1_000n * mon);
-    await setMon(fork, parties.facilitator.address, 1_000n * mon);
-    await setMon(fork, parties.provider.address, 10n * mon);
-    const funding = await fundUsdc(fork, USDC, parties.buyer.address, BUYER_USDC);
-    note(
-      funding.method === "masterMinter"
-        ? `minted ${formatUsdc(BUYER_USDC)} of USDC through the token's masterMinter ${funding.masterMinter} (configureMinter ${funding.txHashes[0]}, mint ${funding.txHashes[1]})`
-        : `wrote ${formatUsdc(BUYER_USDC)} of USDC into the buyer's balance slot`,
-    );
-    report.fact("buyer USDC funding", funding.method === "masterMinter" ? `minted via masterMinter ${funding.masterMinter}` : "balance slot write", "chain");
+  await report.step("fund the parties with USDC (Arc's gas token too)", async (note) => {
+    await setUsdc(fork, privateKeyToAccount(DEPLOYER_KEY).address, 50_000_000n);
+    await setUsdc(fork, parties.operator.address, 50_000_000n);
+    await setUsdc(fork, parties.facilitator.address, 50_000_000n);
+    await setUsdc(fork, parties.provider.address, PROVIDER_GAS_USDC);
+    await setUsdc(fork, parties.buyer.address, BUYER_USDC);
+    note(`buyer ${formatUsdc(BUYER_USDC)}; broker keys and the provider hold USDC for gas`);
     report.equal("buyer USDC balance after funding", await usdcBalance(fork.client, USDC, parties.buyer.address), BUYER_USDC);
-    report.equal("buyer holds no MON", await fork.client.getBalance({ address: parties.buyer.address }), 0n);
+    report.equal("native balance is the same USDC (18 decimals)", await fork.client.getBalance({ address: parties.buyer.address }), BUYER_USDC * 10n ** 12n);
   });
 
-  const ledger = await report.step("deploy XorvLedger with packages/contracts' deploy script", async (note) => {
-    const deployment = await deployLedger({ group, contractsDir: CONTRACTS_DIR, fork, broker: parties.operator.address, env: cleanEnv() });
-    note(`XorvLedger at ${deployment.address} (block ${deployment.fromBlock}, tx ${deployment.txHash})`);
+  const ledger = await report.step("deploy with scripts/deploy.sh local (XorvLedger and the Arc contracts)", async (note) => {
+    const d = await deployArc({ group, repo: REPO, runDir, fork, deployerKey: DEPLOYER_KEY, broker: parties.operator.address, env: cleanEnv() });
+    const deployment = { address: d.ledger, fromBlock: d.fromBlock, txHash: null as string | null };
+    note(`XorvLedger at ${deployment.address} (from block ${deployment.fromBlock}); escrow ${d.escrow} (not used by this run)`);
     const c = fork.client;
     const [identity, reputation, broker] = await Promise.all([
       c.readContract({ address: deployment.address, abi: LEDGER_VIEW_ABI, functionName: "identity" }),
@@ -310,7 +315,6 @@ async function main(): Promise<void> {
     return deployment;
   });
   report.fact("XorvLedger", ledger.address, "chain");
-  report.fact("XorvLedger deploy tx", ledger.txHash, "chain");
 
   // ---------------------------------------------------------------------------
   const brokerPort = await freePort();
@@ -427,6 +431,8 @@ async function main(): Promise<void> {
   });
   report.fact("provider ERC-8004 agent id", agentId.toString(), "parties");
 
+  // What the provider holds once its identity is registered: what it earns is measured from here.
+  const providerStart = await usdcBalance(fork.client, USDC, parties.provider.address);
   const provider = await report.step("provider: go live (xorv start)", async (note) => {
     const [cmd, args] = node(CLI_ENTRY, "start");
     const proc = group.start("provider", cmd, args, { cwd: providerHome, env: providerEnv });
@@ -685,7 +691,7 @@ async function main(): Promise<void> {
     private: privateRun.job,
   };
 
-  await report.step("on-chain: x402 settlements (real USDC, facilitator pays gas)", async (note) => {
+  await report.step("on-chain: x402 settlements (real USDC, facilitator pays gas, Arc Memo tags the job)", async (note) => {
     const expected: Array<[keyof typeof jobs, bigint]> = [
       ["cli", 40_000n],
       ["mcp", 1_000n],
@@ -710,12 +716,13 @@ async function main(): Promise<void> {
         s.transfers.map((t) => `${t.from}→${t.to} ${t.value}`).join("; "),
       );
       report.check(`${which}: EIP-3009 authorization used by the buyer`, s.authorizers.includes(parties.buyer.address));
+      const memos = memoEventsIn(s.receipt.logs, NET.circle.memo);
+      report.check(`${which}: Arc Memo tags the transfer with the job (xorv:pay)`, memos.some((m) => m.target === USDC && m.text.startsWith("xorv:pay")), JSON.stringify(memos.map((m) => m.text)));
       report.equal(`${which}: job.payment.amount`, job.payment?.amount, amount.toString());
       total += amount;
     }
     report.equal("buyer USDC balance", await usdcBalance(fork.client, USDC, parties.buyer.address), BUYER_USDC - total);
-    report.equal("provider USDC balance", await usdcBalance(fork.client, USDC, parties.provider.address), total);
-    report.equal("buyer spent no MON (still zero)", await fork.client.getBalance({ address: parties.buyer.address }), 0n);
+    report.equal("provider USDC received", (await usdcBalance(fork.client, USDC, parties.provider.address)) - providerStart, total);
     report.equal("buyer never sent a transaction (nonce 0)", await fork.client.getTransactionCount({ address: parties.buyer.address }), 0);
   });
 
