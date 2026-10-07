@@ -1,17 +1,35 @@
+# Xorv on Arc. Xorv's own contracts use OpenZeppelin v5 from the lib/ submodule;
+# the Chainlink packages (installed by `npm install` in this directory, its own
+# package-lock) import OpenZeppelin by versioned paths that only these
+# remappings resolve. XorvLedger lives in ../packages/contracts (Hardhat) and is
+# compiled here too, against the same OZ v5, for the one deploy script.
 [profile.default]
 src = "src"
 test = "test"
 script = "script"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "node_modules"]
 solc_version = "0.8.28"
 evm_version = "cancun"
 optimizer = true
 optimizer_runs = 10_000
 via_ir = false
+allow_paths = ["../packages/contracts/contracts"]
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts@4.8.3/=node_modules/@openzeppelin/contracts-4.8.3/",
+  "@openzeppelin/contracts@5.3.0/=node_modules/@openzeppelin/contracts-5.3.0/",
+  "@chainlink/contracts-ccip/=node_modules/@chainlink/contracts-ccip/",
+  "@chainlink/contracts/=node_modules/@chainlink/contracts/",
+  "@chainlink/local/=node_modules/@chainlink/local/",
   "forge-std/=lib/forge-std/src/",
+  "@xorv/ledger/=../packages/contracts/contracts/",
+]
+# Deploy.s.sol writes deployments/*.json at the repo root.
+fs_permissions = [
+  { access = "read-write", path = "../deployments" },
+  { access = "read-write", path = "./cache" },
+  { access = "read", path = "./" },
 ]
 
 [fuzz]
@@ -23,7 +41,11 @@ depth = 64
 fail_on_revert = false
 
 [rpc_endpoints]
-monad_testnet = "https://testnet-rpc.monad.xyz"
+arc_testnet = "https://rpc.testnet.arc.io"
+arc_mainnet = "https://rpc.mainnet.arc.io"
 
 [fmt]
 line_length = 100
+
+[lint]
+lint_on_build = false

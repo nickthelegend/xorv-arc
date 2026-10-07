@@ -8,7 +8,7 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC3009} from "./interfaces/IERC3009.sol";
-import {IXorvRegistry} from "./interfaces/IXorvRegistry.sol";
+import {IXorvOutcomeSink} from "./interfaces/IXorvOutcomeSink.sol";
 import {IIdentityGate} from "./interfaces/IIdentityGate.sol";
 
 /**
@@ -47,20 +47,38 @@ import {IIdentityGate} from "./interfaces/IIdentityGate.sol";
  *   payee, the job and its refund deadline. A relayer that changes any of them
  *   produces a nonce the signature does not cover, and the token rejects it.
  *
+ * ## Contract buyers: direct funding
+ *
+ * A contract cannot sign EIP-3009, so an owner-allowlisted *funder* (the
+ * Chainlink CCIP receiver that posts jobs for buyer agents on other chains)
+ * funds with `fundDirect`: it is the buyer of record, and the escrow pulls the
+ * amount with `transferFrom`. Funding is allowlisted rather than open so that
+ * nobody can front-run a broker job id and squat on it.
+ *
+ * ## Caps
+ *
+ * Every job, on both funding paths, is capped at `maxJobAmount` (100 USDC by
+ * default on Arc mainnet). A job also lasts at most `MAX_JOB_DURATION`, so no
+ * buyer's money is parked for longer than seven days.
+ *
  * ## What the owner can and cannot do
  *
- * The owner configures (tokens, attester, fee, registry, pause). The owner can
- * never move escrowed funds: there is no admin withdrawal, `sweep` only reaches
- * tokens sent here by mistake (balance above what jobs hold), fees are capped
- * at `MAX_FEE_BPS` and snapshotted per job at funding, and `pause` stops new
- * jobs without ever blocking a release or a refund.
+ * The owner can: allow or disallow tokens for new jobs; rotate the attester;
+ * set the outcome sink (registry); set or clear the optional identity gate;
+ * allow or remove direct funders; set the per-job cap; set a fee of at most
+ * `MAX_FEE_BPS` (5%) for jobs funded afterwards; pause new funding; and sweep
+ * tokens sent here by mistake. The owner can never move escrowed funds: there
+ * is no admin withdrawal, `sweep` only reaches the balance above
+ * `totalEscrowed`, fees are snapshotted per job at funding, `pause` never
+ * blocks a release, refund or cancel, and ownership cannot be renounced (it
+ * moves in two steps).
  *
  * ## Reputation is a side effect of settlement
  *
  * Every release, attester refund and reassignment reports an outcome to the
- * provider registry (XorvRegistry). A registry
- * that reverts or runs out of gas is caught and logged; it can never hold a
- * payment hostage.
+ * outcome sink (`XorvReputation`, which writes it to Arc's ERC-8004
+ * Reputation Registry). A sink that reverts or runs out of gas is caught and
+ * logged; it can never hold a payment hostage.
  */
 contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -121,8 +139,10 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     /// And may not park a buyer's money for longer than this.
     uint40 public constant MAX_JOB_DURATION = 7 days;
 
-    /// Gas forwarded to the registry. Enough for the registry's worst-case (first-outcome) write with room to spare.
-    uint256 public constant REGISTRY_GAS_LIMIT = 150_000;
+    /// Gas forwarded to the outcome sink. Sized for XorvReputation's worst case: a provider's first
+    /// outcome (a fresh stats slot) plus the first ERC-8004 `giveFeedback` from this client for the
+    /// agent (new feedback, index, client-list entries). Measured on an Arc testnet fork; see README.
+    uint256 public constant REGISTRY_GAS_LIMIT = 400_000;
 
     /// Gas that must remain before the registry call so it receives its whole budget:
     /// the budget, the 1/64 EIP-150 withholds from it, and room for the CALL itself.
@@ -147,11 +167,17 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     /// The broker's settlement key: funds jobs, releases on delivery, refunds on failure.
     address public attester;
 
-    /// Provider registry. Zero disables outcome reporting.
-    IXorvRegistry public registry;
+    /// Outcome sink (XorvReputation). Zero disables outcome reporting.
+    IXorvOutcomeSink public registry;
 
-    /// Identity gate (Cleanverse CVI). Zero lets anyone transact.
+    /// Optional identity gate. Zero (the default) lets anyone transact.
     IIdentityGate public identityGate;
+
+    /// Contracts allowed to fund jobs with `fundDirect` as their own buyer (the CCIP receiver).
+    mapping(address funder => bool) public funderAllowed;
+
+    /// Largest amount a single job may hold, in the token's base units, on either funding path.
+    uint256 public maxJobAmount;
 
     /// Protocol fee applied to jobs funded from now on, and who receives it.
     uint16 public feeBps;
@@ -191,6 +217,8 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     event TokenAllowed(address indexed token, bool allowed);
     event FeeUpdated(uint16 feeBps, address indexed recipient);
     event Swept(address indexed token, address indexed to, uint256 amount);
+    event FunderUpdated(address indexed funder, bool allowed);
+    event MaxJobAmountUpdated(uint256 previous, uint256 maxJobAmount);
 
     // ---------------------------------------------------------------------
     // Errors
@@ -213,6 +241,8 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     error RenounceDisabled();
     error InsufficientGasForRegistry();
     error IdentityNotVerified(address account);
+    error NotFunder(address caller);
+    error AmountAboveCap(uint256 amount, uint256 cap);
 
     // ---------------------------------------------------------------------
     // Construction and admin
@@ -222,10 +252,12 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
         address initialOwner,
         address initialAttester,
         address initialRegistry,
-        address[] memory tokens
+        address[] memory tokens,
+        uint256 initialMaxJobAmount
     ) Ownable(initialOwner) {
         _setAttester(initialAttester);
-        registry = IXorvRegistry(initialRegistry);
+        _setMaxJobAmount(initialMaxJobAmount);
+        registry = IXorvOutcomeSink(initialRegistry);
         emit RegistryUpdated(address(0), initialRegistry);
         for (uint256 i = 0; i < tokens.length; ++i) {
             _setTokenAllowed(tokens[i], true);
@@ -244,7 +276,19 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     /// Zero disables outcome reporting; payments are unaffected either way.
     function setRegistry(address newRegistry) external onlyOwner {
         emit RegistryUpdated(address(registry), newRegistry);
-        registry = IXorvRegistry(newRegistry);
+        registry = IXorvOutcomeSink(newRegistry);
+    }
+
+    /// Allow or remove a contract that funds jobs as their own buyer (`fundDirect`).
+    function setFunder(address funder, bool allowed) external onlyOwner {
+        if (funder == address(0)) revert ZeroAddress();
+        funderAllowed[funder] = allowed;
+        emit FunderUpdated(funder, allowed);
+    }
+
+    /// Per-job cap for jobs funded from now on. Must be non-zero; funded jobs are unaffected.
+    function setMaxJobAmount(uint256 newMax) external onlyOwner {
+        _setMaxJobAmount(newMax);
     }
 
     /**
@@ -322,30 +366,7 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
      *      leaving the escrow short of what it owes.
      */
     function fund(Funding calldata f) external onlyAttester whenNotPaused nonReentrant {
-        Job storage job = _jobs[f.jobId];
-        if (job.status != Status.None) revert JobExists(f.jobId);
-        if (!tokenAllowed[f.token]) revert TokenNotAllowed(f.token);
-        if (f.amount == 0 || f.amount > type(uint96).max) revert InvalidAmount(f.amount);
-        if (f.buyer == address(0) || f.provider == address(0) || f.buyer == f.provider) {
-            revert InvalidParties(f.buyer, f.provider);
-        }
-        if (
-            f.deadline < block.timestamp + MIN_JOB_DURATION
-                || f.deadline > block.timestamp + MAX_JOB_DURATION
-        ) revert InvalidDeadline(f.deadline);
-        _requireVerified(f.buyer);
-        _requireVerified(f.provider);
-
-        // Effects before the external call. If the pull fails the whole
-        // transaction reverts, so there is no half-funded state to unwind.
-        job.buyer = f.buyer;
-        job.deadline = f.deadline;
-        job.status = Status.Funded;
-        job.feeBps = feeBps;
-        job.provider = f.provider;
-        job.amount = uint96(f.amount);
-        job.token = f.token;
-        totalEscrowed[f.token] += f.amount;
+        _open(f.jobId, f.buyer, f.provider, f.token, f.amount, f.deadline);
 
         uint256 before = IERC20(f.token).balanceOf(address(this));
         IERC3009(f.token).receiveWithAuthorization(
@@ -357,10 +378,36 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
             fundingNonce(f.jobId, f.deadline),
             f.signature
         );
-        uint256 received = IERC20(f.token).balanceOf(address(this)) - before;
-        if (received != f.amount) revert AmountMismatch(f.amount, received);
+        _checkReceived(f.token, before, f.amount);
 
         emit JobFunded(f.jobId, f.buyer, f.provider, f.token, f.amount, f.deadline);
+    }
+
+    /**
+     * Fund `jobId` from an allowlisted contract buyer (the CCIP receiver), which
+     * becomes the job's buyer of record: refunds go back to it and it may
+     * release. Pulls `amount` with `transferFrom`, so approve this contract first.
+     *
+     * @dev Same checks as `fund`: the job must be new, the token allowed, the
+     *      amount within (0, maxJobAmount], the parties distinct, the deadline
+     *      inside [now + MIN_JOB_DURATION, now + MAX_JOB_DURATION], and both
+     *      parties verified when an identity gate is set.
+     */
+    function fundDirect(
+        bytes32 jobId,
+        address provider,
+        address token,
+        uint256 amount,
+        uint40 deadline
+    ) external whenNotPaused nonReentrant {
+        if (!funderAllowed[msg.sender]) revert NotFunder(msg.sender);
+        _open(jobId, msg.sender, provider, token, amount, deadline);
+
+        uint256 before = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        _checkReceived(token, before, amount);
+
+        emit JobFunded(jobId, msg.sender, provider, token, amount, deadline);
     }
 
     /**
@@ -488,6 +535,51 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     // Internals
     // ---------------------------------------------------------------------
 
+    /**
+     * Checks and effects shared by both funding paths. Effects come before the
+     * pull: if the pull fails the whole transaction reverts, so there is no
+     * half-funded state to unwind.
+     */
+    function _open(
+        bytes32 jobId,
+        address buyer,
+        address provider,
+        address token,
+        uint256 amount,
+        uint40 deadline
+    ) private {
+        Job storage job = _jobs[jobId];
+        if (job.status != Status.None) revert JobExists(jobId);
+        if (!tokenAllowed[token]) revert TokenNotAllowed(token);
+        if (amount == 0 || amount > type(uint96).max) revert InvalidAmount(amount);
+        if (amount > maxJobAmount) revert AmountAboveCap(amount, maxJobAmount);
+        if (buyer == address(0) || provider == address(0) || buyer == provider) {
+            revert InvalidParties(buyer, provider);
+        }
+        if (
+            deadline < block.timestamp + MIN_JOB_DURATION
+                || deadline > block.timestamp + MAX_JOB_DURATION
+        ) revert InvalidDeadline(deadline);
+        _requireVerified(buyer);
+        _requireVerified(provider);
+
+        job.buyer = buyer;
+        job.deadline = deadline;
+        job.status = Status.Funded;
+        job.feeBps = feeBps;
+        job.provider = provider;
+        job.amount = uint96(amount);
+        job.token = token;
+        totalEscrowed[token] += amount;
+    }
+
+    /// The balance is measured on both sides of the pull, so a token that skims a transfer fee
+    /// (none on the allowlist do) reverts instead of leaving the escrow short of what it owes.
+    function _checkReceived(address token, uint256 before, uint256 amount) private view {
+        uint256 received = IERC20(token).balanceOf(address(this)) - before;
+        if (received != amount) revert AmountMismatch(amount, received);
+    }
+
     function _funded(bytes32 jobId) private view returns (Job storage job) {
         job = _jobs[jobId];
         if (job.status != Status.Funded) revert JobNotFunded(jobId, job.status);
@@ -513,10 +605,10 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
      *      an estimator is forced to include the registry's share.
      */
     function _reportOutcome(bytes32 jobId, address provider, bool success, uint256 amount) private {
-        IXorvRegistry reg = registry;
+        IXorvOutcomeSink reg = registry;
         if (address(reg) == address(0)) return;
         if (gasleft() < REGISTRY_GAS_RESERVE) revert InsufficientGasForRegistry();
-        try reg.recordOutcome{gas: REGISTRY_GAS_LIMIT}(provider, success, amount) {}
+        try reg.recordOutcome{gas: REGISTRY_GAS_LIMIT}(jobId, provider, success, amount) {}
         catch (bytes memory reason) {
             emit RegistryCallFailed(jobId, provider, reason);
         }
@@ -530,6 +622,12 @@ contract XorvEscrow is Ownable2Step, Pausable, ReentrancyGuard {
     function _setAttester(address newAttester) private {
         emit AttesterUpdated(attester, newAttester);
         attester = newAttester;
+    }
+
+    function _setMaxJobAmount(uint256 newMax) private {
+        if (newMax == 0) revert InvalidAmount(0);
+        emit MaxJobAmountUpdated(maxJobAmount, newMax);
+        maxJobAmount = newMax;
     }
 
     function _setTokenAllowed(address token, bool allowed) private {

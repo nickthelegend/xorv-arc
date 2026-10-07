@@ -3,88 +3,144 @@ pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {XorvEscrow} from "../src/XorvEscrow.sol";
-import {XorvRefundKeeper} from "../src/XorvRefundKeeper.sol";
-import {CleanverseGate} from "../src/CleanverseGate.sol";
+import {XorvReputation} from "../src/XorvReputation.sol";
+import {XorvCcipReceiver} from "../src/ccip/XorvCcipReceiver.sol";
+// ../packages/contracts/contracts/XorvLedger.sol, via the @xorv/ledger remapping (foundry.toml).
+import {XorvLedger} from "@xorv/ledger/XorvLedger.sol";
+import {ArcConfig} from "./ArcConfig.sol";
 
 /**
- * Deploy XorvEscrow and XorvRefundKeeper (and, with XORV_CLEANVERSE=1, a CleanverseGate set on the
- * escrow) to the chain behind --rpc-url.
+ * Deploy Xorv on Arc: XorvLedger, XorvReputation, XorvEscrow and XorvCcipReceiver,
+ * wired together, and write deployments/arc-<network>.json at the repo root.
  *
- *   XORV_OPERATOR_KEY=0x… forge script script/Deploy.s.sol \
- *     --rpc-url https://testnet-rpc.monad.xyz --broadcast --verify --verifier sourcify \
- *     --verifier-url https://sourcify-api-monad.blockvision.org
+ *   NETWORK=testnet|mainnet|local  (local = whatever chain --rpc-url is, e.g. an Arc fork;
+ *                                   testnet addresses unless overridden by XORV_ADDR_* env)
+ *   DEPLOYER_PRIVATE_KEY           pays for and owns everything (never logged)
+ *   XORV_BROKER_ADDRESS            the broker's settlement key: escrow attester and ledger writer
+ *                                  (required; on mainnet it must differ from the deployer)
+ *   XORV_MAX_JOB_AMOUNT            per-job cap in USDC base units (6 dec), default 100e6 = 100 USDC
+ *   XORV_CONFIRM_MAINNET=1         required for NETWORK=mainnet
+ *   XORV_DEPLOYMENT_OUT            output path (default ../deployments/arc-<network>.json)
  *
- * Roles. The operator key deploys and owns both contracts. The escrow's attester (who funds,
- * releases and refunds jobs) is the broker's settlement key: XORV_FACILITATOR_KEY's address when
- * that is set, the operator otherwise. Reputation is not the escrow's job in this repo: XorvLedger
- * writes it to ERC-8004, so the escrow's registry hook is left unset.
- *
- * Turn the Cleanverse gate on only once Cleanverse has issued A-Passes to the parties who will
- * transact (docs/DEPLOY-LATER.md); with it on, nobody without one can fund or be paid.
+ * Run it through scripts/deploy.sh, which builds, holds the shared deployer lock only for
+ * the broadcast, and moves the record into place only once the broadcast succeeded.
  */
 contract Deploy is Script {
-    function _tokens(uint256 chainId) internal view returns (address[] memory tokens) {
-        if (chainId == 10143) {
-            // Monad testnet: Circle test USDC, Agora AUSD.
-            tokens = new address[](2);
-            tokens[0] = 0x534b2f3A21130d7a60830c2Df862319e593943A3;
-            tokens[1] = 0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC;
-        } else if (chainId == 143) {
-            // Monad mainnet: Circle USDC, Agora AUSD.
-            tokens = new address[](2);
-            tokens[0] = 0x754704Bc059F8C67012fEd69BC8A327a5aafb603;
-            tokens[1] = 0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a;
-        } else if (vm.envOr("XORV_STABLECOIN", address(0)) != address(0)) {
-            // Any other chain (a local dev node): the test token named in the env.
-            tokens = new address[](1);
-            tokens[0] = vm.envAddress("XORV_STABLECOIN");
-        } else {
-            revert("Deploy: no stablecoins configured for this chain");
+    struct Deployed {
+        address deployer;
+        address broker;
+        uint256 maxJobAmount;
+        address ledger;
+        address reputation;
+        address escrow;
+        address ccipReceiver;
+    }
+
+    function run() external returns (Deployed memory d) {
+        string memory network = vm.envOr("NETWORK", string("testnet"));
+        ArcConfig.Arc memory arc = _arc(network);
+
+        uint256 key = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        d.deployer = vm.addr(key);
+        d.broker = vm.envAddress("XORV_BROKER_ADDRESS");
+        require(d.broker != address(0), "Deploy: XORV_BROKER_ADDRESS is zero");
+        d.maxJobAmount = vm.envOr("XORV_MAX_JOB_AMOUNT", uint256(100e6));
+        require(d.maxJobAmount > 0, "Deploy: XORV_MAX_JOB_AMOUNT must be > 0");
+
+        if (_eq(network, "mainnet")) {
+            require(vm.envOr("XORV_CONFIRM_MAINNET", uint256(0)) == 1, "Deploy: set XORV_CONFIRM_MAINNET=1 to deploy to Arc MAINNET");
+            require(d.broker != d.deployer, "Deploy: on mainnet the broker key must not be the deployer/owner key");
+            console2.log("==============================================================");
+            console2.log("  ARC MAINNET (chain 5042). REAL USDC. Owner:", d.deployer);
+            console2.log("==============================================================");
         }
-    }
-
-    /// The Chainlink KeystoneForwarder the refund keeper trusts. Defaults to Monad testnet's
-    /// MockKeystoneForwarder, which `cre workflow simulate --broadcast` delivers through;
-    /// XORV_CRE_FORWARDER picks another (the production forwarder once the workflow is deployed).
-    function _forwarder(uint256 chainId, address fallback_) internal view returns (address) {
-        address configured = vm.envOr("XORV_CRE_FORWARDER", address(0));
-        if (configured != address(0)) return configured;
-        if (chainId == 10143) return 0xB9F79d863261869B234c481D1f9A7af84AeAd192;
-        if (chainId == 143) return 0x9eF6468C5f37b976E57d52054c693269479A784d;
-        return fallback_;
-    }
-
-    function _cleanverse(uint256 chainId) internal view returns (address apass, address validator, address pool) {
-        apass = vm.envOr("XORV_CLEANVERSE_APASS", chainId == 10143 ? 0xbA82D189540CaC9DC6FF46B6837CaC1BFdEC58B9 : address(0));
-        validator = vm.envOr(
-            "XORV_CLEANVERSE_VALIDATOR", chainId == 10143 ? 0xaC7e5179C2C7f03f209136886c172eb34F161792 : address(0)
-        );
-        pool = vm.envOr("XORV_CLEANVERSE_POOL", address(0));
-        require(apass != address(0), "Deploy: XORV_CLEANVERSE=1 needs XORV_CLEANVERSE_APASS on this chain");
-    }
-
-    function run() external returns (XorvEscrow escrow, XorvRefundKeeper keeper, CleanverseGate gate) {
-        uint256 key = vm.envUint("XORV_OPERATOR_KEY");
-        address operator = vm.addr(key);
-        uint256 settlementKey = vm.envOr("XORV_FACILITATOR_KEY", uint256(0));
-        address attester = settlementKey == 0 ? operator : vm.addr(settlementKey);
+        if (!_eq(network, "local")) require(block.chainid == arc.chainId, "Deploy: --rpc-url is not on the NETWORK's chain");
 
         vm.startBroadcast(key);
-        escrow = new XorvEscrow(operator, attester, address(0), _tokens(block.chainid));
-        keeper = new XorvRefundKeeper(address(escrow), _forwarder(block.chainid, operator), operator);
-        if (vm.envOr("XORV_CLEANVERSE", false)) {
-            (address apass, address validator, address pool) = _cleanverse(block.chainid);
-            gate = new CleanverseGate(apass, validator, pool);
-            escrow.setIdentityGate(address(gate));
-        }
+        _deploy(arc, d);
         vm.stopBroadcast();
 
+        console2.log("network         ", network);
         console2.log("chain id        ", block.chainid);
-        console2.log("XorvEscrow      ", address(escrow));
-        console2.log("XorvRefundKeeper", address(keeper));
-        console2.log("CRE forwarder   ", keeper.forwarder());
-        if (address(gate) != address(0)) console2.log("CleanverseGate  ", address(gate));
-        console2.log("owner           ", operator);
-        console2.log("attester        ", attester);
+        console2.log("deployer/owner  ", d.deployer);
+        console2.log("broker          ", d.broker);
+        console2.log("XorvLedger      ", d.ledger);
+        console2.log("XorvReputation  ", d.reputation);
+        console2.log("XorvEscrow      ", d.escrow);
+        console2.log("XorvCcipReceiver", d.ccipReceiver);
+
+        _write(network, arc, d);
+    }
+
+    function _deploy(ArcConfig.Arc memory arc, Deployed memory d) internal {
+        address[] memory tokens = new address[](1);
+        tokens[0] = arc.usdc;
+        d.ledger = address(new XorvLedger(arc.identityRegistry, arc.reputationRegistry, d.broker, d.deployer));
+        XorvReputation reputation = new XorvReputation(arc.identityRegistry, arc.reputationRegistry, d.deployer);
+        XorvEscrow escrow = new XorvEscrow(d.deployer, d.broker, address(reputation), tokens, d.maxJobAmount);
+        reputation.setEscrow(address(escrow));
+        XorvCcipReceiver receiver = new XorvCcipReceiver(arc.ccipRouter, address(escrow), arc.usdc, d.deployer);
+        escrow.setFunder(address(receiver), true);
+        d.reputation = address(reputation);
+        d.escrow = address(escrow);
+        d.ccipReceiver = address(receiver);
+    }
+
+    function _arc(string memory network) internal view returns (ArcConfig.Arc memory arc) {
+        if (_eq(network, "mainnet")) return ArcConfig.mainnet();
+        if (_eq(network, "testnet")) return ArcConfig.testnet();
+        require(_eq(network, "local"), "Deploy: NETWORK must be testnet, mainnet or local");
+        arc = ArcConfig.testnet();
+        arc.name = "local";
+        arc.chainId = block.chainid;
+        arc.usdc = vm.envOr("XORV_ADDR_USDC", arc.usdc);
+        arc.identityRegistry = vm.envOr("XORV_ADDR_IDENTITY", arc.identityRegistry);
+        arc.reputationRegistry = vm.envOr("XORV_ADDR_REPUTATION", arc.reputationRegistry);
+        arc.ccipRouter = vm.envOr("XORV_ADDR_CCIP_ROUTER", arc.ccipRouter);
+    }
+
+    function _write(string memory network, ArcConfig.Arc memory arc, Deployed memory d) internal {
+        string memory c = "contracts";
+        vm.serializeAddress(c, "XorvLedger", d.ledger);
+        vm.serializeAddress(c, "XorvReputation", d.reputation);
+        vm.serializeAddress(c, "XorvEscrow", d.escrow);
+        string memory contractsJson = vm.serializeAddress(c, "XorvCcipReceiver", d.ccipReceiver);
+
+        string memory e = "external";
+        vm.serializeAddress(e, "usdc", arc.usdc);
+        vm.serializeAddress(e, "erc8004IdentityRegistry", arc.identityRegistry);
+        vm.serializeAddress(e, "erc8004ReputationRegistry", arc.reputationRegistry);
+        vm.serializeAddress(e, "erc8004ValidationRegistry", arc.validationRegistry);
+        vm.serializeAddress(e, "ccipRouter", arc.ccipRouter);
+        vm.serializeString(e, "ccipChainSelector", vm.toString(arc.ccipChainSelector));
+        vm.serializeAddress(e, "memo", arc.memo);
+        vm.serializeAddress(e, "cctpTokenMessengerV2", arc.tokenMessengerV2);
+        vm.serializeAddress(e, "cctpMessageTransmitterV2", arc.messageTransmitterV2);
+        vm.serializeUint(e, "cctpDomain", arc.cctpDomain);
+        vm.serializeAddress(e, "gatewayWallet", arc.gatewayWallet);
+        string memory externalJson = vm.serializeAddress(e, "gatewayMinter", arc.gatewayMinter);
+
+        string memory r = "root";
+        vm.serializeString(r, "network", network);
+        vm.serializeUint(r, "chainId", block.chainid);
+        vm.serializeString(r, "status", "deployed");
+        vm.serializeAddress(r, "deployer", d.deployer);
+        vm.serializeAddress(r, "owner", d.deployer);
+        vm.serializeAddress(r, "broker", d.broker);
+        vm.serializeUint(r, "maxJobAmount", d.maxJobAmount);
+        vm.serializeUint(r, "blockNumber", block.number);
+        vm.serializeUint(r, "timestamp", block.timestamp);
+        vm.serializeString(r, "contracts", contractsJson);
+        string memory json = vm.serializeString(r, "external", externalJson);
+
+        string memory out = vm.envOr(
+            "XORV_DEPLOYMENT_OUT", string.concat(vm.projectRoot(), "/../deployments/arc-", network, ".json")
+        );
+        vm.writeJson(json, out);
+        console2.log("record          ", out);
+    }
+
+    function _eq(string memory a, string memory b) internal pure returns (bool) {
+        return keccak256(bytes(a)) == keccak256(bytes(b));
     }
 }

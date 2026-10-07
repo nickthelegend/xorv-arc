@@ -1,6 +1,6 @@
 /**
  * GENERATED from contracts/src/XorvEscrow.sol — do not edit by hand.
- * Regenerate: pnpm gen:abi (runs forge build, then scripts/gen-abi.mjs).
+ * Regenerate: cd contracts && forge build && node scripts/export-abi.mjs
  */
 export const XORV_ESCROW_ABI = [
   {
@@ -25,6 +25,11 @@ export const XORV_ESCROW_ABI = [
         "name": "tokens",
         "type": "address[]",
         "internalType": "address[]"
+      },
+      {
+        "name": "initialMaxJobAmount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
@@ -228,6 +233,58 @@ export const XORV_ESCROW_ABI = [
   },
   {
     "type": "function",
+    "name": "fundDirect",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "provider",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "deadline",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "funderAllowed",
+    "inputs": [
+      {
+        "name": "funder",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "fundingNonce",
     "inputs": [
       {
@@ -340,6 +397,19 @@ export const XORV_ESCROW_ABI = [
   },
   {
     "type": "function",
+    "name": "maxJobAmount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -423,7 +493,7 @@ export const XORV_ESCROW_ABI = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IXorvRegistry"
+        "internalType": "contract IXorvOutcomeSink"
       }
     ],
     "stateMutability": "view"
@@ -486,12 +556,43 @@ export const XORV_ESCROW_ABI = [
   },
   {
     "type": "function",
+    "name": "setFunder",
+    "inputs": [
+      {
+        "name": "funder",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setIdentityGate",
     "inputs": [
       {
         "name": "gate",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMaxJobAmount",
+    "inputs": [
+      {
+        "name": "newMax",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -638,6 +739,25 @@ export const XORV_ESCROW_ABI = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FunderUpdated",
+    "inputs": [
+      {
+        "name": "funder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -805,6 +925,25 @@ export const XORV_ESCROW_ABI = [
   },
   {
     "type": "event",
+    "name": "MaxJobAmountUpdated",
+    "inputs": [
+      {
+        "name": "previous",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxJobAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
@@ -954,6 +1093,22 @@ export const XORV_ESCROW_ABI = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AmountAboveCap",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "cap",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -1119,6 +1274,17 @@ export const XORV_ESCROW_ABI = [
   {
     "type": "error",
     "name": "NotAuthorized",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotFunder",
     "inputs": [
       {
         "name": "caller",

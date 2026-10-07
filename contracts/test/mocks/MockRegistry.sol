@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {IXorvOutcomeSink} from "../../src/interfaces/IXorvOutcomeSink.sol";
+
 /// Records what the escrow reports, and can be told to misbehave.
-contract MockRegistry {
+contract MockRegistry is IXorvOutcomeSink {
     enum Mode {
         Ok,
         Revert,
         BurnGas,
-        /// Needs ~120k gas in total (50k burned + its storage writes): more than a cold registry
-        /// record (~72k measured), still inside the escrow's 150k budget.
+        /// Burns 250k gas before its storage writes: well above a plain record, still inside the
+        /// escrow's 400k budget (the size of XorvReputation's first ERC-8004 feedback write).
         Expensive
     }
 
@@ -16,6 +18,7 @@ contract MockRegistry {
     address public escrow;
 
     struct Outcome {
+        bytes32 jobId;
         address provider;
         bool success;
         uint256 amount;
@@ -37,17 +40,17 @@ contract MockRegistry {
         return outcomes.length;
     }
 
-    function recordOutcome(address provider, bool success, uint256 amount) external {
+    function recordOutcome(bytes32 jobId, address provider, bool success, uint256 amount) external {
         if (mode == Mode.Revert) revert("registry down");
         if (mode == Mode.BurnGas) {
             while (true) {}
         }
         if (mode == Mode.Expensive) {
-            uint256 target = gasleft() - 50_000;
+            uint256 target = gasleft() - 250_000;
             while (gasleft() > target) {}
         }
         require(escrow == address(0) || msg.sender == escrow, "not escrow");
-        outcomes.push(Outcome(provider, success, amount));
+        outcomes.push(Outcome(jobId, provider, success, amount));
         if (success) completed[provider]++;
         else failed[provider]++;
     }

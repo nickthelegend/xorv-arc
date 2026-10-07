@@ -10,7 +10,7 @@ import {MockRegistry, MockSmartWallet} from "./mocks/MockRegistry.sol";
 
 contract XorvEscrowTestBase is Test {
     XorvEscrow internal escrow;
-    MockERC3009 internal usdg;
+    MockERC3009 internal usdc;
     MockRegistry internal registry;
 
     address internal owner = makeAddr("owner");
@@ -23,6 +23,7 @@ contract XorvEscrowTestBase is Test {
     address internal buyer;
 
     uint256 internal constant PRICE = 250_000; // $0.25 at 6 decimals
+    uint256 internal constant CAP = 1_000e6;
     bytes32 internal constant JOB = keccak256("job-1");
     // keccak, not sha256: sha256 is a precompile *call*, which would consume a vm.prank.
     bytes32 internal constant RESULT = keccak256("the answer");
@@ -30,13 +31,13 @@ contract XorvEscrowTestBase is Test {
     function setUp() public virtual {
         vm.warp(1_800_000_000);
         buyer = vm.addr(buyerKey);
-        usdg = new MockERC3009("Global Dollar", "1");
+        usdc = new MockERC3009("USDC", "2");
         registry = new MockRegistry();
         address[] memory tokens = new address[](1);
-        tokens[0] = address(usdg);
-        escrow = new XorvEscrow(owner, attester, address(registry), tokens);
+        tokens[0] = address(usdc);
+        escrow = new XorvEscrow(owner, attester, address(registry), tokens, CAP);
         registry.setEscrow(address(escrow));
-        usdg.mint(buyer, 1_000e6);
+        usdc.mint(buyer, 1_000e6);
     }
 
     function _deadline() internal view returns (uint40) {
@@ -49,7 +50,7 @@ contract XorvEscrowTestBase is Test {
         view
         returns (bytes memory)
     {
-        bytes32 digest = usdg.hashReceive(
+        bytes32 digest = usdc.hashReceive(
             from,
             address(escrow),
             amount,
@@ -70,7 +71,7 @@ contract XorvEscrowTestBase is Test {
             jobId: jobId,
             buyer: buyer,
             provider: provider,
-            token: address(usdg),
+            token: address(usdc),
             amount: amount,
             deadline: deadline,
             validAfter: 0,
@@ -93,18 +94,18 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
         XorvEscrow.Funding memory f = _funding(JOB, PRICE, deadline);
 
         vm.expectEmit(address(escrow));
-        emit XorvEscrow.JobFunded(JOB, buyer, provider, address(usdg), PRICE, deadline);
+        emit XorvEscrow.JobFunded(JOB, buyer, provider, address(usdc), PRICE, deadline);
         vm.prank(attester);
         escrow.fund(f);
 
-        assertEq(usdg.balanceOf(address(escrow)), PRICE);
-        assertEq(usdg.balanceOf(buyer), 1_000e6 - PRICE);
-        assertEq(escrow.totalEscrowed(address(usdg)), PRICE);
+        assertEq(usdc.balanceOf(address(escrow)), PRICE);
+        assertEq(usdc.balanceOf(buyer), 1_000e6 - PRICE);
+        assertEq(escrow.totalEscrowed(address(usdc)), PRICE);
 
         XorvEscrow.Job memory job = escrow.getJob(JOB);
         assertEq(job.buyer, buyer);
         assertEq(job.provider, provider);
-        assertEq(job.token, address(usdg));
+        assertEq(job.token, address(usdc));
         assertEq(job.amount, PRICE);
         assertEq(job.deadline, deadline);
         assertEq(uint8(job.status), uint8(XorvEscrow.Status.Funded));
@@ -167,7 +168,7 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
         bytes32 nonce = escrow.fundingNonce(JOB, deadline);
         vm.prank(stranger);
         vm.expectRevert("FiatTokenV2: caller must be the payee");
-        usdg.receiveWithAuthorization(
+        usdc.receiveWithAuthorization(
             buyer, address(escrow), PRICE, f.validAfter, f.validBefore, nonce, f.signature
         );
     }
@@ -191,6 +192,11 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
         f = _funding(JOB, huge, _deadline());
         vm.prank(attester);
         vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidAmount.selector, huge));
+        escrow.fund(f);
+
+        f = _funding(JOB, CAP + 1, _deadline());
+        vm.prank(attester);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.AmountAboveCap.selector, CAP + 1, CAP));
         escrow.fund(f);
     }
 
@@ -217,7 +223,7 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
     }
 
     function test_fund_rejectsFeeOnTransferToken() public {
-        usdg.setTransferFeeBps(100);
+        usdc.setTransferFeeBps(100);
         XorvEscrow.Funding memory f = _funding(JOB, PRICE, _deadline());
         vm.prank(attester);
         vm.expectRevert(
@@ -238,9 +244,9 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
     function test_fund_fromSmartContractWallet() public {
         // ERC-1271: a buyer paying from a smart account (e.g. an ERC-4337 wallet).
         MockSmartWallet wallet = new MockSmartWallet(buyer);
-        usdg.mint(address(wallet), 10e6);
+        usdc.mint(address(wallet), 10e6);
         uint40 deadline = _deadline();
-        bytes32 digest = usdg.hashReceive(
+        bytes32 digest = usdc.hashReceive(
             address(wallet),
             address(escrow),
             PRICE,
@@ -254,7 +260,7 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
             jobId: JOB,
             buyer: address(wallet),
             provider: provider,
-            token: address(usdg),
+            token: address(usdc),
             amount: PRICE,
             deadline: deadline,
             validAfter: 0,
@@ -264,7 +270,7 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
         vm.prank(attester);
         escrow.fund(f);
         assertEq(escrow.getJob(JOB).buyer, address(wallet));
-        assertEq(usdg.balanceOf(address(escrow)), PRICE);
+        assertEq(usdc.balanceOf(address(escrow)), PRICE);
     }
 
     function test_fundingNonce_isBoundToChainAndContract() public {
@@ -273,7 +279,7 @@ contract XorvEscrowFundTest is XorvEscrowTestBase {
         assertTrue(escrow.fundingNonce(JOB, 100) != here);
         vm.chainId(421614);
         address[] memory tokens = new address[](0);
-        XorvEscrow twin = new XorvEscrow(owner, attester, address(0), tokens);
+        XorvEscrow twin = new XorvEscrow(owner, attester, address(0), tokens, CAP);
         assertTrue(twin.fundingNonce(JOB, 100) != escrow.fundingNonce(JOB, 100));
     }
 }
@@ -287,9 +293,9 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         vm.prank(attester);
         escrow.release(JOB, RESULT);
 
-        assertEq(usdg.balanceOf(provider), PRICE);
-        assertEq(usdg.balanceOf(address(escrow)), 0);
-        assertEq(escrow.totalEscrowed(address(usdg)), 0);
+        assertEq(usdc.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(address(escrow)), 0);
+        assertEq(escrow.totalEscrowed(address(usdc)), 0);
         assertEq(uint8(escrow.getJob(JOB).status), uint8(XorvEscrow.Status.Released));
         assertEq(registry.completed(provider), 1);
         assertEq(registry.failed(provider), 0);
@@ -300,7 +306,7 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         vm.warp(deadline + 1 days);
         vm.prank(buyer);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(provider), PRICE);
     }
 
     function test_release_attesterCannotReleaseAfterDeadline() public {
@@ -332,8 +338,8 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         vm.prank(attester);
         escrow.release(JOB, RESULT);
         uint256 fee = (PRICE * 250) / 10_000;
-        assertEq(usdg.balanceOf(treasury), fee);
-        assertEq(usdg.balanceOf(provider), PRICE - fee);
+        assertEq(usdc.balanceOf(treasury), fee);
+        assertEq(usdc.balanceOf(provider), PRICE - fee);
     }
 
     function test_settledJobCannotSettleAgain() public {
@@ -369,8 +375,8 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         vm.prank(attester);
         escrow.refund(JOB);
 
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
-        assertEq(escrow.totalEscrowed(address(usdg)), 0);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
+        assertEq(escrow.totalEscrowed(address(usdc)), 0);
         assertEq(registry.failed(provider), 1);
     }
 
@@ -382,8 +388,8 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
 
         vm.prank(stranger);
         escrow.refund(JOB);
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
-        assertEq(usdg.balanceOf(stranger), 0);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
+        assertEq(usdc.balanceOf(stranger), 0);
         assertEq(registry.failed(provider), 0);
     }
 
@@ -400,8 +406,8 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         emit XorvEscrow.JobRefunded(JOB, buyer, PRICE, false);
         vm.prank(attester);
         escrow.cancel(JOB);
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
-        assertEq(escrow.totalEscrowed(address(usdg)), 0);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
+        assertEq(escrow.totalEscrowed(address(usdc)), 0);
         assertEq(uint8(escrow.getJob(JOB).status), uint8(XorvEscrow.Status.Refunded));
         // A buyer calling it off is not the provider failing.
         assertEq(registry.failed(provider), 0);
@@ -432,7 +438,7 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         escrow.pause();
         vm.warp(deadline + 1);
         escrow.refund(JOB);
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
     }
 
     function test_release_worksWhilePaused() public {
@@ -441,7 +447,7 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         escrow.pause();
         vm.prank(attester);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(provider), PRICE);
     }
 
     function test_reassign_movesPayeeAndBlamesPrevious() public {
@@ -454,8 +460,8 @@ contract XorvEscrowSettleTest is XorvEscrowTestBase {
         assertEq(registry.failed(provider), 1);
         vm.prank(attester);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider2), PRICE);
-        assertEq(usdg.balanceOf(provider), 0);
+        assertEq(usdc.balanceOf(provider2), PRICE);
+        assertEq(usdc.balanceOf(provider), 0);
     }
 
     function test_reassign_guards() public {
@@ -484,7 +490,7 @@ contract XorvEscrowRegistryTest is XorvEscrowTestBase {
         emit XorvEscrow.RegistryCallFailed(JOB, provider, "");
         vm.prank(attester);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(provider), PRICE);
     }
 
     function test_gasBurningRegistryNeverBlocksPayment() public {
@@ -492,7 +498,7 @@ contract XorvEscrowRegistryTest is XorvEscrowTestBase {
         _fund(JOB, PRICE);
         vm.prank(attester);
         escrow.refund(JOB);
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
     }
 
     function test_starvingTheRegistryCallReverts() public {
@@ -513,7 +519,7 @@ contract XorvEscrowRegistryTest is XorvEscrowTestBase {
     function test_underfundedGasNeverSkipsReputation() public {
         registry.setMode(MockRegistry.Mode.Expensive);
         _fund(JOB, PRICE);
-        for (uint256 g = 60_000; g < 400_000; g += 10_000) {
+        for (uint256 g = 60_000; g < 1_000_000; g += 10_000) {
             vm.prank(attester);
             (bool ok,) = address(escrow).call{gas: g}(
                 abi.encodeCall(XorvEscrow.release, (JOB, RESULT))
@@ -521,12 +527,23 @@ contract XorvEscrowRegistryTest is XorvEscrowTestBase {
             if (ok) {
                 // The first limit that succeeds must also have paid for the record.
                 assertEq(registry.completed(provider), 1, "released without reputation");
-                assertEq(usdg.balanceOf(provider), PRICE);
+                assertEq(usdc.balanceOf(provider), PRICE);
                 return;
             }
             assertEq(registry.completed(provider), 0);
         }
         revert("release never succeeded");
+    }
+
+    function test_outcomeCarriesJobId() public {
+        _fund(JOB, PRICE);
+        vm.prank(attester);
+        escrow.release(JOB, RESULT);
+        (bytes32 jobId, address p, bool success, uint256 amount) = registry.outcomes(0);
+        assertEq(jobId, JOB);
+        assertEq(p, provider);
+        assertTrue(success);
+        assertEq(amount, PRICE);
     }
 
     function test_noRegistryIsFine() public {
@@ -535,7 +552,7 @@ contract XorvEscrowRegistryTest is XorvEscrowTestBase {
         _fund(JOB, PRICE);
         vm.prank(attester);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(provider), PRICE);
         assertEq(registry.outcomeCount(), 0);
     }
 }
@@ -554,7 +571,11 @@ contract XorvEscrowAdminTest is XorvEscrowTestBase {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         escrow.pause();
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
-        escrow.sweep(address(usdg), stranger);
+        escrow.sweep(address(usdc), stranger);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        escrow.setFunder(stranger, true);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        escrow.setMaxJobAmount(1);
         vm.stopPrank();
     }
 
@@ -570,16 +591,16 @@ contract XorvEscrowAdminTest is XorvEscrowTestBase {
 
     function test_sweepReachesOnlyExcess() public {
         _fund(JOB, PRICE);
-        usdg.mint(address(escrow), 7e6); // sent by mistake
+        usdc.mint(address(escrow), 7e6); // sent by mistake
 
         vm.prank(owner);
-        escrow.sweep(address(usdg), treasury);
-        assertEq(usdg.balanceOf(treasury), 7e6);
-        assertEq(usdg.balanceOf(address(escrow)), PRICE);
+        escrow.sweep(address(usdc), treasury);
+        assertEq(usdc.balanceOf(treasury), 7e6);
+        assertEq(usdc.balanceOf(address(escrow)), PRICE);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.NothingToSweep.selector, address(usdg)));
-        escrow.sweep(address(usdg), treasury);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.NothingToSweep.selector, address(usdc)));
+        escrow.sweep(address(usdc), treasury);
     }
 
     function test_renounceIsDisabled() public {
@@ -600,10 +621,10 @@ contract XorvEscrowAdminTest is XorvEscrowTestBase {
     function test_disallowingTokenStillLetsFundedJobsSettle() public {
         _fund(JOB, PRICE);
         vm.prank(owner);
-        escrow.setTokenAllowed(address(usdg), false);
+        escrow.setTokenAllowed(address(usdc), false);
         vm.prank(attester);
         escrow.release(JOB, RESULT);
-        assertEq(usdg.balanceOf(provider), PRICE);
+        assertEq(usdc.balanceOf(provider), PRICE);
     }
 
     function test_rotatingAttesterRevokesOldKey() public {
@@ -630,8 +651,8 @@ contract XorvEscrowFuzzTest is XorvEscrowTestBase {
         vm.prank(attester);
         escrow.release(JOB, RESULT);
 
-        assertEq(usdg.balanceOf(provider) + usdg.balanceOf(treasury), amount);
-        assertEq(usdg.balanceOf(address(escrow)), 0);
+        assertEq(usdc.balanceOf(provider) + usdc.balanceOf(treasury), amount);
+        assertEq(usdc.balanceOf(address(escrow)), 0);
     }
 
     function testFuzz_refundReturnsEverything(uint96 amount, uint32 lateBy) public {
@@ -639,7 +660,7 @@ contract XorvEscrowFuzzTest is XorvEscrowTestBase {
         uint40 deadline = _fund(JOB, amount);
         vm.warp(uint256(deadline) + 1 + lateBy);
         escrow.refund(JOB);
-        assertEq(usdg.balanceOf(buyer), 1_000e6);
+        assertEq(usdc.balanceOf(buyer), 1_000e6);
     }
 
     function testFuzz_foreignSignerCannotFund(uint256 attackerKey) public {
@@ -651,5 +672,187 @@ contract XorvEscrowFuzzTest is XorvEscrowTestBase {
         vm.prank(attester);
         vm.expectRevert("FiatTokenV2: invalid signature");
         escrow.fund(f);
+    }
+}
+
+contract XorvEscrowCapTest is XorvEscrowTestBase {
+    function test_capIsSetAtDeployAndMustBeNonZero() public {
+        assertEq(escrow.maxJobAmount(), CAP);
+        address[] memory tokens = new address[](0);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidAmount.selector, 0));
+        new XorvEscrow(owner, attester, address(0), tokens, 0);
+    }
+
+    function test_ownerCanMoveTheCap() public {
+        vm.expectEmit(address(escrow));
+        emit XorvEscrow.MaxJobAmountUpdated(CAP, 100e6);
+        vm.prank(owner);
+        escrow.setMaxJobAmount(100e6);
+        assertEq(escrow.maxJobAmount(), 100e6);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidAmount.selector, 0));
+        escrow.setMaxJobAmount(0);
+    }
+
+    function test_loweringTheCapLeavesFundedJobsAlone() public {
+        _fund(JOB, 500e6);
+        vm.prank(owner);
+        escrow.setMaxJobAmount(100e6);
+        vm.prank(attester);
+        escrow.release(JOB, RESULT);
+        assertEq(usdc.balanceOf(provider), 500e6);
+    }
+
+    function test_jobAtExactlyTheCapIsFine() public {
+        vm.prank(owner);
+        escrow.setMaxJobAmount(PRICE);
+        _fund(JOB, PRICE);
+        assertEq(escrow.totalEscrowed(address(usdc)), PRICE);
+    }
+}
+
+/// A contract buyer (the CCIP receiver) funds jobs as itself.
+contract XorvEscrowFundDirectTest is XorvEscrowTestBase {
+    address internal funder = makeAddr("ccip-receiver");
+
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        escrow.setFunder(funder, true);
+        usdc.mint(funder, 100e6);
+        vm.prank(funder);
+        usdc.approve(address(escrow), type(uint256).max);
+    }
+
+    function _direct(bytes32 jobId, uint256 amount, uint40 deadline) internal {
+        vm.prank(funder);
+        escrow.fundDirect(jobId, provider, address(usdc), amount, deadline);
+    }
+
+    function test_fundDirect_funderIsBuyerOfRecord() public {
+        uint40 deadline = _deadline();
+        vm.expectEmit(address(escrow));
+        emit XorvEscrow.JobFunded(JOB, funder, provider, address(usdc), PRICE, deadline);
+        _direct(JOB, PRICE, deadline);
+
+        XorvEscrow.Job memory job = escrow.getJob(JOB);
+        assertEq(job.buyer, funder);
+        assertEq(job.provider, provider);
+        assertEq(job.amount, PRICE);
+        assertEq(usdc.balanceOf(address(escrow)), PRICE);
+        assertEq(escrow.totalEscrowed(address(usdc)), PRICE);
+    }
+
+    function test_fundDirect_settlesLikeAnyJob() public {
+        _direct(JOB, PRICE, _deadline());
+        // The funder is the buyer: it may release at any time.
+        vm.prank(funder);
+        escrow.release(JOB, RESULT);
+        assertEq(usdc.balanceOf(provider), PRICE);
+        assertEq(registry.completed(provider), 1);
+
+        bytes32 job2 = keccak256("job-2");
+        uint40 deadline = _deadline();
+        _direct(job2, PRICE, deadline);
+        vm.warp(deadline + 1);
+        escrow.refund(job2);
+        assertEq(usdc.balanceOf(funder), 100e6 - PRICE);
+    }
+
+    function test_fundDirect_onlyAllowlisted() public {
+        usdc.mint(stranger, 10e6);
+        vm.startPrank(stranger);
+        usdc.approve(address(escrow), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.NotFunder.selector, stranger));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+        vm.stopPrank();
+
+        vm.prank(owner);
+        escrow.setFunder(funder, false);
+        vm.prank(funder);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.NotFunder.selector, funder));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+    }
+
+    function test_fundDirect_setFunderGuards() public {
+        vm.expectEmit(address(escrow));
+        emit XorvEscrow.FunderUpdated(stranger, true);
+        vm.prank(owner);
+        escrow.setFunder(stranger, true);
+        assertTrue(escrow.funderAllowed(stranger));
+        vm.prank(owner);
+        vm.expectRevert(XorvEscrow.ZeroAddress.selector);
+        escrow.setFunder(address(0), true);
+    }
+
+    function test_fundDirect_sameValidationsAsFund() public {
+        uint40 deadline = _deadline();
+        vm.startPrank(funder);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidAmount.selector, 0));
+        escrow.fundDirect(JOB, provider, address(usdc), 0, deadline);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.AmountAboveCap.selector, CAP + 1, CAP));
+        escrow.fundDirect(JOB, provider, address(usdc), CAP + 1, deadline);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidParties.selector, funder, funder));
+        escrow.fundDirect(JOB, funder, address(usdc), PRICE, deadline);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidParties.selector, funder, address(0)));
+        escrow.fundDirect(JOB, address(0), address(usdc), PRICE, deadline);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.TokenNotAllowed.selector, stranger));
+        escrow.fundDirect(JOB, provider, stranger, PRICE, deadline);
+        uint40 tooSoon = uint40(block.timestamp + 30);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidDeadline.selector, tooSoon));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, tooSoon);
+        uint40 tooLate = uint40(block.timestamp + 8 days);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.InvalidDeadline.selector, tooLate));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, tooLate);
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, deadline);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.JobExists.selector, JOB));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, deadline);
+        vm.stopPrank();
+    }
+
+    function test_fundDirect_cannotSquatOnABrokerJob() public {
+        // A broker job funded by signature first: a funder can't reuse its id, and vice versa.
+        _fund(JOB, PRICE);
+        vm.prank(funder);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.JobExists.selector, JOB));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+    }
+
+    function test_fundDirect_blockedWhenPaused() public {
+        vm.prank(owner);
+        escrow.pause();
+        vm.prank(funder);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+    }
+
+    function test_fundDirect_rejectsFeeOnTransfer() public {
+        usdc.setTransferFeeBps(100);
+        vm.prank(funder);
+        vm.expectRevert(
+            abi.encodeWithSelector(XorvEscrow.AmountMismatch.selector, PRICE, PRICE - PRICE / 100)
+        );
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+    }
+
+    function test_fundDirect_respectsIdentityGate() public {
+        MockGate gate = new MockGate();
+        vm.prank(owner);
+        escrow.setIdentityGate(address(gate));
+        gate.set(provider, true);
+        vm.prank(funder);
+        vm.expectRevert(abi.encodeWithSelector(XorvEscrow.IdentityNotVerified.selector, funder));
+        escrow.fundDirect(JOB, provider, address(usdc), PRICE, _deadline());
+        gate.set(funder, true);
+        _direct(JOB, PRICE, _deadline());
+    }
+}
+
+contract MockGate {
+    mapping(address => bool) public isVerified;
+
+    function set(address a, bool v) external {
+        isVerified[a] = v;
     }
 }

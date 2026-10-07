@@ -9,8 +9,8 @@ import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/Signa
  * A minimal EIP-3009 stablecoin for tests, faithful to the parts XorvEscrow
  * relies on: 6 decimals, the canonical `ReceiveWithAuthorization` typehash,
  * the `msg.sender == to` rule, single-use nonces, validity windows, and
- * ERC-1271 support through the `bytes signature` overload (as FiatTokenV2_2
- * and AUSD both have).
+ * ERC-1271 support through the `bytes signature` overload (as FiatTokenV2_2,
+ * the USDC behind Arc's 0x3600…0000, has).
  */
 contract MockERC3009 is ERC20, EIP712 {
     bytes32 public constant RECEIVE_WITH_AUTHORIZATION_TYPEHASH = keccak256(

@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 /**
  * The slice of EIP-3009 ("Transfer With Authorization") that XorvEscrow uses.
  *
- * Both stablecoins Xorv settles in implement it: Circle's USDC (FiatTokenV2_2)
- * and Agora's AUSD. The
+ * Circle's USDC implements it (FiatTokenV2_2; on Arc, the ERC-20 view of the
+ * native gas balance at 0x3600…0000, EIP-712 domain "USDC" version "2"). The
  * `bytes signature` overloads are used rather than `(v, r, s)` because they
  * also accept ERC-1271 signatures, so a buyer paying from a smart-contract
  * wallet works with no extra code.

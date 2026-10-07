@@ -40,9 +40,10 @@ contract EscrowHandler is Test {
     }
 
     function actors() external view returns (address[] memory all) {
-        all = new address[](buyerKeys.length + providers.length);
+        all = new address[](buyerKeys.length + providers.length + 1);
         for (uint256 i = 0; i < buyerKeys.length; ++i) all[i] = vm.addr(buyerKeys[i]);
         for (uint256 i = 0; i < providers.length; ++i) all[buyerKeys.length + i] = providers[i];
+        all[buyerKeys.length + providers.length] = address(this);
     }
 
     function fund(uint256 buyerSeed, uint256 providerSeed, uint256 amount, uint256 duration)
@@ -81,6 +82,21 @@ contract EscrowHandler is Test {
         });
         vm.prank(attester);
         escrow.fund(f);
+        jobIds.push(jobId);
+        ghostFunded += amount;
+        ghostEscrowed += amount;
+    }
+
+    /// The handler itself is an allowlisted contract buyer (like the CCIP receiver).
+    function fundDirect(uint256 providerSeed, uint256 amount, uint256 duration) external {
+        address provider = providers[providerSeed % providers.length];
+        amount = bound(amount, 1, 50e6);
+        uint40 deadline = uint40(block.timestamp + bound(duration, 2 minutes, 3 days));
+        bytes32 jobId = keccak256(abi.encode("job", nextJob++));
+        token.mint(address(this), amount);
+        ghostMinted += amount;
+        token.approve(address(escrow), amount);
+        escrow.fundDirect(jobId, provider, address(token), amount, deadline);
         jobIds.push(jobId);
         ghostFunded += amount;
         ghostEscrowed += amount;
@@ -163,13 +179,14 @@ contract XorvEscrowInvariantTest is Test {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        token = new MockERC3009("Global Dollar", "1");
+        token = new MockERC3009("USDC", "2");
         MockRegistry registry = new MockRegistry();
         address[] memory tokens = new address[](1);
         tokens[0] = address(token);
-        escrow = new XorvEscrow(address(this), attester, address(registry), tokens);
+        escrow = new XorvEscrow(address(this), attester, address(registry), tokens, 100e6);
         registry.setEscrow(address(escrow));
         handler = new EscrowHandler(escrow, token, attester, treasury);
+        escrow.setFunder(address(handler), true);
         escrow.transferOwnership(address(handler));
         vm.prank(address(handler));
         escrow.acceptOwnership();

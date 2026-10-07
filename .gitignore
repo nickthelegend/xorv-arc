@@ -54,3 +54,6 @@ references_/
 
 # git worktrees created by parallel agents
 .claude/worktrees/
+
+# contracts/ installs the Chainlink packages with its own npm (standalone package-lock)
+contracts/node_modules/
