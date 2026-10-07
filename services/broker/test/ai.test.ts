@@ -101,7 +101,7 @@ const quiet = () => undefined;
 function job(over: Partial<StoredJob> = {}): StoredJob {
   return {
     id: "job_test",
-    request: { prompt: "Write a haiku about Monad.", maxPriceUsdMicros: 50_000 },
+    request: { prompt: "Write a haiku about Arc.", maxPriceUsdMicros: 50_000 },
     status: "completed",
     createdAt: 1,
     providerId: "prv_a",
@@ -315,7 +315,7 @@ describe("the Kimi verifier", () => {
     expect(typeof verification!.ms).toBe("number");
     expect(typeof verification!.at).toBe("number");
     const user = (llm.calls[0]!.body.messages as Array<{ content: string }>)[1]!.content;
-    expect(user).toContain("<prompt>\nWrite a haiku about Monad.\n</prompt>");
+    expect(user).toContain("<prompt>\nWrite a haiku about Arc.\n</prompt>");
     expect(user).toContain("<result>\nBlocks every half second");
   });
 
@@ -397,7 +397,7 @@ describe("verification feedback (ERC-8004)", () => {
       xorv: {
         kind: "verification",
         jobId: "job_test",
-        requestHash: textHash("Write a haiku about Monad."),
+        requestHash: textHash("Write a haiku about Arc."),
         resultHash: job().resultHash,
         verifier: { by: "kimi", model: "kimi-k3", score: 87, pass: true, flags: [] },
       },

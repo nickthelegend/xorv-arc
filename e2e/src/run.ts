@@ -517,7 +517,7 @@ async function main(): Promise<void> {
     const tools = (agentRouting?.steps ?? []).map((st) => st.tool);
     report.check(
       "router's trace: listed candidates, read the provider, then selected",
-      tools[0] === "list_candidates" && tools.at(-1) === "select_provider" && tools.includes("recent_receipts") && tools.includes("nansen_trust"),
+      tools[0] === "list_candidates" && tools.at(-1) === "select_provider" && tools.includes("recent_receipts") && tools.includes("escrow_outcomes"),
       tools.join(" → ") || "no steps",
     );
     report.equal("quote freezes $0.04 = 40000 USDC units", out.quote.usdcAmount, "40000");

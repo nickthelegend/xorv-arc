@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DROPPED = /^(XORV_|MONAD_|NEXT_PUBLIC_|ENVIO_|DASHSCOPE_|MOONSHOT_|TOKENHUB_|HEDERA_|PRIVY_)/;
+const DROPPED = /^(XORV_|ARC_FORK_|MONAD_|NEXT_PUBLIC_|ENVIO_|DASHSCOPE_|MOONSHOT_|TOKENHUB_|HEDERA_|PRIVY_)/;
 
 /** Read by the broker or the protocol, but only mentioned in .env.example's comments. */
 const EXTRA_BROKER_VARS = [

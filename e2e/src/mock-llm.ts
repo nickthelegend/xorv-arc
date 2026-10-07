@@ -15,7 +15,7 @@
  *  - Qwen router: runs the broker's tool loop the way the real model does —
  *    turn 1 calls list_candidates; turn 2 reads the chosen provider with
  *    erc8004_reputation (when it has an agent), recent_receipts,
- *    indexer_provider_stats and nansen_trust in parallel; turn 3 calls
+ *    indexer_provider_stats and escrow_outcomes in parallel; turn 3 calls
  *    select_provider. It picks the "qwen" provider whenever one is listed —
  *    deliberately not the cheapest option, so the quote proves the router
  *    (not the price matcher) chose.
@@ -169,7 +169,7 @@ export async function startMockLlm(opts: { keys: Record<MockPreset, string> }): 
           ...(pick.agentId ? [call("erc8004_reputation", { agentId: pick.agentId })] : []),
           call("recent_receipts", { providerId: pick.providerId }),
           call("indexer_provider_stats", { providerId: pick.providerId }),
-          call("nansen_trust", { providerId: pick.providerId }),
+          call("escrow_outcomes", { providerId: pick.providerId }),
         ];
       } else {
         toolCalls = [

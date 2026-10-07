@@ -103,7 +103,7 @@ const CANDIDATES: RouteCandidate[] = [
   candidate({ providerId: "prv_big", label: "big node", adapter: "claude-code", address: ADDR.big, priceUsdMicros: 90_000 }),
 ];
 
-const REQUEST: JobRequest = { prompt: "Write a haiku about Monad", maxPriceUsdMicros: 50_000 };
+const REQUEST: JobRequest = { prompt: "Write a haiku about Arc", maxPriceUsdMicros: 50_000 };
 
 // ---------------------------------------------------------------------------
 // A scripted Qwen
@@ -285,7 +285,7 @@ const HAPPY_PATH: Turn[] = [
 // ---------------------------------------------------------------------------
 
 describe("the Qwen router's tool loop", () => {
-  it("lists, reads Monad state in parallel, then picks a provider — and records every step", async () => {
+  it("lists, reads Arc state in parallel, then picks a provider — and records every step", async () => {
     const qwen = scriptedQwen(HAPPY_PATH);
     const data = stubData();
     const routing = await router(qwen.fetch).route(REQUEST, CANDIDATES, data);
@@ -351,7 +351,7 @@ describe("the Qwen router's tool loop", () => {
       "select_provider",
     ]);
     expect(first.messages[0]!.content).toMatch(/job router for Xorv/);
-    expect(first.messages[1]!.content).toContain("<prompt>\nWrite a haiku about Monad\n</prompt>");
+    expect(first.messages[1]!.content).toContain("<prompt>\nWrite a haiku about Arc\n</prompt>");
     expect(first.messages[1]!.content).toContain("ceiling is $0.0500; 3 live options are within it");
 
     // Turn 2 saw the candidate list as a tool result — never the node over the ceiling.

@@ -263,7 +263,7 @@ describe("streamChat", () => {
         fetch: sseFetch([
           chunk({ tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "search", arguments: "" } }] }),
           chunk({ tool_calls: [{ index: 0, function: { arguments: '{"q":' } }] }),
-          chunk({ tool_calls: [{ index: 0, function: { arguments: '"monad"}' } }] }),
+          chunk({ tool_calls: [{ index: 0, function: { arguments: '"arc"}' } }] }),
           "data: [DONE]\n\n",
         ]),
       }),
@@ -271,7 +271,7 @@ describe("streamChat", () => {
     expect(deltas).toEqual([
       { kind: "tool", index: 0, id: "call_1", name: "search", args: "" },
       { kind: "tool", index: 0, args: '{"q":' },
-      { kind: "tool", index: 0, args: '"monad"}' },
+      { kind: "tool", index: 0, args: '"arc"}' },
     ]);
   });
 

@@ -3,7 +3,7 @@
  *
  * Same shape as integration.test.ts — the real Hono app, the real x402
  * resource server with upfront settlement, the real WebSocket hub, a buyer
- * signing a real EIP-3009 authorization — with only Monad stubbed. The
+ * signing a real EIP-3009 authorization — with only Arc stubbed. The
  * question every test here asks is the same: after a private job, is there
  * any plaintext result anywhere the broker stores or serves? And for vaults:
  * can anyone but the passkey that owns one change it?
@@ -63,7 +63,7 @@ const ANSWER = `Here is the memo about ${SECRET}: …`;
 const INBOX = deriveInboxKeys(Uint8Array.from({ length: 32 }, (_, i) => (i * 3 + 1) & 0xff));
 
 // ---------------------------------------------------------------------------
-// Stubs — only what would touch Monad
+// Stubs — only what would touch Arc
 // ---------------------------------------------------------------------------
 
 class StubChain implements ChainLike {

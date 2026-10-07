@@ -77,7 +77,7 @@ async function buyerPayload(reqs: PaymentRequirements) {
 }
 
 /** An Arc testnet node with a USDC contract, an EOA payer, and a mempool of one. */
-function monadNode() {
+function arcNode() {
   const sent: Hex[] = [];
   const rpc = fakeRpc({
     eth_chainId: () => hex(5042002),
@@ -151,7 +151,7 @@ function monadNode() {
 
 describe("buildLocalFacilitator", () => {
   it("advertises exact on Arc testnet, signed by its own EOA", async () => {
-    const node = monadNode();
+    const node = arcNode();
     const account = accountFromKey(generatePrivateKey());
     const facilitator = buildLocalFacilitator({ network: ARC_TESTNET, account, transport: node.transport, log: () => {} });
     const supported = await facilitator.getSupported();
@@ -161,7 +161,7 @@ describe("buildLocalFacilitator", () => {
   });
 
   it("verifies a genuine buyer payload, simulating the transfer on-chain first", async () => {
-    const node = monadNode();
+    const node = arcNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
       network: ARC_TESTNET,
@@ -178,7 +178,7 @@ describe("buildLocalFacilitator", () => {
   });
 
   it("logs a rejection with its reason at the point of decision", async () => {
-    const node = monadNode();
+    const node = arcNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
       network: ARC_TESTNET,
@@ -197,7 +197,7 @@ describe("buildLocalFacilitator", () => {
   });
 
   it("settles by sending transferWithAuthorization with gas = estimate + headroom", async () => {
-    const node = monadNode();
+    const node = arcNode();
     const log = vi.fn();
     const account = accountFromKey(generatePrivateKey());
     const facilitator = buildLocalFacilitator({ network: ARC_TESTNET, account, transport: node.transport, log });
@@ -225,7 +225,7 @@ describe("buildLocalFacilitator", () => {
   });
 
   it("reports and logs a settlement that fails verification, without sending anything", async () => {
-    const node = monadNode();
+    const node = arcNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
       network: ARC_TESTNET,

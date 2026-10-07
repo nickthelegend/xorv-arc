@@ -3,7 +3,7 @@
  *
  * A real HTTP server, the real Hono app, the real x402 resource server (with
  * the EVM exact scheme and the upfront payment flow) and the real WebSocket
- * hub. Only the parts that would touch Monad are stubbed: the facilitator
+ * hub. Only the parts that would touch Arc are stubbed: the facilitator
  * (which would submit `transferWithAuthorization`), the ledger writer (which
  * would send XorvLedger transactions), the ERC-8004 agent-wallet lookup and
  * the ledger feed reader.
@@ -1880,7 +1880,7 @@ interface AiScript {
   verify?: unknown;
 }
 
-/** Captures verifier feedback instead of sending it to Monad. */
+/** Captures verifier feedback instead of sending it to Arc. */
 class StubFeedback implements FeedbackSink {
   readonly address = privateKeyToAccount(generatePrivateKey()).address;
   readonly reputationRegistry = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
@@ -2027,7 +2027,7 @@ describe("AI roles", () => {
       agentId: "7",
     });
 
-    const { status, body: q } = await quoteWith(ai, { prompt: "Write a haiku about Monad", adapter: "auto" });
+    const { status, body: q } = await quoteWith(ai, { prompt: "Write a haiku about Arc", adapter: "auto" });
     expect(status).toBe(200);
     // Qwen's pick wins over the cheaper node, and says why.
     expect(q.provider).toMatchObject({ id: kimi.providerId, adapter: "kimi", agentId: "7" });
@@ -2046,7 +2046,7 @@ describe("AI roles", () => {
     });
     expect(typeof q.routing.ms).toBe("number");
     expect(q.screening).toMatchObject({ by: "hunyuan", verdict: "allow", category: "none" });
-    // The agent trace: what it read on Monad before it chose.
+    // The agent trace: what it read on Arc before it chose.
     expect(q.routing.steps.map((st: Json) => st.tool)).toEqual([
       "list_candidates",
       "erc8004_reputation",
