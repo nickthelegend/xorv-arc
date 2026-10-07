@@ -1,22 +1,23 @@
 /**
  * `xorv wallet` — the payout address.
  *
- * On Monad there is nothing to set up before an address can be paid: any
+ * On Arc there is nothing to set up before an address can be paid: any
  * address can receive an ERC-20, so the Hedera-era chores (token association,
  * funding an account into existence) are gone. What is left to show is what the
  * address holds and where to look it up.
  *
- * Both balances are shown, with what each is for, because they are easy to
- * confuse: USDC is what jobs pay in; MON is gas, which a provider only needs
- * for the optional `xorv identity register` (the facilitator pays the gas on
- * every settlement, so earning never costs MON).
+ * Arc pays gas in USDC, so there is one token, with two views of the same
+ * balance: the 6-decimal ERC-20 jobs pay in, and the 18-decimal native view
+ * gas is metered in. A provider only spends gas on the optional
+ * `xorv identity register` / `bind` and on `xorv withdraw` (the broker's
+ * facilitator pays the gas on every settlement, so earning costs nothing).
  */
 
 import {
   explorerAddress,
   explorerToken,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   formatUsdc,
   networkConfig,
   networkLabel,
@@ -35,9 +36,11 @@ export function walletRows(config: Pick<NodeConfig, "network" | "address" | "pri
     ["network", `${cfg.name} ${ui.c.muted(`(${cfg.caip2})`)}`],
     ["usdc", `${ui.c.money(formatUsdc(balances.usdcUnits))} ${ui.c.muted("— what jobs pay you in")}`],
     [
-      "mon",
-      `${formatMon(balances.monWei)} ${ui.c.muted(
-        BigInt(balances.monWei) === 0n ? "— none needed to earn; gas only for `xorv identity register`" : "— gas, for `xorv identity register`",
+      "gas",
+      `${formatGasUsdc(balances.nativeWei)} ${ui.c.muted(
+        BigInt(balances.nativeWei) === 0n
+          ? "— the same USDC (Arc's gas token); none needed to earn"
+          : "— the same USDC, as gas (identity, withdraw)",
       )}`,
     ],
     ["key", config.privateKey ? ui.c.muted("stored locally (0600)") : ui.c.muted("none on this machine — address-only")],
@@ -45,11 +48,8 @@ export function walletRows(config: Pick<NodeConfig, "network" | "address" | "pri
     ["token", ui.c.muted(`${cfg.usdc.symbol} ${explorerToken(cfg.caip2, cfg.usdc.address)}`)],
     ["explorer", ui.c.muted(explorerAddress(cfg.caip2, address))],
   ];
-  if (cfg.faucets.usdc || cfg.faucets.mon) {
-    rows.push([
-      "faucets",
-      ui.c.muted([cfg.faucets.usdc && `USDC ${cfg.faucets.usdc}`, cfg.faucets.mon && `MON ${cfg.faucets.mon}`].filter(Boolean).join(" · ")),
-    ]);
+  if (cfg.faucets.usdc) {
+    rows.push(["faucet", ui.c.muted(`USDC (also gas) ${cfg.faucets.usdc} — choose "${cfg.name}"`)]);
   }
   return rows;
 }
@@ -59,7 +59,7 @@ export async function walletShow(): Promise<void> {
   const address = payoutAddress(config);
   console.log(ui.banner("payout wallet"));
 
-  const spin = ui.spinner(`reading ${address} on Monad ${networkLabel(config.network)}…`);
+  const spin = ui.spinner(`reading ${address} on Arc ${networkLabel(config.network)}…`);
   try {
     const balances = await fetchBalances(config.network, address);
     spin.stop();
@@ -113,8 +113,8 @@ export async function walletNew(): Promise<void> {
           ["private key", ui.c.muted(`saved to the node config (0600) — back it up: xorv config --path`)],
         ]),
         "",
-        "  Nothing to fund: any Monad address can receive USDC.",
-        ...(cfg.faucets.mon ? [`  (MON for an identity: ${cfg.faucets.mon})`] : []),
+        "  Nothing to fund: any Arc address can receive USDC.",
+        ...(cfg.faucets.usdc ? [`  (test USDC, which is also Arc's gas: ${cfg.faucets.usdc})`] : []),
       ],
       { title: "keypair", color: ui.BRAND.amber },
     ),

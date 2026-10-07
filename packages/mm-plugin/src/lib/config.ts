@@ -4,7 +4,7 @@
  * timeout). Pure functions — the commands feed them raw flag values.
  */
 
-import { MONAD_MAINNET, MONAD_TESTNET, networkConfig, parseUsd, type MonadNetwork } from "@xorv/protocol";
+import { ARC_MAINNET, ARC_TESTNET, networkConfig, parseUsd, type ArcNetwork } from "@xorv/protocol";
 import { XorvPluginError } from "./errors.js";
 
 /** `mm xorv …` talks to this broker unless `--broker` or `XORV_BROKER_URL` says otherwise. */
@@ -12,17 +12,17 @@ export const DEFAULT_BROKER_URL = "http://localhost:8402";
 export const BROKER_URL_ENV = "XORV_BROKER_URL";
 
 /**
- * The chains this plugin will ever sign for: Monad testnet and mainnet.
+ * The chains this plugin will ever sign for: Arc testnet (5042002) and Arc mainnet (5042).
  *
  * Mirrors `package.json#mm.commands[].targetChains`, which is what MetaMask
  * shows on the install consent screen. Keeping the runtime check next to the
  * declared list means a broker on some other chain gets a clear refusal here,
  * not a signature for a chain the user never consented to.
  */
-export const TARGET_CHAIN_IDS = [10143, 143] as const;
-const NETWORK_BY_CHAIN_ID: Readonly<Record<number, MonadNetwork>> = {
-  10143: MONAD_TESTNET,
-  143: MONAD_MAINNET,
+export const TARGET_CHAIN_IDS = [5042002, 5042] as const;
+const NETWORK_BY_CHAIN_ID: Readonly<Record<number, ArcNetwork>> = {
+  5042002: ARC_TESTNET,
+  5042: ARC_MAINNET,
 };
 
 /** The default spend ceiling per job, in dollars — the same default as `xorv run` in the Xorv CLI. */
@@ -63,7 +63,7 @@ export function resolveBrokerUrl(flag?: string | null, env: Env = process.env): 
 }
 
 /** The CAIP-2 network for one of the plugin's target chain ids, or null for any other chain. */
-export function networkForChainId(chainId: number): MonadNetwork | null {
+export function networkForChainId(chainId: number): ArcNetwork | null {
   return NETWORK_BY_CHAIN_ID[chainId] ?? null;
 }
 
@@ -87,8 +87,8 @@ export function parseChainId(raw: string | null | undefined): number | null {
   if (!Number.isInteger(chainId) || !networkForChainId(chainId)) {
     throw new XorvPluginError(
       "XORV_INVALID_INPUT",
-      `--chain-id ${text} is not a Monad chain`,
-      `Use --chain-id ${TARGET_CHAIN_IDS[0]} (Monad testnet) or --chain-id ${TARGET_CHAIN_IDS[1]} (Monad mainnet).`,
+      `--chain-id ${text} is not an Arc chain`,
+      `Use --chain-id ${TARGET_CHAIN_IDS[0]} (Arc testnet) or --chain-id ${TARGET_CHAIN_IDS[1]} (Arc mainnet).`,
     );
   }
   return chainId;
@@ -150,7 +150,7 @@ export function parseTimeoutSeconds(raw: string | null | undefined): number {
   return seconds;
 }
 
-/** Short human label for a target network, e.g. "Monad Testnet". */
+/** Short human label for a target network, e.g. "Arc Testnet". */
 export function networkName(network: string): string {
   try {
     return networkConfig(network).name;

@@ -1,7 +1,7 @@
 {
   "name": "@xorv/mcp",
   "version": "0.2.0",
-  "description": "MCP server for Xorv — lets any agent buy AI capacity from the network and pay for it in USDC over x402 on Monad, from a local key or a policy-bounded Privy server wallet.",
+  "description": "MCP server for Xorv — lets any agent buy AI capacity from the network and pay for it in USDC over x402 on Arc, from a local key or a policy-bounded Privy server wallet.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -12,14 +12,14 @@
   "files": ["dist", "README.md"],
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=20.19.0" },
-  "homepage": "https://github.com/nickthelegend/xorv-monad/tree/main/packages/mcp#readme",
+  "homepage": "https://github.com/nickthelegend/xorv-arc/tree/main/packages/mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nickthelegend/xorv-monad.git",
+    "url": "git+https://github.com/nickthelegend/xorv-arc.git",
     "directory": "packages/mcp"
   },
-  "bugs": "https://github.com/nickthelegend/xorv-monad/issues",
-  "keywords": ["mcp", "x402", "monad", "evm", "usdc", "privy", "ai-agents", "model-context-protocol"],
+  "bugs": "https://github.com/nickthelegend/xorv-arc/issues",
+  "keywords": ["mcp", "x402", "arc", "circle", "ccip", "evm", "usdc", "privy", "ai-agents", "model-context-protocol"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/make-executable.mjs dist/index.js dist/scripts/privy-setup.js",
     "dev": "tsx src/index.ts",

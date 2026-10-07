@@ -3,7 +3,7 @@
  *
  * Reads the local append-only ledger written as each job settles, so it works
  * with the broker down and with no network at all. The authoritative record is
- * on Monad — the USDC transfer to the payout address, and the XorvLedger
+ * on Arc — the USDC transfer to the payout address, and the XorvLedger
  * receipt that names it; this is the operator's own copy, and the balance at
  * the bottom is read live from the chain.
  */
@@ -12,7 +12,7 @@ import {
   explorerAddress,
   fetchBalances,
   formatDuration,
-  formatMon,
+  formatGasUsdc,
   formatUsd,
   formatUsdc,
   networkLabel,
@@ -175,9 +175,9 @@ export async function earningsCommand(opts: { json?: boolean; limit?: string }):
       console.log(
         ui.box(
           ui.kv([
-            ["address", `${config.address} ${ui.c.muted(`(Monad ${networkLabel(config.network)})`)}`],
+            ["address", `${config.address} ${ui.c.muted(`(Arc ${networkLabel(config.network)})`)}`],
             ["usdc", ui.c.money(formatUsdc(balances.usdcUnits))],
-            ["mon", formatMon(balances.monWei)],
+            ["gas", ui.c.muted(`${formatGasUsdc(balances.nativeWei)} (the same USDC, 18-decimal gas view)`)],
             ["explorer", ui.c.muted(explorerAddress(config.network, config.address))],
           ]),
           { title: "wallet", color: ui.BRAND.mint },
@@ -185,7 +185,7 @@ export async function earningsCommand(opts: { json?: boolean; limit?: string }):
       );
     } catch {
       spin.stop();
-      ui.warn("  couldn't reach the Monad RPC for the live balance");
+      ui.warn("  couldn't reach the Arc RPC for the live balance");
     }
   }
   ui.blank();

@@ -2,7 +2,7 @@
  * Shared test fixtures: throwaway keys and a fake Privy client.
  *
  * The keys are the well-known Anvil/Hardhat development accounts — public,
- * worthless, and never funded on Monad. Using fixed keys keeps signatures and
+ * worthless, and never funded on Arc. Using fixed keys keeps signatures and
  * addresses stable across runs.
  */
 

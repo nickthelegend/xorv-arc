@@ -147,7 +147,7 @@ describe("Privy signer", () => {
       maxUsdcUnits: 50_000,
       expect: { payTo: PROVIDER, amount: "10000" },
     });
-    const usdc = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+    const usdc = "0x3600000000000000000000000000000000000000";
     const payload = await client.createPaymentPayload({
       x402Version: 2,
       resource: { url: "http://broker.test/api/jobs/qte_1", description: "job", mimeType: "application/json" },
@@ -164,19 +164,19 @@ describe("Privy signer", () => {
       ],
     });
 
-    // Exactly one wallet-API call, for this wallet, for a USDC authorization on Monad testnet.
+    // Exactly one wallet-API call, for this wallet, for a USDC authorization on Arc testnet.
     expect(privy.signRequests).toHaveLength(1);
     const request = privy.signRequests[0]!;
     expect(request.walletId).toBe("wal_test");
     expect(request.typed_data.primary_type).toBe("TransferWithAuthorization");
-    expect(request.typed_data.domain).toMatchObject({ name: "USDC", version: "2", chainId: 10143, verifyingContract: usdc });
+    expect(request.typed_data.domain).toMatchObject({ name: "USDC", version: "2", chainId: 5042002, verifyingContract: usdc });
     expect(request.authorization_context).toBeUndefined();
 
     const auth = payload.payload.authorization as Record<string, string>;
     expect(auth.from).toBe(PRIVY_WALLET_ADDRESS);
     const valid = await verifyTypedData({
       address: PRIVY_WALLET_ADDRESS as Hex,
-      domain: { name: "USDC", version: "2", chainId: 10143, verifyingContract: usdc as Hex },
+      domain: { name: "USDC", version: "2", chainId: 5042002, verifyingContract: usdc as Hex },
       types: {
         TransferWithAuthorization: [
           { name: "from", type: "address" },
@@ -227,7 +227,7 @@ describe("Privy signer", () => {
         {
           scheme: "exact",
           network: NETWORK as `${string}:${string}`,
-          asset: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+          asset: "0x3600000000000000000000000000000000000000",
           amount,
           payTo: PROVIDER,
           maxTimeoutSeconds: 300,
@@ -250,7 +250,7 @@ describe("Privy signer", () => {
     expect(signer.describe()).toContain("owner-keyed");
     const payer = await signer.resolve();
     await payer.account.signTypedData({
-      domain: { name: "XorvLedger", version: "1", chainId: 10143, verifyingContract: PROVIDER as Hex },
+      domain: { name: "XorvLedger", version: "1", chainId: 5042002, verifyingContract: PROVIDER as Hex },
       types: { Ping: [{ name: "n", type: "uint256" }] },
       primaryType: "Ping",
       message: { n: 1n },

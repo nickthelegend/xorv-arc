@@ -2,7 +2,7 @@
  * npm's package page and `xorv --help` are where people go looking for the
  * source. Both must name this repository, not the Hedera prototype
  * (nickthelegend/xorv) that Xorv was ported from and that has none of the
- * Monad work. The root package.json is the reference.
+ * Arc work. The root package.json is the reference.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -22,8 +22,8 @@ const read = (file: string) => JSON.parse(readFileSync(file, "utf8")) as Package
 const pkg = read(join(pkgDir, "package.json"));
 const root = read(join(pkgDir, "..", "..", "package.json"));
 
-/** Any link to the prototype repo: `nickthelegend/xorv` not followed by `-monad`. */
-const PROTOTYPE_REPO = /github\.com\/nickthelegend\/xorv(?!-monad)/;
+/** Any link to the prototype repo: `nickthelegend/xorv` not followed by `-arc`. */
+const PROTOTYPE_REPO = /github\.com\/nickthelegend\/xorv(?!-arc)/;
 
 describe("package metadata", () => {
   it("points repository, homepage and bugs at this repository", () => {

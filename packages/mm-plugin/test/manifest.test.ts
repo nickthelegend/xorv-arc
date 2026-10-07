@@ -40,7 +40,7 @@ describe("package.json#mm", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("keeps plugin-wide capabilities empty and targets only Monad", () => {
+  it("keeps plugin-wide capabilities empty and targets only Arc", () => {
     expect(pkg.mm.capabilities).toEqual([]);
     for (const command of pkg.mm.commands) expect(command.targetChains).toEqual([...TARGET_CHAIN_IDS]);
   });

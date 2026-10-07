@@ -84,7 +84,7 @@ export async function startCommand(opts: StartOptions): Promise<void> {
   if (opts.broker) config.brokerUrl = opts.broker;
   const brokerUrl = resolveBrokerUrl(config);
 
-  console.log(ui.banner(`${config.label} · Monad ${networkLabel(config.network)}`));
+  console.log(ui.banner(`${config.label} · Arc ${networkLabel(config.network)}`));
 
   const node = new ProviderNode(config);
   // Keep the session token, so the next `xorv start` can prove it is this

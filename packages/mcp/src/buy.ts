@@ -1,9 +1,10 @@
 /**
  * Buying a job: quote, vet, pay over x402, wait for the answer.
  *
- * On Monad the payment is an EIP-3009 `transferWithAuthorization` over USDC:
- * the payer signs an EIP-712 message, the broker's facilitator submits it and
- * pays the MON gas, and the USDC moves payer → provider in one transfer. The
+ * On Arc the payment is an EIP-3009 `transferWithAuthorization` over USDC:
+ * the payer signs an EIP-712 message, the broker's self-hosted facilitator
+ * submits it and pays the gas (Arc's gas token is USDC too), and the USDC moves
+ * payer → provider (or into XorvEscrow for the provider) in one transfer. The
  * payer holds nothing but USDC, and the broker is never the payee.
  *
  * A signed authorization is directly spendable by whoever holds it, so
@@ -31,6 +32,7 @@ import {
   parseUsd,
   sameAddress,
   usdMicrosToUsdcUnits,
+  type CcipQuoteTerms,
   type PaymentRecord,
   type PublicJob,
   type QuoteResponse,
@@ -43,7 +45,7 @@ export type BuyStage = "setup" | "budget" | "quote" | "payment" | "job";
 
 /**
  * How long the pay request (402, sign, paid retry with settlement) may take.
- * Monad settles in about a second; this is slack for a slow RPC behind the
+ * Arc is final in under a second; this is slack for a slow RPC behind the
  * facilitator, not an expected duration.
  */
 export const PAYMENT_TIMEOUT_MS = 90_000;
@@ -162,6 +164,35 @@ export async function requestQuote(
     throw new BuyError("quote", brokerErrorText(reply.body) ?? `No quote: broker returned ${reply.status}`);
   }
   return reply.body;
+}
+
+/**
+ * Quote a job to be funded from another chain over Chainlink CCIP
+ * (`payVia: "ccip"`). Returns the quote with its `ccip` terms; throws a
+ * `BuyError` when the broker takes no cross-chain jobs. Signs nothing and
+ * sends nothing: the buyer agent pays on its own chain with
+ * `XorvCcipSender.postJob`.
+ */
+export async function requestCcipQuote(
+  broker: BrokerClient,
+  args: { prompt: string; adapter?: string | null; ceilingUsdMicros: number },
+): Promise<QuoteResponse & { ccip: CcipQuoteTerms }> {
+  const reply = await broker.postJson<QuoteResponse & { error?: string }>("/api/quotes", {
+    prompt: args.prompt,
+    adapter: args.adapter ?? null,
+    maxPriceUsdMicros: args.ceilingUsdMicros,
+    payVia: "ccip",
+  });
+  if (!reply.ok) {
+    throw new BuyError("quote", brokerErrorText(reply.body) ?? `No cross-chain quote: broker returned ${reply.status}`);
+  }
+  if (!reply.body.ccip) {
+    throw new BuyError(
+      "quote",
+      "the broker answered without CCIP terms — it takes no cross-chain jobs (no XorvEscrow or XorvCcipReceiver configured)",
+    );
+  }
+  return reply.body as QuoteResponse & { ccip: CcipQuoteTerms };
 }
 
 /**

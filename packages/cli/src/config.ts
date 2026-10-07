@@ -1,16 +1,17 @@
 /**
  * Node configuration, stored under `~/.xorv/` (or `$XORV_HOME`).
  *
- * On Monad a provider needs a payout *address*, not a key. Nothing on the
+ * On Arc a provider needs a payout *address*, not a key. Nothing on the
  * provider's side signs per job: the buyer signs an EIP-3009 authorization, the
- * facilitator submits it and pays the gas, and USDC lands at `address`. So the
+ * broker's facilitator submits it and pays the gas, and USDC lands at `address`. So the
  * safest node is one that keeps no key on disk at all — `xorv init` offers
  * exactly that for an address the operator already controls elsewhere (a Privy
  * wallet from the web app, a hardware wallet), and a key that is not on the
  * machine cannot be read by a hostile prompt.
  *
- * A key is only needed for two things: buying with `xorv run`, and registering
- * an ERC-8004 identity from the payout address (`xorv identity register`).
+ * A key is only needed for: buying with `xorv run`, registering and binding an
+ * ERC-8004 identity from the payout address (`xorv identity register|bind`),
+ * and withdrawing earnings to another chain (`xorv withdraw`).
  * When one is kept it lives here in plaintext, the file mode locked to 0600 and
  * the directory to 0700 — a stated trade-off rather than an oversight: a
  * passphrase would be typed once and held in memory anyway, or written next to
@@ -35,7 +36,7 @@ export interface NodeConfig {
   /** Stable identity across restarts, so the broker re-uses the provider slot. */
   nodeId: string;
   label: string;
-  /** CAIP-2 network id, e.g. `eip155:10143` (Monad testnet). */
+  /** CAIP-2 network id, e.g. `eip155:5042002` (Arc testnet). */
   network: string;
   brokerUrl: string;
   /** Checksummed payout address — where buyers' USDC lands (x402 `payTo`). */
@@ -118,7 +119,7 @@ export class LegacyConfigError extends Error {
       .join(" ");
     super(
       `${CONFIG_PATH} was written by the Hedera version of Xorv${where ? ` (${where})` : ""}. ` +
-        "Xorv now runs on Monad — run `xorv init` to set up a Monad payout address " +
+        "Xorv now runs on Arc — run `xorv init` to set up an Arc payout address " +
         "(your node name, capabilities and prices are kept)",
     );
     this.name = "LegacyConfigError";
@@ -169,7 +170,7 @@ export function loadConfig(): NodeConfig | null {
 
 /**
  * What `xorv init` builds on: the current config, or — for a Hedera-era one —
- * the parts that still mean something on Monad (name, capabilities, prices,
+ * the parts that still mean something on Arc (name, capabilities, prices,
  * region, broker, node id), with the chain-specific fields dropped.
  *
  * Never throws for a legacy config; that is the one command that fixes it.
@@ -289,7 +290,7 @@ export interface EarningRow {
   at: number;
   jobId: string;
   /**
-   * Always "usdc" for rows written on Monad. "hbar" survives in ledgers
+   * Always "usdc" for rows written on Arc. "hbar" survives in ledgers
    * written by the Hedera prototype; they are read, never written.
    */
   asset: "usdc" | "hbar";
@@ -308,7 +309,7 @@ export function appendEarning(row: EarningRow): void {
     fs.appendFileSync(EARNINGS_PATH, `${JSON.stringify(row)}\n`, { mode: 0o600 });
   } catch {
     // The ledger is a convenience; the record of payment is the USDC transfer
-    // on Monad. Never let a disk problem here fail a job that already ran and
+    // on Arc. Never let a disk problem here fail a job that already ran and
     // already got paid.
   }
 }

@@ -21,7 +21,17 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BUYER_ADDRESS, BUYER_KEY } from "./helpers/fixtures.js";
-import { RATE_TX, RECEIPT_TX, SETTLE_TX, startMockBroker, type MockBroker } from "./helpers/mock-broker.js";
+import {
+  CCIP_RECEIVER,
+  CCIP_SENDER,
+  ESCROW_JOB_ID,
+  PROVIDER,
+  RATE_TX,
+  RECEIPT_TX,
+  SETTLE_TX,
+  startMockBroker,
+  type MockBroker,
+} from "./helpers/mock-broker.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const entry = path.resolve(here, "../src/index.ts");
@@ -71,7 +81,7 @@ class Client {
         // Point at a port nothing is listening on, so "broker unreachable" is
         // deterministic rather than depending on a dev server being up.
         XORV_BROKER_URL: "http://127.0.0.1:59999",
-        XORV_NETWORK: "eip155:10143",
+        XORV_NETWORK: "eip155:5042002",
         ...env,
       },
       stdio: ["pipe", "pipe", "pipe"],
@@ -182,6 +192,7 @@ describe("tools", () => {
     await client.handshake();
     const tools = await client.tools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "xorv_ccip_quote",
       "xorv_get_job",
       "xorv_list_providers",
       "xorv_network_status",
@@ -197,6 +208,8 @@ describe("tools", () => {
     // Hints a client can use to decide what needs confirmation.
     expect(tools.find((t) => t.name === "xorv_run_job")?.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.find((t) => t.name === "xorv_quote")?.annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.find((t) => t.name === "xorv_ccip_quote")?.annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.find((t) => t.name === "xorv_ccip_quote")?.description).toMatch(/sends nothing on-chain/);
   }, 40_000);
 
   it("warns in the run_job description that it spends real money", async () => {
@@ -207,7 +220,7 @@ describe("tools", () => {
     // alone that it costs money.
     expect(runJob?.description).toMatch(/pay|spend/i);
     expect(runJob?.description).toMatch(/\$/);
-    expect(runJob?.description).toMatch(/USDC transfer on Monad/);
+    expect(runJob?.description).toMatch(/USDC transfer on Arc/);
     // No HBAR option any more.
     expect(JSON.stringify(runJob?.inputSchema)).not.toMatch(/pay_with|hbar/i);
   }, 40_000);
@@ -238,7 +251,7 @@ describe("configuration", () => {
     const reply = await client.call(2, "xorv_list_providers");
     expect(reply.result?.isError).toBe(true);
     expect(textOf(reply)).toMatch(/misconfigured/);
-    expect(textOf(reply)).toMatch(/eip155:10143/);
+    expect(textOf(reply)).toMatch(/eip155:5042002/);
   }, 40_000);
 });
 
@@ -295,8 +308,8 @@ describe("buying and rating against a mock broker", () => {
     const out = textOf(run);
     expect(run.result?.isError, out).toBeFalsy();
     expect(out.startsWith("4")).toBe(true);
-    expect(out).toContain(`https://testnet.monadscan.com/tx/${SETTLE_TX}`);
-    expect(out).toContain(`https://testnet.monadscan.com/tx/${RECEIPT_TX}`);
+    expect(out).toContain(`https://explorer.testnet.arc.io/tx/${SETTLE_TX}`);
+    expect(out).toContain(`https://explorer.testnet.arc.io/tx/${RECEIPT_TX}`);
     expect(out).toContain(BUYER_ADDRESS);
     expect(out).toMatch(/xorv_rate_job/);
     expect(out).toMatch(/\$0\.0100 of \$0\.5000 session budget spent/);
@@ -304,11 +317,11 @@ describe("buying and rating against a mock broker", () => {
 
     const rate = await client.call(3, "xorv_rate_job", { job_id: "job_test1", value: 90 });
     expect(rate.result?.isError, textOf(rate)).toBeFalsy();
-    expect(textOf(rate)).toContain(`https://testnet.monadscan.com/tx/${RATE_TX}`);
+    expect(textOf(rate)).toContain(`https://explorer.testnet.arc.io/tx/${RATE_TX}`);
     expect(broker.ratings).toEqual([expect.objectContaining({ value: 90, valid: true })]);
 
     const job = await client.call(4, "xorv_get_job", { job_id: "job_test1" });
-    expect(textOf(job)).toContain(`Payment: https://testnet.monadscan.com/tx/${SETTLE_TX}`);
+    expect(textOf(job)).toContain(`Payment: https://explorer.testnet.arc.io/tx/${SETTLE_TX}`);
     expect(textOf(job)).toMatch(/Verified by kimi/);
     expect(client.garbage).toEqual([]);
   }, 60_000);
@@ -323,20 +336,55 @@ describe("buying and rating against a mock broker", () => {
     expect(broker.payments).toEqual([]);
   }, 40_000);
 
-  it("shows network status, providers and quotes with Monad details", async () => {
+  it("shows network status, providers and quotes with Arc details", async () => {
     broker = await startMockBroker();
     client = new Client({ XORV_BROKER_URL: broker.url });
     await client.handshake();
     const status = textOf(await client.call(2, "xorv_network_status"));
-    expect(status).toMatch(/Network: eip155:10143/);
+    expect(status).toMatch(/Network: eip155:5042002/);
     expect(status).toMatch(/XorvLedger: 0x/);
     expect(status).toMatch(/router qwen/);
+    expect(status).toMatch(/Gas: paid in USDC/);
+    expect(status).toMatch(/XorvEscrow: 0x1C75/);
+    expect(status).toMatch(/XorvReputation: 0xbD31.*successRate/);
+    expect(status).toMatch(/CCIP: no XorvCcipReceiver/);
     const providers = textOf(await client.call(3, "xorv_list_providers"));
     expect(providers).toMatch(/pays to 0x00000000000000000000000000000000000000A1/);
     expect(providers).toMatch(/ERC-8004 agent #7/);
     const quote = textOf(await client.call(4, "xorv_quote", { prompt: "hi" }));
     expect(quote).toMatch(/Payment goes directly to 0x/);
-    expect(quote).toMatch(/USDC on Monad Testnet/);
+    expect(quote).toMatch(/USDC on Arc Testnet/);
     expect(broker.payments).toEqual([]);
+  }, 40_000);
+});
+
+describe("cross-chain quotes over CCIP", () => {
+  it("returns the postJob terms for a source chain and pays nothing", async () => {
+    broker = await startMockBroker({ ccip: true });
+    client = new Client({ XORV_BROKER_URL: broker.url, XORV_PRIVATE_KEY: BUYER_KEY });
+    await client.handshake();
+    const reply = await client.call(2, "xorv_ccip_quote", { prompt: "hi", source_chain: "base-sepolia" });
+    const out = textOf(reply);
+    expect(reply.result?.isError, out).toBeFalsy();
+    expect(broker.quotes[0]).toMatchObject({ payVia: "ccip", maxPriceUsdMicros: 50_000 });
+    expect(out).toContain(`Escrow job id: ${ESCROW_JOB_ID}`);
+    expect(out).toContain(`XorvCcipReceiver ${CCIP_RECEIVER}`);
+    expect(out).toContain(`XorvCcipSender: ${CCIP_SENDER}`);
+    expect(out).toMatch(new RegExp(`postJob\\{value: fee\\}\\(${ESCROW_JOB_ID}, ${PROVIDER}, 10000, \\d+, 0, 2000\\)`));
+    expect(out).toMatch(/calldata: 0x/);
+    expect(out).not.toMatch(/Ethereum Sepolia/);
+    expect(out).toMatch(/Nothing was signed or sent/);
+    // Nothing paid, nothing hit beyond the quote.
+    expect(broker.payments).toEqual([]);
+    expect(broker.hits).toEqual(["POST /api/quotes"]);
+  }, 40_000);
+
+  it("says so when the broker takes no cross-chain jobs", async () => {
+    broker = await startMockBroker();
+    client = new Client({ XORV_BROKER_URL: broker.url });
+    await client.handshake();
+    const reply = await client.call(2, "xorv_ccip_quote", { prompt: "hi" });
+    expect(reply.result?.isError).toBe(true);
+    expect(textOf(reply)).toMatch(/no cross-chain jobs/);
   }, 40_000);
 });

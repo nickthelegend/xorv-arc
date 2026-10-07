@@ -164,7 +164,7 @@ function page(node: ProviderNode): string {
 </style></head><body><div class="wrap">
   <div class="mark">Xorv provider node</div>
   <h1>${escapeHtml(node.config.label)}</h1>
-  <p class="sub">Selling idle AI capacity, paid per job in USDC over x402 on Monad.</p>
+  <p class="sub">Selling idle AI capacity, paid per job in USDC over x402 on Arc.</p>
   <span class="pill"><span class="dot"></span>${node.stats.connected ? "connected to the network" : "reconnecting"}</span>
   <div class="grid">
     <div class="card"><div class="k">Jobs done</div><div class="v">${node.stats.jobsCompleted}</div></div>
@@ -174,7 +174,7 @@ function page(node: ProviderNode): string {
   </div>
   <table><thead><tr><th>Capability</th><th>Adapter</th><th class="right">Price / job</th></tr></thead>
   <tbody>${rows}</tbody></table>
-  <footer>Payouts to ${payout} on Monad ${escapeHtml(networkLabel(node.config.network))} (${escapeHtml(node.config.network)}).${agent}
+  <footer>Payouts to ${payout} on Arc ${escapeHtml(networkLabel(node.config.network))} (${escapeHtml(node.config.network)}).${agent}
   <br>Run your own: <span class="mono">npm i -g @xorv/cli &amp;&amp; xorv init</span></footer>
 </div></body></html>`;
 }

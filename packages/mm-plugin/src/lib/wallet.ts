@@ -57,7 +57,7 @@ export function activeEvmAddress(state: WalletStateSnapshot | null | undefined, 
     throw new XorvPluginError(
       "XORV_NO_WALLET",
       "no EVM wallet is set up in MetaMask Agent Wallet",
-      "Run mm init (or mm wallet create), then fund it with test USDC from https://faucet.circle.com (Monad Testnet).",
+      "Run mm init (or mm wallet create), then fund it with test USDC from https://faucet.circle.com (Arc Testnet).",
     );
   }
   // Several wallets and none selected: take the first. The signature check

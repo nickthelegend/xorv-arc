@@ -27,7 +27,7 @@ import {
   explorerAddress,
   explorerAgent,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   formatUsd,
   formatUsdc,
   isLlmPresetKind,
@@ -191,7 +191,7 @@ export function rpcChecks(network: string, rpcUrl: string, probe: RpcProbe): Che
       fail(
         "rpc",
         `${rpcUrl} is chain ${probe.chainId}, but this node is on ${network} (chain ${expected})`,
-        "point XORV_RPC_URL at a Monad RPC for this network, or unset it",
+        "point XORV_RPC_URL at an Arc RPC for this network, or unset it",
       ),
     ];
   }
@@ -199,24 +199,25 @@ export function rpcChecks(network: string, rpcUrl: string, probe: RpcProbe): Che
 }
 
 export interface BalanceLike {
-  /** Native MON, in wei. */
-  monWei: string | bigint | number;
+  /** Native USDC (Arc's gas view of the same balance), in 18-decimal wei. */
+  nativeWei: string | bigint | number;
   /** USDC smallest units. */
   usdcUnits: string | bigint | number;
 }
 
 export function payoutChecks(network: string, address: string, balances: BalanceLike): Check[] {
-  const mon = BigInt(balances.monWei);
+  const native = BigInt(balances.nativeWei);
   return [
-    ok("payout", `${address} on Monad ${networkLabel(network)} · ${explorerAddress(network, address)}`),
+    ok("payout", `${address} on Arc ${networkLabel(network)} · ${explorerAddress(network, address)}`),
     ok(
       "balance",
-      // A provider is *paid*, so it needs no MON to operate — the facilitator
-      // covers the gas on every settlement, and any address can receive USDC
-      // without opting in. Zero is fine here, and flagging it sends people to
-      // a faucet they do not need.
-      `${formatUsdc(balances.usdcUnits)} USDC · ${formatMon(mon)}` +
-        (mon === 0n ? " (no MON needed — the facilitator pays gas)" : ""),
+      // A provider is *paid*, so it needs no gas to operate — the broker's
+      // facilitator covers the gas on every settlement, and any address can
+      // receive USDC without opting in. Zero is fine here, and flagging it
+      // sends people to a faucet they do not need. On Arc gas is the same
+      // USDC, so the native figure is the same money in its 18-decimal view.
+      `${formatUsdc(balances.usdcUnits)} USDC` +
+        (native === 0n ? " (no gas needed to earn — the facilitator pays it)" : ` · gas view ${formatGasUsdc(native)}`),
     ),
   ];
 }
@@ -292,10 +293,10 @@ export function brokerChecks(url: string, info: BrokerNetworkInfo, nodeNetwork: 
       ),
     );
   } else {
-    checks.push(ok("network", `Monad ${networkLabel(info.network)} (${info.network}) · both sides agree`));
+    checks.push(ok("network", `Arc ${networkLabel(info.network)} (${info.network}) · both sides agree`));
   }
 
-  // Optional chaining throughout: a broker not yet moved to Monad answers in
+  // Optional chaining throughout: a broker not yet moved to Arc answers in
   // the old shape, and that should read as a network mismatch, not a crash.
   const payer = info.facilitator?.address ? ` · gas paid by ${info.facilitator.address}` : "";
   checks.push(ok("facilitator", `${info.facilitator?.description ?? "unknown"}${payer}`));
@@ -451,7 +452,7 @@ export function adapterChecks(states: AdapterState[]): Check[] {
  * Repair what has exactly one safe repair, and report the rest.
  *
  * Anything that costs money, moves funds, or needs a human decision is listed
- * as unfixable rather than guessed at. A `--fix` that spends MON on an
+ * as unfixable rather than guessed at. A `--fix` that spends USDC gas on an
  * identity registration without being asked is worse than one that does
  * nothing.
  */

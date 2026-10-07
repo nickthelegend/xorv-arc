@@ -62,7 +62,7 @@ async function exec<T>(Cmd: CommandClass, flags: Record<string, unknown>, opts: 
   cmd.ctx = {
     walletStateManager: { read: walletState },
     publicClient: (chainId: number) => {
-      expect(chainId).toBe(10143);
+      expect(chainId).toBe(5042002);
       return {
         readContract: async () => {
           harness.balanceReads += 1;
@@ -158,13 +158,13 @@ describe("mm xorv providers", () => {
 describe("mm xorv quote", () => {
   it("prices a job without touching the wallet", async () => {
     const { data, hint } = await exec<Awaited<ReturnType<XorvQuote["execute"]>>>(XorvQuote as unknown as CommandClass, {
-      prompt: "Write a haiku about Monad",
+      prompt: "Write a haiku about Arc",
       adapter: "claude-code",
       max: "0.02",
     });
     expect(data).toMatchObject({
       quoteId: "qte_TestQuote01",
-      chainId: 10143,
+      chainId: 5042002,
       price: "$0.0100",
       usdcAmount: "10000",
       usdc: "0.0100 USDC",
@@ -172,7 +172,7 @@ describe("mm xorv quote", () => {
       provider: { label: "alice-mbp", agentId: "42", adapter: "claude-code" },
     });
     const sent = JSON.parse(harness.broker.seen.find((s) => s.path === "/api/quotes")!.body);
-    expect(sent).toMatchObject({ prompt: "Write a haiku about Monad", adapter: "claude-code", maxPriceUsdMicros: 20_000 });
+    expect(sent).toMatchObject({ prompt: "Write a haiku about Arc", adapter: "claude-code", maxPriceUsdMicros: 20_000 });
     expect(hint).toMatch(/mm xorv run/);
     expect(harness.executorSources).toHaveLength(0);
   });
@@ -192,29 +192,29 @@ describe("mm xorv quote", () => {
 describe("mm xorv run", () => {
   it("quotes, has MetaMask sign the EIP-3009 authorization, pays over x402 and returns the result", async () => {
     const { data, hint } = await exec<Awaited<ReturnType<XorvRun["execute"]>>>(XorvRun as unknown as CommandClass, {
-      prompt: "Write a haiku about Monad",
+      prompt: "Write a haiku about Arc",
       max: "0.05",
     });
     expect(data).toMatchObject({
       jobId: JOB_ID,
       status: "completed",
       result: expect.stringContaining("parallel sunrise"),
-      chainId: 10143,
+      chainId: 5042002,
       payer: PAYER.address,
       price: "$0.0100",
       usdcAmount: "10000",
-      payment: { txHash: SETTLE_TX, explorerUrl: `https://testnet.monadscan.com/tx/${SETTLE_TX}` },
+      payment: { txHash: SETTLE_TX, explorerUrl: `https://explorer.testnet.arc.io/tx/${SETTLE_TX}` },
       receiptExplorerUrl: expect.stringContaining("/tx/0xcdcd"),
       rate: `mm xorv rate ${JOB_ID} --stars 5`,
       jobUrl: `${BROKER_URL}/api/jobs/${JOB_ID}`,
     });
-    expect(hint).toContain(`https://testnet.monadscan.com/tx/${SETTLE_TX}`);
+    expect(hint).toContain(`https://explorer.testnet.arc.io/tx/${SETTLE_TX}`);
 
     // The executor was requested under this command's manifest id, once.
     expect(harness.executorSources).toEqual(["xorv:run"]);
     expect(harness.mm.requests).toHaveLength(1);
     const request = harness.mm.requests[0]!;
-    expect(request).toMatchObject({ kind: "typed-data", chainId: 10143 });
+    expect(request).toMatchObject({ kind: "typed-data", chainId: 5042002 });
     expect(request.typedData.primaryType).toBe("TransferWithAuthorization");
     expect(request.typedData.message).toMatchObject({ from: PAYER.address, to: PROVIDER_ADDRESS, value: "10000" });
     expect(request.intent?.summary).toMatch(/Xorv: pay 0\.0100 USDC to 0x7099.*alice-mbp.*qte_TestQuote01/);
@@ -222,7 +222,7 @@ describe("mm xorv run", () => {
     // The broker accepted the signature (it verifies it), and the balance was checked first.
     expect(harness.broker.payments).toHaveLength(1);
     expect(harness.balanceReads).toBe(1);
-    expect(harness.lines.join("\n")).toMatch(/Paid: https:\/\/testnet\.monadscan\.com\/tx\//);
+    expect(harness.lines.join("\n")).toMatch(/Paid: https:\/\/explorer\.testnet\.arc\.io\/tx\//);
     expect(harness.lines.join("\n")).toMatch(/› Drafting the haiku/);
   });
 
@@ -276,9 +276,9 @@ describe("mm xorv rate", () => {
     expect(hint).toContain("ERC-8004 agent #42");
     expect(harness.executorSources).toEqual(["xorv:rate"]);
     const request = harness.mm.requests[0]!;
-    expect(request).toMatchObject({ kind: "typed-data", chainId: 10143 });
+    expect(request).toMatchObject({ kind: "typed-data", chainId: 5042002 });
     expect(request.typedData.primaryType).toBe("Rating");
-    expect(request.typedData.domain).toMatchObject({ name: "XorvLedger", version: "1", chainId: 10143 });
+    expect(request.typedData.domain).toMatchObject({ name: "XorvLedger", version: "1", chainId: 5042002 });
     expect(request.typedData.message).toMatchObject({ value: "80" });
     expect(request.intent?.summary).toMatch(/4\/5 stars/);
     // The broker verified the signature against the payer before accepting.

@@ -595,7 +595,7 @@ describe("XorvLedger", async function () {
 
     it("relays a buyer's EIP-712 signature from a viem account (gasless for the buyer)", async function () {
       const { asBroker, ledger, reputation, identity, agentId } = await loadRecorded();
-      // A fresh viem account with no MON at all: it only ever signs.
+      // A fresh viem account with no gas money at all: it only ever signs.
       const buyerAccount = privateKeyToAccount(generatePrivateKey());
       const r = receiptFor("viem-buyer", agentId, { buyer: buyerAccount.address });
       await asBroker.write.recordJobs([[r]]);
@@ -733,7 +733,7 @@ describe("XorvLedger", async function () {
       ]);
       const forOtherLedger = await signRating(buyer, chainId, otherLedger.address, rating);
       await viem.assertions.revertWithCustomError(asBroker.write.rateJob([rating, forOtherLedger]), asBroker, "BadSignature");
-      const forOtherChain = await signRating(buyer, 143, ledger.address, rating);
+      const forOtherChain = await signRating(buyer, 8453, ledger.address, rating);
       await viem.assertions.revertWithCustomError(asBroker.write.rateJob([rating, forOtherChain]), asBroker, "BadSignature");
 
       await viem.assertions.revertWithCustomError(asBroker.write.rateJob([rating, "0x"]), asBroker, "BadSignature");

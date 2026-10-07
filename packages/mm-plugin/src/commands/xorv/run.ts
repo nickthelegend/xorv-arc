@@ -35,7 +35,7 @@ const inputs = {
  *
  * Quote → vet → 402 → MetaMask signs the USDC `TransferWithAuthorization`
  * (EIP-712, via `ctx.walletExecutor`, so Guard Mode policy and 2FA apply) →
- * the broker's facilitator settles it on Monad, buyer → provider → the job runs
+ * the broker's facilitator settles it on Arc, buyer → provider → the job runs
  * on the provider's machine → the answer, the settlement link and the ledger
  * receipt come back.
  *
@@ -45,7 +45,7 @@ const inputs = {
  */
 export default class XorvRun extends PluginCommand<RunResult> {
   static override description =
-    "Run an AI job on Xorv and pay the provider in USDC over x402 on Monad, signed by your MetaMask wallet.";
+    "Run an AI job on Xorv and pay the provider in USDC over x402 on Arc, signed by your MetaMask wallet.";
 
   static override examples = [
     '<%= config.bin %> xorv run "Explain EIP-3009 in two paragraphs"',

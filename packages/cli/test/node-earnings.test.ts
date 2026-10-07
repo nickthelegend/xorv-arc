@@ -65,7 +65,7 @@ function config(): NodeConfig {
   return {
     nodeId: "earnings-test-node",
     label: "earnings-test",
-    network: "eip155:10143",
+    network: "eip155:5042002",
     brokerUrl: "http://127.0.0.1:9",
     address: PAYOUT,
     privateKey: "",

@@ -8,15 +8,17 @@
  * `XORV_PRIVY_APP_SECRET` — or `PRIVY_APP_ID` / `PRIVY_APP_SECRET`), then:
  *
  *  1. creates a policy that ALLOWs only `eth_signTypedData_v4` for USDC
- *     `TransferWithAuthorization` on the chosen Monad network with
- *     `value <= --cap-usdc` (plus XorvLedger ratings when the ledger address
- *     is known — see privy-policy.ts);
+ *     `TransferWithAuthorization` on the chosen Arc network (chain 5042002
+ *     or 5042) with `value <= --cap-usdc` (plus `ReceiveWithAuthorization`
+ *     into XorvEscrow and XorvLedger ratings when those addresses are known —
+ *     see privy-policy.ts);
  *  2. creates an ethereum server wallet bound to that policy;
  *  3. prints the environment lines for the MCP client config and the address
  *     to fund with test USDC from Circle's faucet.
  *
- * The wallet needs USDC only — never MON: x402's facilitator submits the
- * signed authorization and pays the gas, and ratings are relayed by the broker.
+ * The wallet needs USDC only and never sends a transaction: the broker's
+ * self-hosted x402 facilitator submits the signed authorization and pays the
+ * gas (USDC on Arc), and ratings are relayed by the broker.
  *
  * `--owner-key` also generates a P-256 authorization key and makes it the
  * owner of the wallet and the policy. Then the app secret alone can neither
@@ -47,9 +49,10 @@ Creates a Privy policy + server wallet the Xorv MCP server can pay from.
 
 Options:
   --cap-usdc <n>       Required. Most any single payment may be, in USDC (e.g. 0.50).
-  --network <caip2>    eip155:10143 (Monad testnet, default) or eip155:143 (mainnet).
+  --network <caip2>    eip155:5042002 (Arc testnet, default) or eip155:5042 (Arc mainnet).
   --ledger <0x…>       XorvLedger address, to also allow signing job ratings.
-  --broker <url>       Read the ledger address from this broker's /api/network instead.
+  --escrow <0x…>       XorvEscrow address, to also allow escrowed payments (ReceiveWithAuthorization).
+  --broker <url>       Read the ledger and escrow addresses from this broker's /api/network instead.
   --pay-to <0x…,…>     Only allow paying these provider addresses (default: any).
   --name <label>       Policy / wallet display name.
   --owner-key          Generate a P-256 owner key for the wallet and policy.
@@ -62,6 +65,7 @@ export interface SetupOptions {
   capUnits: bigint;
   network: string;
   ledger: string | null;
+  escrow: string | null;
   broker: string | null;
   payTo: string[];
   name: string | null;
@@ -79,6 +83,7 @@ export function parseSetupArgs(argv: string[], env: Record<string, string | unde
       "cap-usdc": { type: "string" },
       network: { type: "string" },
       ledger: { type: "string" },
+      escrow: { type: "string" },
       broker: { type: "string" },
       "pay-to": { type: "string" },
       name: { type: "string" },
@@ -97,13 +102,14 @@ export function parseSetupArgs(argv: string[], env: Record<string, string | unde
   }
   const network = values.network ?? env.XORV_NETWORK?.trim() ?? DEFAULT_NETWORK;
   if (!isSupportedNetwork(network)) {
-    throw new Error(`--network must be eip155:10143 (Monad testnet) or eip155:143 (mainnet), got "${network}"`);
+    throw new Error(`--network must be eip155:5042002 (Arc testnet) or eip155:5042 (Arc mainnet), got "${network}"`);
   }
   const decimals = networkConfig(network).usdc.decimals;
   return {
     capUnits: parseCapUsdc(values["cap-usdc"], decimals),
     network,
     ledger: values.ledger ? normalizeAddress(values.ledger) : null,
+    escrow: values.escrow ? normalizeAddress(values.escrow) : null,
     broker: values.broker ?? null,
     payTo: (values["pay-to"] ?? "")
       .split(",")
@@ -116,20 +122,25 @@ export function parseSetupArgs(argv: string[], env: Record<string, string | unde
   };
 }
 
-/** The XorvLedger address a broker advertises, or null (with the reason logged). */
-async function ledgerFromBroker(url: string, log: (line: string) => void): Promise<string | null> {
+/** The XorvLedger and XorvEscrow addresses a broker advertises (null each, with the reason logged). */
+export async function contractsFromBroker(
+  url: string,
+  log: (line: string) => void,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ledger: string | null; escrow: string | null }> {
   try {
-    const res = await fetch(`${url.replace(/\/+$/, "")}/api/network`, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetchImpl(`${url.replace(/\/+$/, "")}/api/network`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const info = (await res.json()) as { ledger?: { address?: string } | null };
-    if (!info.ledger?.address) {
-      log(`  ${url} has no XorvLedger configured, so the rating rule is skipped.`);
-      return null;
-    }
-    return normalizeAddress(info.ledger.address);
+    const info = (await res.json()) as { ledger?: { address?: string } | null; escrow?: { address?: string } | null };
+    if (!info.ledger?.address) log(`  ${url} has no XorvLedger configured, so the rating rule is skipped.`);
+    if (!info.escrow?.address) log(`  ${url} has no XorvEscrow configured, so the escrow-payment rule is skipped.`);
+    return {
+      ledger: info.ledger?.address ? normalizeAddress(info.ledger.address) : null,
+      escrow: info.escrow?.address ? normalizeAddress(info.escrow.address) : null,
+    };
   } catch (err) {
-    log(`  could not read ${url}/api/network (${err instanceof Error ? err.message : String(err)}); the rating rule is skipped.`);
-    return null;
+    log(`  could not read ${url}/api/network (${err instanceof Error ? err.message : String(err)}); the rating and escrow rules are skipped.`);
+    return { ledger: null, escrow: null };
   }
 }
 
@@ -154,12 +165,16 @@ export async function main(argv: string[], env: Record<string, string | undefine
   }
 
   const cfg = networkConfig(opts.network);
-  const ledger = opts.ledger ?? (opts.broker ? await ledgerFromBroker(opts.broker, err) : null);
+  const fromBroker =
+    opts.broker && (!opts.ledger || !opts.escrow) ? await contractsFromBroker(opts.broker, err) : { ledger: null, escrow: null };
+  const ledger = opts.ledger ?? fromBroker.ledger;
+  const escrow = opts.escrow ?? fromBroker.escrow;
   const policy = buildAgentPolicy({
     network: cfg.caip2,
     capUnits: opts.capUnits,
     payTo: opts.payTo,
     ledger,
+    escrow,
     name: opts.name ?? undefined,
   });
 
@@ -184,6 +199,9 @@ export async function main(argv: string[], env: Record<string, string | undefine
   const created = await privy.policies().create({ ...policy, ...ownerField });
   out(`  policy ${created.id}`);
   out(describePolicy(policy));
+  if (!escrow) {
+    out("  (no XorvEscrow address given — escrowed payments will be denied; re-run with --escrow or --broker if the broker escrows jobs)");
+  }
   if (!ledger) {
     out("  (no XorvLedger address given — xorv_rate_job signatures will be denied; re-run with --ledger or --broker to allow them)");
   }
@@ -217,9 +235,9 @@ export async function main(argv: string[], env: Record<string, string | undefine
   out("XORV_SESSION_BUDGET_USD (default $0.50) is what bounds cumulative spend per session.");
   out();
   if (cfg.faucets.usdc) {
-    out(`Fund it with test USDC (no MON needed): ${cfg.faucets.usdc} → network "${cfg.name}" → ${address}`);
+    out(`Fund it with test USDC (nothing else needed): ${cfg.faucets.usdc} → network "${cfg.name}" → ${address}`);
   } else {
-    out(`Fund it with USDC on ${cfg.name} at ${address} (no MON needed — the facilitator pays gas).`);
+    out(`Fund it with USDC on ${cfg.name} at ${address} (nothing else needed — the broker's facilitator pays the gas).`);
   }
   return 0;
 }

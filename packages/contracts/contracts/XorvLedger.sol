@@ -9,7 +9,7 @@ import {IIdentityRegistry8004} from "./interfaces/IIdentityRegistry8004.sol";
 import {IReputationRegistry8004} from "./interfaces/IReputationRegistry8004.sol";
 
 /// @title XorvLedger
-/// @notice The public record of the Xorv network on Monad: provider registrations and heartbeats,
+/// @notice The public record of the Xorv network on Arc: provider registrations and heartbeats,
 ///         one receipt per x402-paid job, and a relay that turns a buyer's rating of a job they
 ///         actually paid for into ERC-8004 reputation feedback.
 ///
@@ -32,25 +32,25 @@ import {IReputationRegistry8004} from "./interfaces/IReputationRegistry8004.sol"
 ///         are beyond what a contract can see. The broker checks those before it relays a rating,
 ///         but rateJob stays open to the buyer and to any relayer, so that check is advisory.
 ///
-///         Gas on Monad shapes the whole layout:
-///         - Monad bills the transaction's gas LIMIT, not the gas used (execution is asynchronous,
-///           so the block is built before anything runs). The broker sizes every call from
-///           eth_estimateGas plus a small margin; a padded constant is money thrown away.
+///         Gas on Arc is paid in USDC (Arc's native token), so every unit of gas the broker spends
+///         is a fraction of a cent out of the network's margin. That shapes the whole layout:
+///         - The broker sizes every call from eth_estimateGas plus a small margin rather than a
+///           padded constant, and pays at least Arc's 20 gwei base-fee floor per unit.
 ///         - The 21k intrinsic cost, the cold access to this contract and the cold access to the
-///           Identity Registry (10,100 on Monad vs 2,600 on Ethereum) are paid once per
-///           transaction, so receipts are written in batches (recordJobs) rather than one per job.
-///         - A net-new storage slot costs ~27.9k on Monad (8,000 page load + 2,800 page write +
-///           17,000 state growth + 100 base), while log bytes are cheap and nobody needs them in
-///           state. So each job gets ONE packed slot, holding exactly what rateJob must verify, and
-///           everything else (amounts, hashes, provider labels, heartbeats) lives only in events,
-///           which the indexer reads. Registrations and heartbeats write no storage at all.
+///           Identity Registry are paid once per transaction, so receipts are written in batches
+///           (recordJobs) rather than one per job.
+///         - A net-new storage slot is the most expensive thing a transaction can do, while log
+///           bytes are cheap and nobody needs them in state. So each job gets ONE packed slot,
+///           holding exactly what rateJob must verify, and everything else (amounts, hashes,
+///           provider labels, heartbeats) lives only in events, which the indexer reads.
+///           Registrations and heartbeats write no storage at all.
 contract XorvLedger is EIP712("XorvLedger", "1") {
     /// @notice agentId for a provider that has no ERC-8004 identity. Its jobs are still recorded,
     ///         but they can't be rated, because there is no agent to attach reputation to.
     uint256 public constant NO_AGENT = type(uint256).max;
 
     /// @dev JobState.agentId value meaning "no agent". Real agentIds are sequential from 0 (about
-    ///      10k on Monad mainnet today), so 2^64 - 1 is unreachable in practice.
+    ///      thousands on a busy registry today), so 2^64 - 1 is unreachable in practice.
     uint64 private constant NO_AGENT_ID = type(uint64).max;
 
     /// @notice One settled job, as the broker saw it. Hashes are keccak256 of the UTF-8 text so the
@@ -61,7 +61,7 @@ contract XorvLedger is EIP712("XorvLedger", "1") {
         address buyer; //        x402 payer (the EIP-3009 `from`); the only address that may rate
         address payTo; //        x402 payTo; must be the agent's verified wallet when agentId is set
         uint256 amount; //       USDC base units (6 decimals)
-        bytes32 paymentTx; //    x402 settlement tx hash on Monad (zero if the job was not paid)
+        bytes32 paymentTx; //    x402 settlement tx hash on Arc (zero if the job was not paid)
         bytes32 requestHash; //  keccak256(utf8(prompt))
         bytes32 resultHash; //   keccak256(utf8(result ?? ""))
         uint32 durationMs; //    wall-clock run time on the provider
@@ -221,9 +221,9 @@ contract XorvLedger is EIP712("XorvLedger", "1") {
     }
 
     /// @notice Record a batch of settled jobs: one packed slot + one event each.
-    /// @dev    Batching is the point: on Monad the fixed per-tx costs (21k intrinsic, cold accounts at
-    ///         10,100) dwarf the marginal cost of a receipt, and the broker pays for the gas limit it
-    ///         asks for, so it estimates the exact batch and adds a small margin.
+    /// @dev    Batching is the point: the fixed per-tx costs (21k intrinsic, cold accounts) dwarf the
+    ///         marginal cost of a receipt, and on Arc the broker pays all of it in USDC, so it
+    ///         estimates the exact batch and adds a small margin.
     ///
     ///         The whole batch reverts on the first bad receipt (duplicate, zero buyer, buyer that is
     ///         its own payTo, payTo that is not the agent's wallet). A partial write would leave the
@@ -289,8 +289,7 @@ contract XorvLedger is EIP712("XorvLedger", "1") {
     ///         - anyone relays (in practice the broker, so rating is gasless for the buyer) with the
     ///           buyer's EIP-712 signature over the Rating, checked by _isBuyerSignature: ECDSA from
     ///           the buyer's own key first (an EOA, or an EIP-7702 account whatever it delegates to),
-    ///           then ERC-1271 for smart accounts, which covers passkey wallets backed by Monad's P256
-    ///           precompile.
+    ///           then ERC-1271 for smart accounts, which covers passkey (P-256) smart wallets.
     ///         The deadline bounds how long a signed rating can sit in a relayer's queue. It is not
     ///         checked on the direct path, where there is no signature to expire.
     ///

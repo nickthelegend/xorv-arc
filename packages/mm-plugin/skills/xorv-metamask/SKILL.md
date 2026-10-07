@@ -1,19 +1,19 @@
 ---
 name: xorv-metamask
-description: Buy an AI job on the Xorv network (Claude Code, Codex, Grok, Qwen 3.8 Max, Kimi K3, Hunyuan hy4 running on someone else's machine) and pay the provider per job in USDC over x402 on Monad, signed by the user's MetaMask Agent Wallet under its policy. Use when the user has MetaMask Agent Wallet (`mm`) set up and asks to offload, delegate or outsource a task to Xorv, wants a second model's answer, or says "mm xorv". Also use to list Xorv providers and prices, or to rate a job they paid for.
+description: Buy an AI job on the Xorv network (Claude Code, Codex, Grok, Qwen 3.8 Max, Kimi K3, Hunyuan hy4 running on someone else's machine) and pay the provider per job in USDC over x402 on Arc, signed by the user's MetaMask Agent Wallet under its policy. Use when the user has MetaMask Agent Wallet (`mm`) set up and asks to offload, delegate or outsource a task to Xorv, wants a second model's answer, or says "mm xorv". Also use to list Xorv providers and prices, or to rate a job they paid for.
 ---
 
 # Xorv through MetaMask Agent Wallet
 
 Xorv is a marketplace for idle AI capacity. A stranger's machine runs the job
 on the plan or model they already have, and they are paid per job: a USDC
-transfer on Monad, straight to them. The broker never holds the money.
+transfer on Arc, straight to them. The broker never holds the money.
 
 The `@xorv/mm-plugin` adds `mm xorv …` commands to MetaMask Agent Wallet. The
 payment is an EIP-3009 authorization that **MetaMask signs**, so the user's
 wallet policy applies (Guard Mode allowlists, 2FA). You never touch a key, and
-the wallet needs **USDC on Monad and no MON**: the network's facilitator pays
-the gas.
+the wallet needs **USDC on Arc and nothing else**: USDC is Arc's gas token, and
+the broker's facilitator pays the gas anyway.
 
 ## Before anything else
 
@@ -24,7 +24,7 @@ mm doctor                            # is the wallet signed in and initialised?
 
 If the plugin is missing, say so and stop. It is not on npm yet, so do not
 suggest installing it by package name: that fails with a 404. The user
-installs it from a checkout of https://github.com/nickthelegend/xorv-monad:
+installs it from a checkout of https://github.com/nickthelegend/xorv-arc:
 
 ```bash
 pnpm install
@@ -48,7 +48,7 @@ mm xorv providers --json
 ```
 
 `data.providers[]` lists each live node: `label`, `capabilities[]` (adapter,
-model, `price`), `agentId` (its ERC-8004 identity on Monad), `successRate` and
+model, `price`), `agentId` (its ERC-8004 identity on Arc), `successRate` and
 `reputation.stars`. No wallet access, no sign-in needed.
 
 ## Price a task without paying
@@ -73,7 +73,7 @@ mm xorv run --json --max 0.30 "<the task, as a complete self-contained prompt>"
   authorised. If they gave none, use `0.30` and say so.
 - `--adapter <kind>` pins an agent: `claude-code`, `codex`, `grok`, `qwen`,
   `kimi`, `hunyuan`, `qwen-code`. Omit it to let the network choose.
-- `--chain-id 10143` (testnet) or `143` (mainnet) refuses any other chain.
+- `--chain-id 5042002` (testnet) or `5042` (mainnet) refuses any other chain.
 
 MetaMask may pause for approval (Guard Mode 2FA). In `--json` mode that shows
 as a `{"_notice": {"kind": "AWAITING_MFA", …}}` line (text mode prints
@@ -93,9 +93,9 @@ stdout ends with one JSON envelope:
     "status": "completed",
     "result": "…",
     "price": "$0.0100",
-    "provider": { "label": "…", "adapter": "claude-code", "agentId": "42", "agentUrl": "https://testnet.monadscan.com/nft/0x8004…/42" },
-    "payment": { "txHash": "0x…", "explorerUrl": "https://testnet.monadscan.com/tx/0x…" },
-    "receiptExplorerUrl": "https://testnet.monadscan.com/tx/0x…",
+    "provider": { "label": "…", "adapter": "claude-code", "agentId": "42", "agentUrl": "https://explorer.testnet.arc.io/token/0x8004…/instance/42" },
+    "payment": { "txHash": "0x…", "explorerUrl": "https://explorer.testnet.arc.io/tx/0x…" },
+    "receiptExplorerUrl": "https://explorer.testnet.arc.io/tx/0x…",
     "rate": "mm xorv rate job_… --stars 5"
   },
   "hint": "…"
@@ -106,7 +106,7 @@ Always report three things:
 
 1. **The answer**: `data.result`.
 2. **Who ran it and what it cost**: `data.provider.label`, its adapter, `data.price`.
-3. **The receipt**: `data.payment.explorerUrl`, the USDC settlement on Monad.
+3. **The receipt**: `data.payment.explorerUrl`, the USDC settlement on Arc.
    Never report a paid job without it. Add `data.receiptExplorerUrl` (the
    XorvLedger receipt, which commits to a hash of the result) when present.
 
@@ -119,7 +119,7 @@ and exit 1. Relay `message` and follow `hint`. The codes:
 |---|---|---|
 | `XORV_QUOTE_REFUSED` | over `--max`, or the quote is inconsistent | report the price; ask before raising `--max` |
 | `XORV_NO_PROVIDERS` | nobody online under the ceiling | `mm xorv providers`; retry later or raise `--max` with consent |
-| `XORV_INSUFFICIENT_USDC` | wallet short of USDC | testnet: https://faucet.circle.com (Monad Testnet) |
+| `XORV_INSUFFICIENT_USDC` | wallet short of USDC | testnet: https://faucet.circle.com (Arc Testnet) |
 | `XORV_SIGNATURE_DENIED` | MetaMask or its policy refused | nothing was paid; the user checks the request or policy |
 | `XORV_SIGNATURE_PENDING` | approval not given yet | approve (`mm wallet requests watch <id>`), then rerun |
 | `XORV_PAYMENT_REFUSED` | the 402 did not match the quote, or settlement failed | nothing was paid; rerun |

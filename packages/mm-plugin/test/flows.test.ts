@@ -93,7 +93,7 @@ describe("runJob after payment", () => {
       ),
     ).rejects.toMatchObject({
       code: "XORV_JOB_TIMEOUT",
-      message: expect.stringContaining(`https://testnet.monadscan.com/tx/${SETTLE_TX}`),
+      message: expect.stringContaining(`https://explorer.testnet.arc.io/tx/${SETTLE_TX}`),
       hint: expect.stringContaining(`mm xorv job ${JOB_ID}`),
     });
     expect(broker.payments).toHaveLength(1);
@@ -105,7 +105,7 @@ describe("rating verification", () => {
 
   it("accepts the broker's proposal when every field checks out", () => {
     const { typedData, chainId } = verifyRatingRequest({ jobId: JOB_ID, value: 100, request: ratingRequestFor(100), network: net });
-    expect(chainId).toBe(10143);
+    expect(chainId).toBe(5042002);
     expect(typedData.domain.verifyingContract).toBe(net.ledger!.address);
   });
 
@@ -120,7 +120,7 @@ describe("rating verification", () => {
   });
 
   it("refuses a proposal for another chain", () => {
-    expect(tamper((r) => (r.typedData.domain.chainId = 143))).toThrow(/chain 143/);
+    expect(tamper((r) => (r.typedData.domain.chainId = 8453))).toThrow(/chain 8453/);
   });
 
   it("refuses a proposal for another job or value", () => {

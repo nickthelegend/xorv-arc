@@ -51,10 +51,10 @@ describe("spending discipline", () => {
 
   it("sends a missing CLI to the from-source install, never to npm (which serves the pre-port 0.1.0)", () => {
     // Until @xorv/cli@0.2.0 is published, `npm i -g @xorv/cli` installs the
-    // pre-port prototype (0.1.0): a node the Monad broker can neither register
+    // pre-port prototype (0.1.0): a node the Arc broker can neither register
     // nor pay. The skill must not hand an agent that command.
     expect(body).not.toMatch(/npm (i|install) (-g|--global) @xorv\/cli(?!@\^?0\.2)/);
-    expect(body).toContain("https://github.com/nickthelegend/xorv-monad");
+    expect(body).toContain("https://github.com/nickthelegend/xorv-arc");
     expect(body).toContain("pnpm --filter @xorv/cli build");
     expect(body).toContain("pnpm link --global");
   });
@@ -63,7 +63,7 @@ describe("spending discipline", () => {
 describe("the receipt", () => {
   it("requires the explorer link to be reported with every paid job", () => {
     expect(body).toMatch(/Never report a paid job without its link/i);
-    expect(body).toContain("\"explorer\": \"https://testnet.monadscan.com/tx/0x");
+    expect(body).toContain("\"explorer\": \"https://explorer.testnet.arc.io/tx/0x");
   });
 
   it("documents the run --json keys exactly as run.ts emits them", () => {
@@ -74,8 +74,8 @@ describe("the receipt", () => {
     expect(body).not.toMatch(/hashscan|hedera|0\.0\.\d/i);
   });
 
-  it("says a buyer needs USDC and no MON", () => {
-    expect(body).toMatch(/USDC on Monad and nothing else/);
+  it("says a buyer needs USDC and nothing else — USDC is also Arc's gas", () => {
+    expect(body).toMatch(/USDC on Arc and nothing else/);
     expect(body).toContain("faucet.circle.com");
   });
 

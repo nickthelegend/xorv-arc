@@ -1,7 +1,7 @@
 /**
  * The buyer's guarantees: nothing is signed unless the quote, and then the
  * 402, ask for exactly what the buyer accepted — the quoted provider, the
- * quoted USDC amount, on Monad, under --max.
+ * quoted USDC amount, on Arc, under --max.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,7 +24,7 @@ import {
 describe("vetQuote", () => {
   it("accepts an honest quote", () => {
     const vetted = vetQuote(quote(), { maxPriceUsdMicros: 50_000, payer: PAYER.address });
-    expect(vetted).toMatchObject({ network: "eip155:10143", chainId: 10143 });
+    expect(vetted).toMatchObject({ network: "eip155:5042002", chainId: 5042002 });
   });
 
   it("refuses a price over --max", () => {
@@ -51,7 +51,7 @@ describe("vetQuote", () => {
     expect(() => vetQuote(quote({ network: "eip155:8453" }), { maxPriceUsdMicros: 50_000 })).toThrow(
       expect.objectContaining({ code: "XORV_UNSUPPORTED_NETWORK" }),
     );
-    expect(() => vetQuote(quote(), { maxPriceUsdMicros: 50_000, chainId: 143 })).toThrow(/--chain-id is 143/);
+    expect(() => vetQuote(quote(), { maxPriceUsdMicros: 50_000, chainId: 5042 })).toThrow(/--chain-id is 5042/);
   });
 
   it("refuses paying yourself", () => {
@@ -71,7 +71,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
     const signer = executorSigner({
       executor: mm.executor,
       address: PAYER.address,
-      chainId: 10143,
+      chainId: 5042002,
       onError: (e) => {
         signerError ??= e;
       },
@@ -110,7 +110,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
       },
     });
     const mm = fakeMetaMask();
-    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 10143 });
+    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 5042002 });
     const client = new BrokerClient({ baseUrl: BROKER_URL, fetch: broker.fetch });
     const vetted = vetQuote(quote(), { maxPriceUsdMicros: 50_000 });
     await expect(
@@ -119,7 +119,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
     expect(mm.requests).toHaveLength(0);
   });
 
-  it("refuses a 402 on another asset (not Monad USDC)", async () => {
+  it("refuses a 402 on another asset (not Arc USDC)", async () => {
     const { promise, mm } = await attempt((q) => {
       const pr = paymentRequiredFor(q);
       return { ...pr, accepts: pr.accepts.map((a) => ({ ...a, asset: "0x0000000000000000000000000000000000000001" })) };
@@ -133,7 +133,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
     const paid = await promise;
     expect(paid.response.jobId).toBe("job_TestJob0001");
     expect(paid.settlement.txHash).toMatch(/^0x(ab){32}$/);
-    expect(paid.settlement.explorerUrl).toBe(`https://testnet.monadscan.com/tx/${paid.settlement.txHash}`);
+    expect(paid.settlement.explorerUrl).toBe(`https://explorer.testnet.arc.io/tx/${paid.settlement.txHash}`);
     expect(mm.requests).toHaveLength(1);
     expect(broker.payments).toHaveLength(1);
     const paidRequests = broker.seen.filter((s) => s.method === "POST" && s.path.startsWith("/api/jobs/"));
@@ -144,7 +144,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
   it("surfaces a facilitator rejection with its x402 reason and a faucet hint", async () => {
     const broker = fakeBroker({ rejectPayment: "invalid_exact_evm_insufficient_balance" });
     const mm = fakeMetaMask();
-    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 10143 });
+    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 5042002 });
     const client = new BrokerClient({ baseUrl: BROKER_URL, fetch: broker.fetch });
     const vetted = vetQuote(quote(), { maxPriceUsdMicros: 50_000 });
     await expect(
@@ -159,7 +159,7 @@ describe("payForQuote: the 402 must match the vetted quote", () => {
     const signer = executorSigner({
       executor: mm.executor,
       address: PAYER.address,
-      chainId: 10143,
+      chainId: 5042002,
       onError: (e) => {
         signerError ??= e;
       },

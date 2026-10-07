@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * xorv — rent out idle AI capacity, get paid per job in USDC over x402 on Monad.
+ * xorv — rent out idle AI capacity, get paid per job in USDC over x402 on Arc.
  */
 
 import { Command } from "commander";
@@ -12,7 +12,8 @@ import { doctorCommand } from "./commands/doctor.js";
 import { skillsCommand } from "./commands/skills.js";
 import { runCommand } from "./commands/run.js";
 import { walletNew, walletShow } from "./commands/wallet.js";
-import { identityRegisterCommand, identityShowCommand } from "./commands/identity.js";
+import { identityBindCommand, identityRegisterCommand, identityShowCommand } from "./commands/identity.js";
+import { withdrawCommand, type WithdrawOptions } from "./commands/withdraw.js";
 import { VERSION } from "./node.js";
 import {
   cancelCommand,
@@ -35,13 +36,13 @@ const program = new Command();
 program
   .name("xorv")
   .description(
-    "Rent out your idle Claude / Codex / Grok / Qwen / Kimi / Hunyuan capacity and get paid per job in USDC over x402 on Monad.",
+    "Rent out your idle Claude / Codex / Grok / Qwen / Kimi / Hunyuan capacity and get paid per job in USDC over x402 on Arc.",
   )
   .version(VERSION, "-v, --version")
   .configureHelp({ sortSubcommands: false })
   .addHelpText(
     "beforeAll",
-    ui.banner("decentralized AI capacity network · x402 on Monad"),
+    ui.banner("decentralized AI capacity network · x402 on Arc"),
   )
   .addHelpText(
     "afterAll",
@@ -52,6 +53,7 @@ program
       `    ${ui.c.accent("xorv start")}         go live and take jobs`,
       `    ${ui.c.accent("xorv earnings")}      what you've made`,
       `    ${ui.c.accent("xorv identity")}      your ERC-8004 agent identity`,
+      `    ${ui.c.accent("xorv withdraw")}      move earnings to Base / Ethereum (CCTP)`,
       "",
       `  ${ui.c.bold("buyer — spend")}`,
       `    ${ui.c.accent('xorv run "…"')}       post a job and pay for it`,
@@ -174,7 +176,7 @@ program
 const wallet = program.command("wallet").description("the payout address");
 wallet
   .command("show", { isDefault: true })
-  .description("USDC and MON balances, explorer and faucet links")
+  .description("USDC balance (Arc's gas token too), explorer and faucet links")
   .action(wrap(walletShow));
 wallet
   .command("new")
@@ -186,14 +188,36 @@ identity
   .command("show", { isDefault: true })
   .description("read the identity back from the registry and check it matches the payout address")
   .option("--json", "machine-readable output")
+  .option("--reputation <addr>", "XorvReputation address (default: XORV_REPUTATION_ADDRESS, then the broker's /api/network)")
   .action(wrap(identityShowCommand));
 identity
   .command("register")
-  .description("register an ERC-8004 agent from the payout key (one transaction, needs a little MON)")
+  .description("register an ERC-8004 agent from the payout key (one transaction, a few cents of USDC gas)")
   .option("--uri <url>", "agentURI to register (default: <broker>/agents/<providerId>.json)")
   .option("--force", "register a new identity even if this node has one")
   .option("-y, --yes", "skip the confirmation")
   .action(wrap(identityRegisterCommand));
+identity
+  .command("bind")
+  .description("bind the agent to XorvReputation, so every escrow settlement is written to its ERC-8004 reputation")
+  .option("--reputation <addr>", "XorvReputation address (default: XORV_REPUTATION_ADDRESS, then the broker's /api/network)")
+  .option("-y, --yes", "skip the confirmation")
+  .action(wrap(identityBindCommand));
+
+program
+  .command("withdraw")
+  .description("move this node's Arc USDC earnings to another chain with Circle CCTP V2 (burn on Arc, mint there)")
+  .option("--to <chain>", "destination chain name or id (testnet: base-sepolia, ethereum-sepolia; mainnet: base, ethereum)")
+  .option("--amount <usdc>", "USDC to withdraw (default: the whole balance minus 0.05 USDC kept for Arc gas)")
+  .option("--recipient <addr>", "who receives it on the destination (default: this payout address)")
+  .option("--standard", "standard transfer: waits for finality, no Circle fee (default: fast, fee capped by maxFee)")
+  .option("--mint-key-env <VAR>", "env var holding a destination-chain key that sends receiveMessage", "XORV_DEST_KEY")
+  .option("--no-wait", "burn and return; don't wait for the attestation or mint")
+  .option("--resume <burnTx>", "pick up an earlier burn: wait for its attestation and mint")
+  .option("--timeout <seconds>", "how long to wait for the attestation (default 600 fast, 1800 standard)")
+  .option("-y, --yes", "skip the confirmation")
+  .option("--json", "machine-readable output (needs --yes)")
+  .action(wrap((opts: WithdrawOptions) => withdrawCommand(opts)));
 
 /**
  * Turn a thrown error into one clear line instead of a stack trace.

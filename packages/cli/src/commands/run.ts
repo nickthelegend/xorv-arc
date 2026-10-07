@@ -1,7 +1,7 @@
 /**
  * `xorv run "<prompt>"` — the buyer side.
  *
- * Posts a job, pays for it with a real USDC transfer over x402 on Monad,
+ * Posts a job, pays for it with a real USDC transfer over x402 on Arc,
  * watches it execute on a stranger's machine, and prints the answer plus the
  * explorer link that proves the payment. The whole protocol, end to end, in
  * one command and a few seconds.
@@ -11,9 +11,10 @@
  * privileged access to the broker.
  *
  * Paying is an EIP-3009 `transferWithAuthorization`: the buyer signs an
- * EIP-712 message offline, the facilitator submits it and pays the MON gas,
- * and USDC moves buyer → provider in one transfer. So a buyer needs USDC and
- * nothing else — no MON, no approval transaction.
+ * EIP-712 message offline, the broker's self-hosted facilitator submits it and
+ * pays the gas (on Arc, gas is USDC too), and USDC moves buyer → provider in one
+ * transfer. So a buyer needs USDC and nothing else — no gas, no approval
+ * transaction.
  *
  * Three checks stand between the quote and the signature, because on EVM a
  * signed authorization is directly spendable:
@@ -78,7 +79,7 @@ export class RunRefusal extends Error {
 
 /**
  * Which network this buyer pays on: `XORV_NETWORK`, then the node config, then
- * Monad testnet. Validated here — a leftover `hedera:testnet` fails with the
+ * Arc testnet. Validated here — a leftover `hedera:testnet` fails with the
  * fix named, not later as an unverifiable signature.
  */
 export function buyerNetwork(config: Pick<NodeConfig, "network"> | null, env = process.env): string {
@@ -97,8 +98,8 @@ export function resolveBuyerAccount(
   env = process.env,
 ): PrivateKeyAccount {
   const hints = [
-    "set XORV_PAYER_KEY to a Monad key (0x + 64 hex) holding USDC — no MON needed",
-    "test USDC: https://faucet.circle.com (pick Monad Testnet)",
+    "set XORV_PAYER_KEY to an Arc key (0x + 64 hex) holding USDC — nothing else needed (the broker pays the gas)",
+    "test USDC: https://faucet.circle.com (pick Arc Testnet)",
   ];
   const candidates: Array<[string, string | undefined]> = [
     ["XORV_PAYER_KEY", env.XORV_PAYER_KEY?.trim()],
@@ -167,7 +168,7 @@ export function vetQuote(
       `payer and provider are the same address (${quote.provider.address}) — you cannot pay yourself`,
       [
         "this machine's node key is also its payout address; buy with a separate key:",
-        "  export XORV_PAYER_KEY=0x…   (a Monad key holding test USDC)",
+        "  export XORV_PAYER_KEY=0x…   (an Arc key holding test USDC)",
       ],
     );
   }
@@ -408,7 +409,7 @@ export async function runCommand(prompt: string, opts: RunOptions): Promise<void
   // -- 2. pay ---------------------------------------------------------------
 
   const { fetch: paidFetch, httpClient } = payingFetch({ account, network, maxPriceUsdMicros: maxPrice, quote });
-  const paySpin = opts.json ? null : ui.spinner(`signing the USDC authorization and settling on Monad ${networkLabel(network)}…`);
+  const paySpin = opts.json ? null : ui.spinner(`signing the USDC authorization and settling on Arc ${networkLabel(network)}…`);
 
   // Seeded rather than left definite-assigned: the catch below exits the
   // process, but that's an `await` of a never-returning call, which TypeScript's
@@ -438,7 +439,7 @@ export async function runCommand(prompt: string, opts: RunOptions): Promise<void
 
   paySpin?.succeed(`paid ${ui.c.money(quote.priceLabel)} — job ${ui.c.bold(jobId)}`);
   if (settleTx && !opts.json) {
-    ui.ok(`${ui.glyph.chain()} settled on Monad ${networkLabel(network)}`);
+    ui.ok(`${ui.glyph.chain()} settled on Arc ${networkLabel(network)}`);
     ui.muted(`  ${explorerTx(network, settleTx)}`);
   }
 

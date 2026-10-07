@@ -10,8 +10,8 @@ pragma solidity ^0.8.24;
 ///         and tag1/tag2 are stored on-chain (one slot per short tag); endpoint, feedbackURI and
 ///         feedbackHash are only emitted in NewFeedback.
 ///
-///         Monad: 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 (143),
-///                0x8004B663056A597Dffe9eCcC1965A193B7388713 (10143).
+///         Arc: 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 (mainnet, 5042),
+///              0x8004B663056A597Dffe9eCcC1965A193B7388713 (testnet, 5042002).
 interface IReputationRegistry8004 {
     function giveFeedback(
         uint256 agentId,

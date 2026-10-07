@@ -1,16 +1,16 @@
 # @xorv/mcp
 
-An [MCP](https://modelcontextprotocol.io) server that lets an AI agent **buy AI work from the Xorv network and pay for it itself**. It pays per job in USDC over [x402](https://x402.org) on **Monad**, from either a local key or a **Privy server wallet bound to a signing policy**.
+An [MCP](https://modelcontextprotocol.io) server that lets an AI agent **buy AI work from the Xorv network and pay for it itself**. It pays per job in USDC over [x402](https://x402.org) on **Arc** (Circle's stablecoin L1, where USDC is also the gas token), from either a local key or a **Privy server wallet bound to a signing policy**.
 
-The agent asks for a quote, the network matches a provider (someone renting out an idle Claude Code, Codex, Qwen, Kimi or Hunyuan subscription), the agent signs a USDC authorization for exactly that quote, the network's facilitator settles it on-chain and pays the gas, and the job runs on the provider's machine. No human opens a browser, creates an account or types in a card number. The provider is paid directly; the Xorv broker never holds the money.
+The agent asks for a quote, the network matches a provider (someone renting out an idle Claude Code, Codex, Qwen, Kimi or Hunyuan subscription), the agent signs a USDC authorization for exactly that quote, the broker's self-hosted x402 facilitator settles it on-chain and pays the gas, and the job runs on the provider's machine. No human opens a browser, creates an account or types in a card number. The provider is paid directly; the Xorv broker never holds the money.
 
 ```
 agent ──xorv_run_job──► MCP server ──POST /api/quotes──► broker: frozen quote (provider 0x…, price, USDC units)
                            │  checks the quote against XORV_MAX_PRICE and the session budget
-                           ├──POST /api/jobs/:quoteId──► 402 { exact, eip155:10143, USDC, amount, payTo: provider }
-                           │  signs EIP-3009 TransferWithAuthorization (local key, or Privy under its policy)
-                           ├──PAYMENT-SIGNATURE──► facilitator: transferWithAuthorization payer → provider (pays MON gas)
-                           └──polls──► result + Monadscan links (payment tx, XorvLedger receipt)
+                           ├──POST /api/jobs/:quoteId──► 402 { exact | escrow, eip155:5042002, USDC, amount, payTo }
+                           │  signs EIP-3009 Transfer/ReceiveWithAuthorization (local key, or Privy under its policy)
+                           ├──PAYMENT-SIGNATURE──► broker's facilitator: payer → provider (or → XorvEscrow), pays the gas
+                           └──polls──► result + Arc explorer links (payment tx, XorvLedger receipt)
 ```
 
 ## Tools
@@ -18,8 +18,9 @@ agent ──xorv_run_job──► MCP server ──POST /api/quotes──► bro
 | Tool | What it does | Needs a payer |
 |---|---|---|
 | `xorv_list_providers` | Lists live providers, what they run, their price per job, their payout address and their ERC-8004 identity. | no |
-| `xorv_network_status` | Shows the network, USDC contract, facilitator, XorvLedger audit contract, ERC-8004 registries, the AI roles (router, safety screen, verifier) and totals. | no |
+| `xorv_network_status` | Shows the network, USDC contract (also Arc's gas token), facilitator, XorvEscrow, XorvLedger audit contract, ERC-8004 registries, XorvReputation, Memo, CCTP destinations, the CCIP lane, the AI roles (router, safety screen, verifier) and totals. | no |
 | `xorv_quote` | Prices a job without paying. | no |
+| `xorv_ccip_quote` | Prices a job to be **paid from Base or Ethereum** over Chainlink CCIP + Circle CCTP (`payVia: "ccip"`). Returns the escrow job id, provider, price and deadline for `XorvCcipSender.postJob(jobId, provider, price, deadline, maxFee, minFinalityThreshold)` on the source chain, the sender and USDC addresses there, the steps (approve, `quotePostJob` for the CCIP fee, `postJob`) and ready `postJob` calldata for a standard transfer. Signs nothing, sends nothing. Inputs: `prompt`, `adapter?`, `max_usd?`, `source_chain?` (name or chain id), `fast?`. | no |
 | `xorv_get_job` | Looks up a job: status, result, payment tx, XorvLedger receipt, verifier score and rating. | no |
 | `xorv_wallet` | Shows which wallet pays (local key or Privy), its address, its USDC balance, the per-job cap and how much session budget is left. It spends nothing. | yes |
 | `xorv_run_job` | **Spends money.** Quotes, pays over x402, waits, and returns the result with explorer links proving payment. | yes |
@@ -29,19 +30,19 @@ The `xorv_run_job` description states the per-job cap and the session budget, be
 
 ## Quick start
 
-You need a broker URL. It defaults to a local one at `http://localhost:8402`; run one with `pnpm broker` from the repo root. You also need a payer that holds **test USDC on Monad testnet**. It needs no MON, because the facilitator pays gas.
+You need a broker URL. It defaults to a local one at `http://localhost:8402`; run one with `pnpm broker` from the repo root. You also need a payer that holds **test USDC on Arc testnet**. It needs nothing else: USDC is Arc's gas token, and the broker's facilitator pays the gas anyway.
 
 > **Install from source until 0.2.0 is on npm.** What npm serves as `@xorv/mcp` today is 0.1.0, the
-> Hedera prototype: it pays on Hedera and cannot buy from a Monad broker. `npx -y @xorv/mcp` resolves
+> Hedera prototype: it pays on Hedera and cannot buy from an Arc broker. `npx -y @xorv/mcp` resolves
 > to it. Build this package from the repository instead:
 >
 > ```sh
-> git clone https://github.com/nickthelegend/xorv-monad.git && cd xorv-monad
+> git clone https://github.com/nickthelegend/xorv-arc.git && cd xorv-arc
 > pnpm install
 > pnpm --filter @xorv/protocol build && pnpm --filter @xorv/mcp build
 > ```
 >
-> Every example below then runs `node /path/to/xorv-monad/packages/mcp/dist/index.js`. Once 0.2.0 is
+> Every example below then runs `node /path/to/xorv-arc/packages/mcp/dist/index.js`. Once 0.2.0 is
 > published, `npx -y @xorv/mcp@0.2.0` (pinned, so it can never fall back to 0.1.0) replaces that
 > command.
 
@@ -52,13 +53,13 @@ You need a broker URL. It defaults to a local one at `http://localhost:8402`; ru
 claude mcp add xorv \
   -e XORV_BROKER_URL=http://localhost:8402 \
   -e XORV_PRIVATE_KEY=0xYOUR_TESTNET_KEY \
-  -- node /path/to/xorv-monad/packages/mcp/dist/index.js
+  -- node /path/to/xorv-arc/packages/mcp/dist/index.js
 
 # or: a Privy server wallet (see "Privy agentic wallet" below)
 claude mcp add xorv \
   -e XORV_BROKER_URL=http://localhost:8402 \
   -e XORV_PRIVY_APP_ID=... -e XORV_PRIVY_APP_SECRET=... -e XORV_PRIVY_WALLET_ID=... \
-  -- node /path/to/xorv-monad/packages/mcp/dist/index.js
+  -- node /path/to/xorv-arc/packages/mcp/dist/index.js
 ```
 
 For a project-scoped setup, put the same thing in `.mcp.json`:
@@ -68,10 +69,10 @@ For a project-scoped setup, put the same thing in `.mcp.json`:
   "mcpServers": {
     "xorv": {
       "command": "node",
-      "args": ["/path/to/xorv-monad/packages/mcp/dist/index.js"],
+      "args": ["/path/to/xorv-arc/packages/mcp/dist/index.js"],
       "env": {
         "XORV_BROKER_URL": "http://localhost:8402",
-        "XORV_NETWORK": "eip155:10143",
+        "XORV_NETWORK": "eip155:5042002",
         "XORV_PRIVY_APP_ID": "…",
         "XORV_PRIVY_APP_SECRET": "…",
         "XORV_PRIVY_WALLET_ID": "…",
@@ -92,7 +93,7 @@ In `claude_desktop_config.json` (Settings → Developer → Edit Config):
   "mcpServers": {
     "xorv": {
       "command": "node",
-      "args": ["/path/to/xorv-monad/packages/mcp/dist/index.js"],
+      "args": ["/path/to/xorv-arc/packages/mcp/dist/index.js"],
       "env": {
         "XORV_BROKER_URL": "https://your-broker.example",
         "XORV_PRIVATE_KEY": "0xYOUR_TESTNET_KEY",
@@ -103,7 +104,7 @@ In `claude_desktop_config.json` (Settings → Developer → Edit Config):
 }
 ```
 
-On Windows, give the path with forward slashes or escaped backslashes (`"C:/src/xorv-monad/packages/mcp/dist/index.js"`). If Claude Desktop cannot find `node`, put the full path to `node.exe` in `"command"`. After 0.2.0 is published, `"command": "npx"` with `"args": ["-y", "@xorv/mcp@0.2.0"]` works too (on Windows, `"command": "cmd"` and `"args": ["/c", "npx", "-y", "@xorv/mcp@0.2.0"]`).
+On Windows, give the path with forward slashes or escaped backslashes (`"C:/src/xorv-arc/packages/mcp/dist/index.js"`). If Claude Desktop cannot find `node`, put the full path to `node.exe` in `"command"`. After 0.2.0 is published, `"command": "npx"` with `"args": ["-y", "@xorv/mcp@0.2.0"]` works too (on Windows, `"command": "cmd"` and `"args": ["/c", "npx", "-y", "@xorv/mcp@0.2.0"]`).
 
 Then ask for something like: *"Use xorv to get a second opinion on this function from another model, and don't spend more than 2 cents."*
 
@@ -114,7 +115,7 @@ All configuration comes from the environment. The server is launched by another 
 | Variable | Default | Meaning |
 |---|---|---|
 | `XORV_BROKER_URL` | `http://localhost:8402` | The broker to buy from. |
-| `XORV_NETWORK` | `eip155:10143` | Monad testnet, or `eip155:143` for mainnet. Anything else, including a leftover `hedera:testnet`, is refused. |
+| `XORV_NETWORK` | `eip155:5042002` | Arc testnet, or `eip155:5042` for Arc mainnet. Anything else, including a leftover `hedera:testnet` or another chain's id, is refused. |
 | `XORV_MAX_PRICE` | `0.05` | Hard ceiling **per job**, in USD. The model can ask for less, never more. `XORV_MAX_USD` (the 0.1 name) is still honoured. |
 | `XORV_SESSION_BUDGET_USD` | `0.50` | Hard ceiling **per server process** across all jobs. `unlimited` turns it off. Restarting the server resets it. |
 | `XORV_PRIVATE_KEY` | — | Local-key mode: a 0x-prefixed 32-byte secp256k1 key. `XORV_PAYER_KEY` (the CLI's name) also works. |
@@ -130,7 +131,7 @@ With no payer configured, the read-only tools work. `xorv_run_job`, `xorv_rate_j
 The problem with giving a model a spending tool is that its limits are usually promises made by the same process the model drives. Privy mode moves the key, and the rule about what it may sign, out of that process:
 
 - The wallet is a **Privy server wallet**. Its key never exists on this machine. Privy signs inside its enclave, and only when the request passes the **policy** attached to the wallet.
-- `pnpm privy:setup` writes that policy to allow **only** `eth_signTypedData_v4` for USDC `TransferWithAuthorization` on this chain, with `value ≤ your cap`. It also allows ratings on XorvLedger when you pass `--ledger` or `--broker`. A request that matches no rule is denied, so the wallet cannot send transactions, sign other tokens, sign on other chains, or sign one payment above the cap. That holds even if the MCP host is compromised.
+- `pnpm privy:setup` writes that policy to allow **only** `eth_signTypedData_v4` for USDC `TransferWithAuthorization` on this Arc chain (chain id 5042002, or 5042 on mainnet), with `value ≤ your cap`. It also allows `ReceiveWithAuthorization` into XorvEscrow (escrowed jobs, same cap) when you pass `--escrow` or `--broker`, and ratings on XorvLedger when you pass `--ledger` or `--broker`. A request that matches no rule is denied, so the wallet cannot send transactions, sign other tokens, sign on other chains, or sign one payment above the cap. That holds even if the MCP host is compromised.
 - The server wraps the wallet with Privy's `createViemAccount` (from `@privy-io/node/viem`). x402's `ExactEvmScheme` signs through it like any viem account. It is built **once per process**: one client, one wallet lookup, then reused.
 
 ### Set it up
@@ -144,14 +145,15 @@ The problem with giving a model a spending tool is that its limits are usually p
    ```
 
    Options:
-   - `--network eip155:143`: use mainnet.
+   - `--network eip155:5042`: use Arc mainnet.
    - `--ledger 0x…`: give the XorvLedger address directly instead of reading it from the broker.
+   - `--escrow 0x…`: give the XorvEscrow address directly instead of reading it from the broker.
    - `--pay-to 0xA,0xB`: only allow paying these providers.
    - `--owner-key`: also generate a P-256 owner key for the wallet and the policy. Then the app secret alone can neither sign nor loosen the policy, and the MCP server needs `XORV_PRIVY_AUTH_KEY`.
    - `--dry-run`: print the policy JSON without calling Privy.
 
    The script is also published as the `xorv-mcp-privy-setup` bin. It prints the `XORV_PRIVY_*` lines for your MCP config and the wallet address.
-3. Fund the address with test USDC at [faucet.circle.com](https://faucet.circle.com) by choosing **Monad Testnet**. No MON is needed.
+3. Fund the address with test USDC at [faucet.circle.com](https://faucet.circle.com) by choosing **Arc Testnet**. Nothing else is needed.
 4. Add the printed variables to the MCP server's `env` and call `xorv_wallet` to check the setup. Its first line names the Privy wallet id, its address and the attached policy id (`Payer: Privy server wallet <id> 0x… (policy <policy id>)`), and says `NO POLICY attached` in capitals if the wallet has none. A signature Privy refuses under the policy ends the call with `Payment not made: …` and releases the session-budget reservation, because nothing was signed.
 
 ### What the policy does not do
@@ -202,12 +204,12 @@ Source map:
 
 ### Upgrading from 0.1 (Hedera)
 
-- `XORV_PAYER_ID` is gone. On Monad the address is derived from the key.
+- `XORV_PAYER_ID` is gone. On Arc the address is derived from the key.
 - `XORV_PAYER_KEY` must now be a raw 0x secp256k1 key. Hedera ED25519 keys cannot be reused, and the server says so.
-- `XORV_NETWORK` is `eip155:10143` or `eip155:143`.
+- `XORV_NETWORK` is `eip155:5042002` or `eip155:5042`.
 - `XORV_MAX_USD` is now `XORV_MAX_PRICE`. The old name still works.
 - `xorv_run_job` no longer takes `pay_with`. x402 `exact` on EVM moves ERC-20s only, so every job is paid in USDC.
-- HashScan links are replaced by Monadscan links, and 0.0.x account ids by 0x addresses.
+- HashScan links are replaced by Arc explorer (Blockscout) links, and 0.0.x account ids by 0x addresses.
 
 ## License
 

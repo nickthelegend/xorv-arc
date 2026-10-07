@@ -10,8 +10,8 @@ pragma solidity ^0.8.24;
 ///         minted: the getter does not revert. Callers must therefore treat address(0) as "no
 ///         verified wallet", never as a wallet.
 ///
-///         Monad: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 (143),
-///                0x8004A818BFB912233c491871b3d84c89A494BD9e (10143).
+///         Arc: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 (mainnet, 5042),
+///              0x8004A818BFB912233c491871b3d84c89A494BD9e (testnet, 5042002).
 interface IIdentityRegistry8004 {
     function getAgentWallet(uint256 agentId) external view returns (address);
 

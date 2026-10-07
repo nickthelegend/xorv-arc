@@ -8,8 +8,5 @@ coverage/
 .env
 .env.*
 
-# Only real Monad deployments are part of the record; local dry runs are not.
-deployments/*
-!deployments/monadTestnet.json
-!deployments/monad.json
-!deployments/README.md
+# Deployments are recorded by the Foundry script at the repo root (deployments/arc-<network>.json).
+deployments/

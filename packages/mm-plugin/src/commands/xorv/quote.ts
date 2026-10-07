@@ -33,7 +33,7 @@ export default class XorvQuote extends PluginCommand<QuoteResult> {
 
   static override examples = [
     '<%= config.bin %> xorv quote "Summarise RFC 9110 in five bullet points"',
-    '<%= config.bin %> xorv quote --prompt "Write a haiku about Monad" --adapter claude-code --max 0.02',
+    '<%= config.bin %> xorv quote --prompt "Write a haiku about Arc" --adapter claude-code --max 0.02',
   ];
 
   static override requiresAuth = false;

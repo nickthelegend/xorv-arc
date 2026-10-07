@@ -372,7 +372,7 @@ export async function logsCommand(opts: { json?: boolean; limit?: string }): Pro
     );
   }
   ui.blank();
-  ui.muted(`  ${rows.length} entries · this file is local; the record of payment is the USDC transfer on Monad`);
+  ui.muted(`  ${rows.length} entries · this file is local; the record of payment is the USDC transfer on Arc`);
   ui.blank();
 }
 

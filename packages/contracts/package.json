@@ -2,7 +2,7 @@
   "name": "@xorv/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "XorvLedger: on-chain receipts for x402-paid Xorv jobs and a payer-authorised ERC-8004 feedback relay, on Monad.",
+  "description": "XorvLedger: on-chain receipts for x402-paid Xorv jobs and a payer-authorised ERC-8004 feedback relay, on Arc. Built and tested here with Hardhat; deployed to Arc by the Foundry script in contracts/.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -15,7 +15,6 @@
   "files": [
     "abi",
     "contracts",
-    "deployments",
     "README.md"
   ],
   "scripts": {
@@ -24,12 +23,7 @@
     "typecheck": "hardhat build --quiet && tsc -p tsconfig.json --noEmit",
     "test": "hardhat test nodejs",
     "gas": "hardhat test nodejs test/gas.test.ts",
-    "gas:monad": "hardhat run scripts/monad-gas.ts --network monadTestnet",
     "abi": "hardhat run scripts/export-abi.ts",
-    "deploy:testnet": "hardhat run scripts/deploy.ts --network monadTestnet",
-    "deploy:mainnet": "hardhat run scripts/deploy.ts --network monad",
-    "verify:testnet": "hardhat run scripts/verify.ts --network monadTestnet",
-    "verify:mainnet": "hardhat run scripts/verify.ts --network monad",
     "clean": "hardhat clean"
   },
   "dependencies": {

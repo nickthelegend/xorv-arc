@@ -34,7 +34,7 @@ function config(brokerUrl: string, token: string | null = null): NodeConfig {
   return {
     nodeId: "register-test-node",
     label: "register-test",
-    network: "eip155:10143",
+    network: "eip155:5042002",
     brokerUrl,
     address: "0x1111111111111111111111111111111111111111",
     privateKey: "",

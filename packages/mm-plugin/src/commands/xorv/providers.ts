@@ -26,7 +26,7 @@ const inputs = {
 /**
  * `mm xorv providers` — who is selling AI capacity right now, at what price,
  * and how they have done: completed/failed jobs, buyer ratings, and the
- * provider's ERC-8004 agent identity on Monad.
+ * provider's ERC-8004 agent identity on Arc.
  *
  * Read-only, and it touches no wallet, so it declares no capabilities and
  * runs without sign-in.

@@ -8,8 +8,8 @@ const MINIMAL_UUPS_ABI = parseAbi([
 const IDENTITY_INIT_ABI = parseAbi(["function initialize()"]);
 
 /**
- * Deploys the real ERC-8004 v2.0.0 registries the way upstream's own tests (and the Monad vanity
- * deployment) do it: an ERC1967 proxy is created over a minimal UUPS placeholder that records the
+ * Deploys the real ERC-8004 v2.0.0 registries the way upstream's own tests (and the canonical vanity
+ * deployments) do it: an ERC1967 proxy is created over a minimal UUPS placeholder that records the
  * owner, then upgraded to the real implementation with its reinitializer(2) `initialize`. The
  * implementations disable initializers in their constructors, so this is the only way to get a
  * working instance.

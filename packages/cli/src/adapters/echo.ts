@@ -41,7 +41,7 @@ export class EchoAdapter implements JobAdapter {
       `> ${input.prompt.trim().slice(0, 800)}`,
       ``,
       `This job was matched to a live provider, paid for with a real USDC`,
-      `transfer over x402 on Monad, and executed here. Swap this capability for`,
+      `transfer over x402 on Arc, and executed here. Swap this capability for`,
       `claude-code, codex, grok, qwen, kimi, hunyuan or an OpenAI-compatible`,
       `endpoint to sell actual model capacity — the payment path is identical.`,
     ].join("\n");

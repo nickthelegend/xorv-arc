@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Vendored verbatim from https://github.com/erc-8004/erc-8004-contracts
 // (contracts/ReputationRegistryUpgradeable.sol at commit b9e466c250744a7e06b13dff9d3c2844ed64f825, the
-// source of the v2.0.0 registries deployed on Monad). Copyright the ERC-8004 authors,
+// source of the v2.0.0 registries deployed on Arc). Copyright the ERC-8004 authors,
 // MIT-licensed per the SPDX header above. Used only to run XorvLedger's tests against the
 // real registry logic behind ERC1967 proxies; never deployed by this package.
 // See contracts/vendor/erc8004/README.md. Do not edit: re-vendor instead.

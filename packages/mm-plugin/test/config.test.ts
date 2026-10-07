@@ -25,19 +25,19 @@ describe("resolveBrokerUrl", () => {
 });
 
 describe("chains", () => {
-  it("targets exactly Monad testnet and mainnet", () => {
-    expect(networkForChainId(10143)).toBe("eip155:10143");
-    expect(networkForChainId(143)).toBe("eip155:143");
+  it("targets exactly Arc testnet and mainnet", () => {
+    expect(networkForChainId(5042002)).toBe("eip155:5042002");
+    expect(networkForChainId(5042)).toBe("eip155:5042");
     expect(networkForChainId(8453)).toBeNull();
-    expect(targetChainIdOf("eip155:10143")).toBe(10143);
+    expect(targetChainIdOf("eip155:5042002")).toBe(5042002);
     expect(targetChainIdOf("eip155:1")).toBeNull();
     expect(targetChainIdOf("hedera:testnet")).toBeNull();
   });
 
   it("parses --chain-id", () => {
     expect(parseChainId(undefined)).toBeNull();
-    expect(parseChainId("143")).toBe(143);
-    expect(() => parseChainId("1")).toThrow(/not a Monad chain/);
+    expect(parseChainId("5042")).toBe(5042);
+    expect(() => parseChainId("1")).toThrow(/not an Arc chain/);
   });
 });
 

@@ -35,7 +35,7 @@ import {
 } from "../src/commands/identity.js";
 import { walletRows } from "../src/commands/wallet.js";
 
-const NETWORK = "eip155:10143";
+const NETWORK = "eip155:5042002";
 const IDENTITY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 const KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const account = privateKeyToAccount(KEY);
@@ -70,7 +70,7 @@ const block = () => ({
 function chain(opts: { balance?: bigint; agentId?: bigint; revert?: boolean } = {}) {
   const sent: Hex[] = [];
   const rpc = fakeRpc({
-    eth_chainId: () => hex(10143),
+    eth_chainId: () => hex(5042002),
     eth_blockNumber: () => hex(1_001),
     eth_getBalance: () => hex(opts.balance ?? 10n ** 18n),
     eth_estimateGas: () => hex(ESTIMATE),
@@ -130,7 +130,7 @@ function chain(opts: { balance?: bigint; agentId?: bigint; revert?: boolean } = 
 /** A node that answers the registry's views for one agent. */
 function registryReads(state: { owner: string; wallet: string; uri?: string }) {
   return fakeRpc({
-    eth_chainId: () => hex(10143),
+    eth_chainId: () => hex(5042002),
     eth_call: ([call]) => {
       const { to, data } = call as { to: string; data: Hex };
       expect(to.toLowerCase()).toBe(IDENTITY.toLowerCase());
@@ -165,7 +165,7 @@ describe("agentURI", () => {
 });
 
 describe("checkRegisterGas", () => {
-  it("budgets the padded gas limit at the max fee — Monad bills the limit", async () => {
+  it("budgets the padded gas limit at the max fee — the worst case", async () => {
     const node = chain({ balance: 10n ** 18n });
     const check = await checkRegisterGas({ network: NETWORK, account: PAYOUT, agentURI: URI, client: { transport: node.transport } });
     // 246k + 15% headroom, rounded up.
@@ -202,7 +202,7 @@ describe("registerAgent", () => {
 
     const tx = parseTransaction(node.sent[0]!);
     expect(tx.to?.toLowerCase()).toBe(IDENTITY.toLowerCase());
-    expect(tx.chainId).toBe(10143);
+    expect(tx.chainId).toBe(5042002);
     expect(tx.gas).toBe(282_900n);
     const { functionName, args } = decodeFunctionData({ abi: IDENTITY_ABI, data: tx.data! });
     expect(functionName).toBe("register");
@@ -213,7 +213,7 @@ describe("registerAgent", () => {
     const node = chain({ revert: true });
     await expect(
       registerAgent({ network: NETWORK, account, agentURI: URI, gas: 282_900n, client: { transport: node.transport } }),
-    ).rejects.toThrow(/reverted.*testnet\.monadscan\.com\/tx\/0x/);
+    ).rejects.toThrow(/reverted.*explorer\.testnet\.arc\.io\/tx\/0x/);
   });
 });
 
@@ -241,7 +241,7 @@ describe("readIdentity", () => {
 });
 
 describe("walletRows", () => {
-  const rows = (over: Record<string, unknown> = {}, balances = { monWei: "0", usdcUnits: "2500000" }) =>
+  const rows = (over: Record<string, unknown> = {}, balances = { nativeWei: "0", usdcUnits: "2500000" }) =>
     Object.fromEntries(
       walletRows({ network: NETWORK, address: PAYOUT, privateKey: "", agentId: null, ...over }, balances).map(([k, v]) => [
         k,
@@ -249,18 +249,18 @@ describe("walletRows", () => {
       ]),
     );
 
-  it("shows USDC as what jobs pay in, and zero MON as fine", () => {
+  it("shows USDC as what jobs pay in, and its gas view (Arc's gas token is USDC) at zero as fine", () => {
     const r = rows();
     expect(r.usdc).toContain("$2.50");
-    expect(r.mon).toMatch(/0 MON.*none needed to earn/);
+    expect(r.gas).toMatch(/0 USDC.*none needed to earn/);
   });
 
   it("links the address and the USDC token on the explorer, and the testnet faucets", () => {
     const r = rows();
-    expect(r.explorer).toBe(`https://testnet.monadscan.com/address/${PAYOUT}`);
-    expect(r.token).toContain("https://testnet.monadscan.com/token/0x534b2f3A21130d7a60830c2Df862319e593943A3");
-    expect(r.faucets).toContain("https://faucet.circle.com");
-    expect(r.faucets).toContain("https://faucet.monad.xyz");
+    expect(r.explorer).toBe(`https://explorer.testnet.arc.io/address/${PAYOUT}`);
+    expect(r.token).toContain("https://explorer.testnet.arc.io/token/0x3600000000000000000000000000000000000000");
+    expect(r.faucet).toContain("https://faucet.circle.com");
+    expect(r.faucet).toContain("Arc Testnet");
   });
 
   it("says plainly when there is no key on the machine", () => {
@@ -270,9 +270,9 @@ describe("walletRows", () => {
 
   it("shows no faucets on mainnet — there are none", () => {
     const r = Object.fromEntries(
-      walletRows({ network: "eip155:143", address: PAYOUT, privateKey: "", agentId: "9" }, { monWei: "0", usdcUnits: "0" }),
+      walletRows({ network: "eip155:5042", address: PAYOUT, privateKey: "", agentId: "9" }, { nativeWei: "0", usdcUnits: "0" }),
     );
-    expect(r.faucets).toBeUndefined();
+    expect(r.faucet).toBeUndefined();
     expect(stripAnsiSafe(r.identity!)).toBe("agent #9");
   });
 });

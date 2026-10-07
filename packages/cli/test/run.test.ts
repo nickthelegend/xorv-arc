@@ -33,8 +33,8 @@ const OTHER_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b7
 const OTHER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const PROVIDER = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const BROKER = "0x00000000219ab540356cBB839Cbe05303d7705Fa";
-const USDC = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
-const NETWORK = "eip155:10143";
+const USDC = "0x3600000000000000000000000000000000000000";
+const NETWORK = "eip155:5042002";
 const SETTLE_TX = `0x${"ab".repeat(32)}`;
 
 function quote(over: Partial<QuoteResponse> = {}, provider: Partial<QuoteResponse["provider"]> = {}): QuoteResponse {
@@ -50,7 +50,7 @@ function quote(over: Partial<QuoteResponse> = {}, provider: Partial<QuoteRespons
       id: "prv_1",
       label: "someone's qwen",
       address: PROVIDER,
-      addressUrl: `https://testnet.monadscan.com/address/${PROVIDER}`,
+      addressUrl: `https://explorer.testnet.arc.io/address/${PROVIDER}`,
       agentId: "42",
       capability: "Qwen 3.8 Max",
       adapter: "qwen",
@@ -93,9 +93,9 @@ describe("vetQuote", () => {
   });
 
   it("refuses a quote from a broker on another network", () => {
-    const r = refusal(() => vetQuote(quote({ network: "eip155:143" }), ctx));
-    expect(r.message).toMatch(/eip155:143.*eip155:10143/);
-    expect(r.hints.join(" ")).toContain("XORV_NETWORK=eip155:143");
+    const r = refusal(() => vetQuote(quote({ network: "eip155:5042" }), ctx));
+    expect(r.message).toMatch(/eip155:5042.*eip155:5042002/);
+    expect(r.hints.join(" ")).toContain("XORV_NETWORK=eip155:5042");
   });
 
   it("refuses to pay yourself, whatever the address casing", () => {
@@ -122,7 +122,7 @@ describe("who pays, on which chain", () => {
     const r = refusal(() => resolveBuyerAccount({ privateKey: "" }, {}));
     expect(r.stage).toBe("setup");
     expect(r.message).toMatch(/address-only/);
-    expect(r.hints.join(" ")).toMatch(/XORV_PAYER_KEY.*no MON needed/);
+    expect(r.hints.join(" ")).toMatch(/XORV_PAYER_KEY.*USDC/);
   });
 
   it("names the source of an unusable key", () => {
@@ -130,10 +130,10 @@ describe("who pays, on which chain", () => {
     expect(r.message).toMatch(/XORV_PAYER_KEY is unusable|key in XORV_PAYER_KEY is unusable/);
   });
 
-  it("defaults to Monad testnet, honours XORV_NETWORK, and refuses a Hedera network", () => {
-    expect(buyerNetwork(null, {})).toBe("eip155:10143");
-    expect(buyerNetwork({ network: "eip155:10143" }, { XORV_NETWORK: "eip155:143" })).toBe("eip155:143");
-    expect(() => buyerNetwork({ network: "hedera:testnet" }, {})).toThrow(/Monad/);
+  it("defaults to Arc testnet, honours XORV_NETWORK, and refuses a Hedera network", () => {
+    expect(buyerNetwork(null, {})).toBe("eip155:5042002");
+    expect(buyerNetwork({ network: "eip155:5042002" }, { XORV_NETWORK: "eip155:5042" })).toBe("eip155:5042");
+    expect(() => buyerNetwork({ network: "hedera:testnet" }, {})).toThrow(/Arc/);
   });
 });
 
@@ -248,10 +248,10 @@ describe("the --json contract", () => {
       network: NETWORK,
       payer: BUYER,
       settlementTransaction: SETTLE_TX,
-      explorer: `https://testnet.monadscan.com/tx/${SETTLE_TX}`,
+      explorer: `https://explorer.testnet.arc.io/tx/${SETTLE_TX}`,
       receiptTransaction: `0x${"ef".repeat(32)}`,
-      receiptExplorer: `https://testnet.monadscan.com/tx/0x${"ef".repeat(32)}`,
-      agentExplorer: "https://testnet.monadscan.com/nft/0x8004A818BFB912233c491871b3d84c89A494BD9e/42",
+      receiptExplorer: `https://explorer.testnet.arc.io/tx/0x${"ef".repeat(32)}`,
+      agentExplorer: "https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/42",
       status: "completed",
       result: "4",
     });
@@ -282,7 +282,7 @@ describe("the --json contract", () => {
       },
       durationMs: 5,
     });
-    expect(out.explorer).toBe(`https://testnet.monadscan.com/tx/${SETTLE_TX}`);
+    expect(out.explorer).toBe(`https://explorer.testnet.arc.io/tx/${SETTLE_TX}`);
     expect(out.agentExplorer).toBeNull();
     expect(out.receiptExplorer).toBeNull();
     expect(out.status).toBe("failed");

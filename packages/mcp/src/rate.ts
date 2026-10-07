@@ -7,7 +7,7 @@
  *                                        payer's and relays `XorvLedger.rateJob`,
  *                                        which writes ERC-8004 reputation feedback
  *
- * The buyer spends no gas and holds no MON. What it does hold is a signing
+ * The buyer spends no gas: the broker relays the rating. What it does hold is a signing
  * key, so — as with payments — nothing is signed on the broker's say-so
  * alone. The typed data must be a XorvLedger `Rating` on this server's chain,
  * for *this* job id and *this* value, and the broker must agree that this

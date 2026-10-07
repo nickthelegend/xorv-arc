@@ -30,12 +30,17 @@ import {
 } from "@xorv/protocol";
 import { verifyTypedData, type Hex } from "viem";
 
-export const NETWORK = "eip155:10143";
+export const NETWORK = "eip155:5042002";
 export const PROVIDER = "0x00000000000000000000000000000000000000A1";
 export const LEDGER = "0x00000000000000000000000000000000000000b2";
 export const SETTLE_TX = `0x${"ab".repeat(32)}`;
 export const RECEIPT_TX = `0x${"cd".repeat(32)}`;
 export const RATE_TX = `0x${"ef".repeat(32)}`;
+export const ESCROW = "0x1C75B3F897AD80a1A6fb32f864Cc845aabcC657E";
+export const REPUTATION = "0xbD31F44e13513761fC784D17D6ddDa63f9D5259F";
+export const CCIP_RECEIVER = "0x5ea567E283a0EAbd8377153c6245223BdA5bAE46";
+export const CCIP_SENDER = "0x00000000000000000000000000000000000000c5";
+export const ESCROW_JOB_ID = `0x${"5e".repeat(32)}`;
 
 const usdc = networkConfig(NETWORK).usdc;
 
@@ -52,6 +57,8 @@ export interface MockBrokerOptions {
   tamperRating?: (offer: Record<string, unknown>) => void;
   /** Fail settlement: answer the paid retry with this status instead of 200. */
   settleStatus?: number;
+  /** Take `payVia: "ccip"` quotes (a XorvCcipReceiver is configured). */
+  ccip?: boolean;
 }
 
 export interface PaymentSeen {
@@ -119,7 +126,7 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
       payer: payer ?? PROVIDER,
       payTo: PROVIDER,
       settledAt: Date.now(),
-      explorerUrl: `https://testnet.monadscan.com/tx/${SETTLE_TX}`,
+      explorerUrl: `https://explorer.testnet.arc.io/tx/${SETTLE_TX}`,
     },
     result: "4",
     resultHash: `0x${"12".repeat(32)}`,
@@ -167,12 +174,12 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
       if (route === "GET /api/network") {
         return send(res, 200, {
           network: NETWORK,
-          chainId: 10143,
+          chainId: 5042002,
           label: "testnet",
-          explorerUrl: "https://testnet.monadscan.com",
+          explorerUrl: "https://explorer.testnet.arc.io",
           usdc: { address: usdc.address, symbol: "USDC", decimals: 6 },
           facilitator: { mode: "self", description: "in-process facilitator", address: PROVIDER },
-          ledger: { address: LEDGER, url: `https://testnet.monadscan.com/address/${LEDGER}` },
+          ledger: { address: LEDGER, url: `https://explorer.testnet.arc.io/address/${LEDGER}` },
           erc8004: networkConfig(NETWORK).erc8004,
           indexer: null,
           published: { registrations: 1, heartbeats: 0, receipts: 1, ratings: 0 },
@@ -182,6 +189,26 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
           epoch: 1,
           stats: { providersLive: 1, providersConnected: 1, capacity: 1, jobsTotal: 1, jobsCompleted: 1, paidUsdMicros: price },
           heartbeatIntervalMs: 15_000,
+          escrow: { address: ESCROW, url: `https://explorer.testnet.arc.io/address/${ESCROW}`, deadlineSeconds: 900 },
+          arc: {
+            gasToken: "USDC",
+            finality: "deterministic, sub-second",
+            memo: { address: networkConfig(NETWORK).circle.memo, url: "x", enabled: true },
+            reputation: { address: REPUTATION, url: `https://explorer.testnet.arc.io/address/${REPUTATION}` },
+            gateway: { wallet: networkConfig(NETWORK).circle.gatewayWallet, minter: networkConfig(NETWORK).circle.gatewayMinter, sources: [], enabled: false },
+            cctp: {
+              tokenMessengerV2: networkConfig(NETWORK).circle.tokenMessengerV2,
+              domain: 26,
+              destinations: [{ name: "Base Sepolia", chainId: 84532, domain: 6 }],
+            },
+            ccip: {
+              router: networkConfig(NETWORK).ccip.router,
+              chainSelector: networkConfig(NETWORK).ccip.chainSelector,
+              receiver: opts.ccip ? { address: CCIP_RECEIVER, url: "x" } : null,
+              sources: [{ name: "Base Sepolia", chainId: 84532, selector: "10344971235874465080" }],
+            },
+            keeper: { enabled: false, address: null },
+          },
         });
       }
 
@@ -191,6 +218,11 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
         if (Number(body.maxPriceUsdMicros) < price) {
           return send(res, 503, { error: "no online provider matches that request under the ceiling" });
         }
+        const viaCcip = body.payVia === "ccip";
+        if (viaCcip && !opts.ccip) {
+          return send(res, 400, { error: "this broker takes no cross-chain jobs (no XorvCcipReceiver configured)" });
+        }
+        const deadline = Math.floor(Date.now() / 1000) + 7_200;
         const quote: QuoteResponse = {
           quoteId: `qte_${quotes.length}`,
           payUrl: `http://wrong.invalid/api/jobs/qte_${quotes.length}`,
@@ -203,7 +235,7 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
             id: "prv_test",
             label: "test-node",
             address: PROVIDER,
-            addressUrl: `https://testnet.monadscan.com/address/${PROVIDER}`,
+            addressUrl: `https://explorer.testnet.arc.io/address/${PROVIDER}`,
             agentId: "7",
             capability: "Echo",
             adapter: "echo",
@@ -211,6 +243,27 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
             stats: { jobsCompleted: 3, jobsFailed: 0, earnedUsdcMicros: 30_000, avgDurationMs: 100 },
           },
           accepts: [{ ...requirements(), scheme: "exact", extra: { name: usdc.name, version: usdc.version } }],
+          ...(viaCcip
+            ? {
+                escrow: { address: ESCROW, jobId: ESCROW_JOB_ID, deadline, explorerUrl: "x" },
+                ccip: {
+                  receiver: CCIP_RECEIVER,
+                  arcChainSelector: networkConfig(NETWORK).ccip.chainSelector,
+                  jobId: ESCROW_JOB_ID,
+                  provider: PROVIDER,
+                  price: String(price),
+                  deadline,
+                  sources: networkConfig(NETWORK).remotes.map((r) => ({
+                    name: r.name,
+                    chainId: r.chainId,
+                    selector: r.ccipSelector!,
+                    usdc: r.usdc,
+                    cctpDomain: r.cctpDomain,
+                  })),
+                  senders: { "84532": CCIP_SENDER },
+                },
+              }
+            : {}),
           ...opts.quote,
         };
         return send(res, 200, quote);
@@ -233,7 +286,7 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
         const req402 = requirements();
         const valid = await verifyTypedData({
           address: auth.from as Hex,
-          domain: { name: usdc.name, version: usdc.version, chainId: 10143, verifyingContract: req402.asset as Hex },
+          domain: { name: usdc.name, version: usdc.version, chainId: 5042002, verifyingContract: req402.asset as Hex },
           types: {
             TransferWithAuthorization: [
               { name: "from", type: "address" },
@@ -314,7 +367,7 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
           jobId: rate[1],
           value,
           txHash: RATE_TX,
-          explorerUrl: `https://testnet.monadscan.com/tx/${RATE_TX}`,
+          explorerUrl: `https://explorer.testnet.arc.io/tx/${RATE_TX}`,
           feedbackURI: `${base}/feedback/${rate[1]}.json`,
         });
       }
@@ -329,7 +382,7 @@ export async function startMockBroker(opts: MockBrokerOptions = {}): Promise<Moc
               id: "prv_test",
               label: "test-node",
               address: PROVIDER,
-              addressUrl: `https://testnet.monadscan.com/address/${PROVIDER}`,
+              addressUrl: `https://explorer.testnet.arc.io/address/${PROVIDER}`,
               agentId: "7",
               agentUrl: null,
               endpoint: "http://node.invalid",

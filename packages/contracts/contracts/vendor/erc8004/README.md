@@ -3,7 +3,7 @@
 These files are copied verbatim from
 [erc-8004/erc-8004-contracts](https://github.com/erc-8004/erc-8004-contracts) at commit
 `b9e466c250744a7e06b13dff9d3c2844ed64f825` (2026-08-15). That commit is the source of the v2.0.0
-registries deployed on Monad (`getVersion()` returns `"2.0.0"` on both chains). The only change is
+registries deployed at the canonical `0x8004…` addresses, including Arc testnet and mainnet. The only change is
 a short attribution comment under each SPDX line.
 
 | File | Upstream path | Role here |
@@ -20,7 +20,7 @@ upstream README says CC0. Either way the files are permissive and redistributabl
 `getAgentWallet` returns `address(0)` for cleared and never-minted agents, and `giveFeedback` rejects
 feedback from an agent's owner or operators. `test/XorvLedger.test.ts` deploys these contracts the
 way upstream's own tests do (an ERC1967 proxy over `HardhatMinimalUUPS`, then `upgradeToAndCall` into
-the real implementation). This means the tests exercise the registry code that runs on Monad, not a
+the real implementation). This means the tests exercise the registry code that runs on Arc, not a
 mock's approximation of it.
 
 **Build settings.** `hardhat.config.ts` compiles these files with `viaIR: true` and optimizer 200,

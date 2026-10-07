@@ -4,10 +4,15 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildAgentPolicy, parseCapUsdc, TRANSFER_WITH_AUTHORIZATION_TYPES } from "../src/privy-policy.js";
+import {
+  buildAgentPolicy,
+  parseCapUsdc,
+  RECEIVE_WITH_AUTHORIZATION_TYPES,
+  TRANSFER_WITH_AUTHORIZATION_TYPES,
+} from "../src/privy-policy.js";
 import { LEDGER, NETWORK, PROVIDER } from "./helpers/mock-broker.js";
 
-const USDC_TESTNET = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+const USDC_TESTNET = "0x3600000000000000000000000000000000000000";
 /** A mixed-case ledger address, so both spellings are distinct. */
 const MIXED_LEDGER = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
@@ -20,12 +25,13 @@ describe("buildAgentPolicy", () => {
     expect(rule).toMatchObject({ method: "eth_signTypedData_v4", action: "ALLOW" });
     expect(rule!.name).toContain("$0.5000");
     expect(rule!.conditions).toEqual([
-      { field_source: "ethereum_typed_data_domain", field: "chainId", operator: "eq", value: "10143" },
+      { field_source: "ethereum_typed_data_domain", field: "chainId", operator: "eq", value: "5042002" },
       {
         field_source: "ethereum_typed_data_domain",
         field: "verifyingContract",
         operator: "in",
-        value: [USDC_TESTNET, USDC_TESTNET.toLowerCase()],
+        // Arc's USDC address has no letters, so both spellings are the same one.
+        value: [USDC_TESTNET],
       },
       {
         field_source: "ethereum_typed_data_message",
@@ -37,10 +43,10 @@ describe("buildAgentPolicy", () => {
     ]);
   });
 
-  it("uses mainnet's chain id and USDC on mainnet", () => {
-    const policy = buildAgentPolicy({ network: "eip155:143", capUnits: 1n });
-    expect(policy.rules[0]!.conditions[0]).toMatchObject({ value: "143" });
-    expect(policy.rules[0]!.conditions[1]).toMatchObject({ value: expect.arrayContaining(["0x754704Bc059F8C67012fEd69BC8A327a5aafb603"]) });
+  it("uses Arc mainnet's chain id (5042) and USDC on mainnet", () => {
+    const policy = buildAgentPolicy({ network: "eip155:5042", capUnits: 1n });
+    expect(policy.rules[0]!.conditions[0]).toMatchObject({ value: "5042" });
+    expect(policy.rules[0]!.conditions[1]).toMatchObject({ value: expect.arrayContaining(["0x3600000000000000000000000000000000000000"]) });
   });
 
   it("can restrict payees, and adds a rating rule for a known ledger", () => {
@@ -55,10 +61,33 @@ describe("buildAgentPolicy", () => {
       name: "XorvLedger job ratings",
       method: "eth_signTypedData_v4",
       conditions: [
-        { field: "chainId", value: "10143" },
+        { field: "chainId", value: "5042002" },
         { field: "verifyingContract", operator: "in", value: [MIXED_LEDGER, MIXED_LEDGER.toLowerCase()] },
       ],
     });
+  });
+
+  it("adds an escrow rule: ReceiveWithAuthorization on Arc USDC, up to the cap, only into XorvEscrow", () => {
+    const ESCROW = "0x1C75B3F897AD80a1A6fb32f864Cc845aabcC657E";
+    const policy = buildAgentPolicy({ network: NETWORK, capUnits: 250_000n, escrow: ESCROW.toLowerCase() });
+    expect(policy.rules).toHaveLength(2);
+    const rwa = { primary_type: "ReceiveWithAuthorization", types: RECEIVE_WITH_AUTHORIZATION_TYPES };
+    expect(policy.rules[1]).toMatchObject({ method: "eth_signTypedData_v4", action: "ALLOW" });
+    expect(policy.rules[1]!.name).toMatch(/escrow.*\$0\.2500.*XorvEscrow/);
+    expect(policy.rules[1]!.conditions).toEqual([
+      { field_source: "ethereum_typed_data_domain", field: "chainId", operator: "eq", value: "5042002" },
+      { field_source: "ethereum_typed_data_domain", field: "verifyingContract", operator: "in", value: [USDC_TESTNET] },
+      { field_source: "ethereum_typed_data_message", field: "value", operator: "lte", value: "250000", typed_data: rwa },
+      { field_source: "ethereum_typed_data_message", field: "to", operator: "in", value: [ESCROW, ESCROW.toLowerCase()], typed_data: rwa },
+    ]);
+    expect(RECEIVE_WITH_AUTHORIZATION_TYPES.ReceiveWithAuthorization.map((f) => f.name)).toEqual([
+      "from",
+      "to",
+      "value",
+      "validAfter",
+      "validBefore",
+      "nonce",
+    ]);
   });
 
   it("refuses a zero cap and bad addresses", () => {
@@ -101,13 +130,14 @@ describe("privy-setup script", () => {
     const { parseSetupArgs } = await import("../src/scripts/privy-setup.js");
     expect(() => parseSetupArgs([])).toThrow(/--cap-usdc is required/);
     expect(parseSetupArgs(["--", "--cap-usdc", "0.25"])).toMatchObject({ capUnits: 250_000n, network: NETWORK, dryRun: false });
-    expect(() => parseSetupArgs(["--cap-usdc", "1", "--network", "hedera:testnet"])).toThrow(/eip155:10143/);
-    expect(parseSetupArgs(["--cap-usdc", "1"], { XORV_NETWORK: "eip155:143" })).toMatchObject({ network: "eip155:143" });
+    expect(() => parseSetupArgs(["--cap-usdc", "1", "--network", "hedera:testnet"])).toThrow(/eip155:5042002/);
+    expect(parseSetupArgs(["--cap-usdc", "1"], { XORV_NETWORK: "eip155:5042" })).toMatchObject({ network: "eip155:5042" });
     expect(parseSetupArgs(["--cap-usdc", "1", "--pay-to", `${PROVIDER}, ${LEDGER}`, "--owner-key"])).toMatchObject({
       payTo: [PROVIDER, LEDGER],
       ownerKey: true,
     });
     expect(parseSetupArgs(["-h"])).toBe("help");
+    expect(parseSetupArgs(["--cap-usdc", "1", "--escrow", LEDGER])).toMatchObject({ escrow: LEDGER });
   });
 
   it("prints the policy on --dry-run without credentials or network", async () => {
@@ -118,6 +148,18 @@ describe("privy-setup script", () => {
     expect(code).toBe(0);
     const policy = JSON.parse(lines.join("\n")) as { rules: unknown[] };
     expect(policy.rules).toHaveLength(2);
+  });
+
+  it("reads the ledger and escrow addresses from a broker's /api/network", async () => {
+    const { contractsFromBroker } = await import("../src/scripts/privy-setup.js");
+    const logs: string[] = [];
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ ledger: { address: LEDGER }, escrow: { address: PROVIDER.toLowerCase() } }))) as typeof fetch;
+    expect(await contractsFromBroker("http://b/", (l) => logs.push(l), fetchImpl)).toEqual({ ledger: LEDGER, escrow: PROVIDER });
+    expect(logs).toEqual([]);
+    const none = (async () => new Response(JSON.stringify({ ledger: null }))) as typeof fetch;
+    expect(await contractsFromBroker("http://b", (l) => logs.push(l), none)).toEqual({ ledger: null, escrow: null });
+    expect(logs.join(" ")).toMatch(/no XorvEscrow/);
   });
 
   it("stops with a clear message when the Privy app credentials are missing", async () => {

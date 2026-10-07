@@ -10,12 +10,12 @@
  * A bad value does not crash the process. A server that exits at launch shows
  * up in the client as a bare "failed to start", with the reason buried in a
  * log file nobody opens; a server that boots and answers every tool call with
- * "XORV_NETWORK=hedera:testnet is not supported — use eip155:10143" puts the
+ * "XORV_NETWORK=hedera:testnet is not supported — use eip155:5042002" puts the
  * fix in front of the person (or model) who can act on it. So fundamental
  * problems are collected into `problems`, and the tools refuse with them.
  */
 
-import { DEFAULT_NETWORK, formatUsd, isSupportedNetwork, parseUsd, type MonadNetwork } from "@xorv/protocol";
+import { DEFAULT_NETWORK, formatUsd, isSupportedNetwork, parseUsd, type ArcNetwork } from "@xorv/protocol";
 import { resolveSignerConfig, type SignerConfig } from "./signer.js";
 
 export type Env = Record<string, string | undefined>;
@@ -28,7 +28,7 @@ export const DEFAULT_SESSION_BUDGET_USD = "0.50";
 
 export interface McpConfig {
   brokerUrl: string;
-  network: MonadNetwork;
+  network: ArcNetwork;
   /**
    * A hard spending ceiling per job, in micro-USD.
    *
@@ -85,12 +85,12 @@ export function loadConfig(env: Env): McpConfig {
   const brokerUrl = (readVar(env, "XORV_BROKER_URL") ?? "http://localhost:8402").replace(/\/+$/, "");
 
   const rawNetwork = readVar(env, "XORV_NETWORK") ?? DEFAULT_NETWORK;
-  let network: MonadNetwork = DEFAULT_NETWORK;
+  let network: ArcNetwork = DEFAULT_NETWORK;
   if (isSupportedNetwork(rawNetwork)) {
     network = rawNetwork;
   } else {
     problems.push(
-      `XORV_NETWORK="${rawNetwork}" is not supported — Xorv runs on Monad: set eip155:10143 (testnet) or eip155:143 (mainnet)` +
+      `XORV_NETWORK="${rawNetwork}" is not supported — Xorv runs on Arc: set eip155:5042002 (testnet) or eip155:5042 (mainnet)` +
         (rawNetwork.startsWith("hedera") ? ". The Hedera prototype's settings do not carry over." : ""),
     );
   }

@@ -39,7 +39,7 @@ function baseConfig(mod: Awaited<ReturnType<typeof loadModule>>, over: Record<st
   return {
     nodeId: "abc",
     label: "test-node",
-    network: "eip155:10143",
+    network: "eip155:5042002",
     brokerUrl: "http://localhost:8402",
     address: ADDRESS,
     privateKey: KEY,
@@ -97,13 +97,13 @@ describe("config round trip", () => {
     expect(fs.existsSync(`${mod.configPath()}.tmp`)).toBe(false);
   });
 
-  it("fills in Monad defaults for a sparse config", async () => {
+  it("fills in Arc defaults for a sparse config", async () => {
     const mod = await loadModule();
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(mod.configPath(), JSON.stringify({ label: "old" }));
     const loaded = mod.loadConfig()!;
     expect(loaded.label).toBe("old");
-    expect(loaded.network).toBe("eip155:10143");
+    expect(loaded.network).toBe("eip155:5042002");
     expect(loaded.address).toBe("");
     expect(loaded.agentId).toBeNull();
     expect(loaded.capabilities).toEqual([]);
@@ -175,7 +175,7 @@ describe("a config left by the Hedera prototype", () => {
     expect(config!.nodeId).toBe("n1");
     expect(config!.capabilities[0]!.priceUsdMicros).toBe(123_000);
     expect(config!.brokerUrl).toBe("https://broker.example.test");
-    expect(config!.network).toBe("eip155:10143");
+    expect(config!.network).toBe("eip155:5042002");
     expect(config!.address).toBe("");
     expect(config!.privateKey).toBe("");
     expect(config!.providerId).toBeNull();

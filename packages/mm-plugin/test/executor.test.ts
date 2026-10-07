@@ -20,7 +20,7 @@ import { OTHER, PAYER, PROVIDER_ADDRESS, USDC, fakeMetaMask } from "./helpers.js
 
 const requirements: PaymentRequirements = {
   scheme: "exact",
-  network: "eip155:10143",
+  network: "eip155:5042002",
   asset: USDC.address,
   amount: "10000",
   payTo: PROVIDER_ADDRESS,
@@ -29,7 +29,7 @@ const requirements: PaymentRequirements = {
 };
 
 const authTypedData = (): TypedDataInput => ({
-  domain: { name: "USDC", version: "2", chainId: 10143, verifyingContract: USDC.address },
+  domain: { name: "USDC", version: "2", chainId: 5042002, verifyingContract: USDC.address },
   types: authorizationTypes as unknown as Record<string, unknown>,
   primaryType: "TransferWithAuthorization",
   message: {
@@ -52,7 +52,7 @@ describe("toWalletTypedData", () => {
       { name: "verifyingContract", type: "address" },
     ]);
     expect(wire.types.TransferWithAuthorization).toEqual(authorizationTypes.TransferWithAuthorization);
-    expect(wire.domain.chainId).toBe(10143);
+    expect(wire.domain.chainId).toBe(5042002);
     expect(wire.message.value).toBe("10000");
     expect(wire.message.validBefore).toBe("1900000000");
     expect(() => JSON.stringify(wire)).not.toThrow();
@@ -65,7 +65,7 @@ describe("executorSigner (x402 ClientEvmSigner over MetaMask)", () => {
     const signer = executorSigner({
       executor: mm.executor,
       address: PAYER.address,
-      chainId: 10143,
+      chainId: 5042002,
       describe: () => "Xorv: pay 0.0100 USDC",
     });
     const before = Math.floor(Date.now() / 1000);
@@ -84,10 +84,10 @@ describe("executorSigner (x402 ClientEvmSigner over MetaMask)", () => {
     expect(Number(payload.authorization.validBefore)).toBeGreaterThanOrEqual(before + 300);
     expect(payload.authorization.nonce).toMatch(/^0x[0-9a-f]{64}$/i);
 
-    // Validity: it verifies against Monad USDC's EIP-712 domain, as the facilitator checks it.
+    // Validity: it verifies against Arc USDC's EIP-712 domain, as the facilitator checks it.
     const valid = await verifyTypedData({
       address: PAYER.address,
-      domain: { name: "USDC", version: "2", chainId: 10143, verifyingContract: USDC.address },
+      domain: { name: "USDC", version: "2", chainId: 5042002, verifyingContract: USDC.address },
       types: authorizationTypes,
       primaryType: "TransferWithAuthorization",
       message: {
@@ -100,16 +100,16 @@ describe("executorSigner (x402 ClientEvmSigner over MetaMask)", () => {
     });
     expect(valid).toBe(true);
 
-    // What MetaMask was asked: typed data on Monad testnet, with a human intent.
+    // What MetaMask was asked: typed data on Arc testnet, with a human intent.
     expect(mm.requests).toHaveLength(1);
-    expect(mm.requests[0]).toMatchObject({ kind: "typed-data", chainId: 10143, intent: { action: "custom", summary: "Xorv: pay 0.0100 USDC" } });
+    expect(mm.requests[0]).toMatchObject({ kind: "typed-data", chainId: 5042002, intent: { action: "custom", summary: "Xorv: pay 0.0100 USDC" } });
     expect(mm.requests[0]!.typedData.primaryType).toBe("TransferWithAuthorization");
   });
 
   it("refuses a signature made by a different wallet than the named payer", async () => {
     const mm = fakeMetaMask({ account: OTHER });
     const errors: unknown[] = [];
-    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 10143, onError: (e) => errors.push(e) });
+    const signer = executorSigner({ executor: mm.executor, address: PAYER.address, chainId: 5042002, onError: (e) => errors.push(e) });
     await expect(signer.signTypedData(authTypedData())).rejects.toMatchObject({ code: "XORV_SIGNER_MISMATCH" });
     expect(errors).toHaveLength(1);
   });
@@ -121,7 +121,7 @@ describe("executorSigner (x402 ClientEvmSigner over MetaMask)", () => {
       const { EIP712Domain: _drop, ...types } = req.typedData.types;
       return mm.executor({ ...req, typedData: { ...req.typedData, types } });
     };
-    const signer = executorSigner({ executor: naive, address: PAYER.address, chainId: 10143 });
+    const signer = executorSigner({ executor: naive, address: PAYER.address, chainId: 5042002 });
     await expect(signer.signTypedData(authTypedData())).rejects.toMatchObject({ code: "XORV_SIGNER_MISMATCH" });
   });
 });
@@ -129,7 +129,7 @@ describe("executorSigner (x402 ClientEvmSigner over MetaMask)", () => {
 describe("signTypedDataWithWallet", () => {
   it("refuses typed data for another chain before asking MetaMask", async () => {
     const mm = fakeMetaMask();
-    await expect(signTypedDataWithWallet(mm.executor, { chainId: 143, typedData: authTypedData() })).rejects.toMatchObject({
+    await expect(signTypedDataWithWallet(mm.executor, { chainId: 8453, typedData: authTypedData() })).rejects.toMatchObject({
       code: "XORV_UNSUPPORTED_NETWORK",
     });
     expect(mm.requests).toHaveLength(0);
@@ -138,7 +138,7 @@ describe("signTypedDataWithWallet", () => {
   it("maps a host refusal (policy block) to XORV_SIGNATURE_DENIED and keeps its hint", async () => {
     const err = Object.assign(new Error("blocked by policy"), { code: "POLICY_VIOLATION", hint: "Add the recipient to your allowlist." });
     const mm = fakeMetaMask({ throws: err });
-    await expect(signTypedDataWithWallet(mm.executor, { chainId: 10143, typedData: authTypedData() })).rejects.toMatchObject({
+    await expect(signTypedDataWithWallet(mm.executor, { chainId: 5042002, typedData: authTypedData() })).rejects.toMatchObject({
       code: "XORV_SIGNATURE_DENIED",
       hint: "Add the recipient to your allowlist.",
     });

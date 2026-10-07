@@ -64,7 +64,7 @@ export type SignerConfig = PrivySignerConfig | LocalSignerConfig | NoSignerConfi
 const PRIVY_REQUIRED = ["XORV_PRIVY_APP_ID", "XORV_PRIVY_APP_SECRET", "XORV_PRIVY_WALLET_ID"] as const;
 
 const NO_PAYER =
-  "No payer configured. To let this MCP server buy jobs, set either XORV_PRIVATE_KEY (a 0x Monad key holding test USDC) " +
+  "No payer configured. To let this MCP server buy jobs, set either XORV_PRIVATE_KEY (a 0x Arc key holding test USDC) " +
   "or XORV_PRIVY_APP_ID + XORV_PRIVY_APP_SECRET + XORV_PRIVY_WALLET_ID (a policy-bounded Privy server wallet — " +
   "`pnpm --filter @xorv/mcp privy:setup` creates one). Read-only tools work without either.";
 
@@ -237,7 +237,7 @@ export function createPayerSigner(
     }
     if (wallet.chain_type !== "ethereum") {
       throw new Error(
-        `Privy wallet ${config.walletId} is a ${wallet.chain_type} wallet; paying on Monad needs an ethereum (EVM) wallet`,
+        `Privy wallet ${config.walletId} is a ${wallet.chain_type} wallet; paying on Arc needs an ethereum (EVM) wallet`,
       );
     }
     const address = normalizeAddress(wallet.address);

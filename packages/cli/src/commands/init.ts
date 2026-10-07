@@ -6,7 +6,7 @@
  * the operator's agent CLIs and model keys actually work right now (probed, not
  * asked), and where the money goes.
  *
- * On Monad the second part got much smaller. A payout destination is just an
+ * On Arc the second part got much smaller. A payout destination is just an
  * address — nothing to fund, nothing to opt into — so there are three honest
  * ways to supply one:
  *
@@ -27,7 +27,7 @@ import {
   DEFAULT_NETWORK,
   explorerAddress,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   formatUsd,
   formatUsdc,
   networkConfig,
@@ -67,7 +67,7 @@ export async function initCommand(opts: { broker?: string; force?: boolean }): P
     ui.warn("this machine was set up by the Hedera version of Xorv");
     ui.muted(
       `  ${legacy.accountId ? `account ${legacy.accountId}` : "the old account"}${legacy.network ? ` on ${legacy.network}` : ""} ` +
-        "can't be paid on Monad — this sets up a Monad payout address instead",
+        "can't be paid on Arc — this sets up an Arc payout address instead",
     );
     ui.muted("  your node name, capabilities and prices carry over");
     ui.blank();
@@ -217,7 +217,7 @@ export async function initCommand(opts: { broker?: string; force?: boolean }): P
         ...ui.kv([
           ["node", ui.c.bold(config.label)],
           ["selling", capabilities.map((c) => `${c.displayName} ${ui.c.money(formatUsd(c.priceUsdMicros))}`).join(", ")],
-          ["payout", `${config.address} ${ui.c.muted(`(Monad ${networkLabel(network)})`)}`],
+          ["payout", `${config.address} ${ui.c.muted(`(Arc ${networkLabel(network)})`)}`],
           ["key", config.privateKey ? ui.c.muted("stored in the config (0600)") : ui.c.ok("none on this machine")],
           ["broker", config.brokerUrl],
           ["config", configPath()],
@@ -316,8 +316,8 @@ export async function setupWallet(previous: NodeConfig | null, prompt: Prompter)
           ["private key", ui.c.muted(`${key.slice(0, 10)}…  (saved to ${configPath()})`)],
         ]),
         "",
-        "  Nothing to fund: any Monad address can receive USDC, and the",
-        "  facilitator pays the gas on every payment you receive.",
+        "  Nothing to fund: any Arc address can receive USDC, and the",
+        "  broker's facilitator pays the gas on every payment you receive.",
       ],
       { title: "payout key", color: ui.BRAND.amber },
     ),
@@ -334,12 +334,12 @@ async function reportBalances(network: string, address: string): Promise<void> {
     const balances = await fetchBalances(network, address);
     spin.stop();
     ui.ok(
-      `  ${ui.c.money(formatUsdc(balances.usdcUnits))} USDC · ${formatMon(balances.monWei)} ` +
-        ui.c.muted("(no MON needed to earn)"),
+      `  ${ui.c.money(formatUsdc(balances.usdcUnits))} USDC · ${formatGasUsdc(balances.nativeWei)} ` +
+        ui.c.muted("(gas on Arc is the same USDC; none needed to earn)"),
     );
     ui.muted(`  ${explorerAddress(network, address)}`);
-    if (cfg.faucets.mon) {
-      ui.muted(`  MON for an optional identity: ${cfg.faucets.mon} · test USDC: ${cfg.faucets.usdc}`);
+    if (cfg.faucets.usdc) {
+      ui.muted(`  test USDC (also pays gas for an optional identity): ${cfg.faucets.usdc}`);
     }
   } catch (err) {
     spin.stop();

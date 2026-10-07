@@ -19,6 +19,8 @@ import {
 } from "@xorv/protocol";
 import { loadConfig, resolveBrokerUrl, type NodeConfig } from "../config.js";
 import * as ui from "../ui.js";
+import { readReputation, resolveReputationAddress, type ReputationRecord } from "../reputation.js";
+import { reputationRows } from "./identity.js";
 
 /** An explorer link, or "" when the broker's network has no explorer this CLI knows. */
 function link(build: () => string): string {
@@ -76,18 +78,34 @@ export async function statusCommand(opts: { broker?: string; json?: boolean }): 
   }
   spin?.stop();
 
+  // This node's XorvReputation record, when the contract is known (env, or the
+  // broker's arc block) and this machine has a payout address. Best effort.
+  let reputation: ReputationRecord | null = null;
+  if (config?.address && isSupportedNetwork(network.network)) {
+    try {
+      const found =
+        (await resolveReputationAddress({})) ??
+        (network.arc?.reputation?.address
+          ? await resolveReputationAddress({ flag: network.arc.reputation.address })
+          : null);
+      if (found) reputation = await readReputation({ network: network.network, reputation: found.address, provider: config.address });
+    } catch {
+      reputation = null;
+    }
+  }
+
   if (opts.json) {
-    console.log(JSON.stringify({ network, providers }, null, 2));
+    console.log(JSON.stringify(reputation ? { network, providers, reputation } : { network, providers }, null, 2));
     return;
   }
 
   console.log(ui.banner(`network status · ${networkLabel(network.network)}`));
 
   if (!isSupportedNetwork(network.network)) {
-    // A broker that has not been moved to Monad yet (or a typo'd XORV_NETWORK
+    // A broker that has not been moved to Arc yet (or a typo'd XORV_NETWORK
     // on it). Its payments can't be made by this CLI, but who is online is
     // still worth showing, so this warns instead of refusing.
-    ui.warn(`this broker reports network "${network.network}" — this CLI pays on Monad (eip155:10143 / eip155:143)`);
+    ui.warn(`this broker reports network "${network.network}" — this CLI pays on Arc (eip155:5042002 / eip155:5042)`);
     ui.blank();
   }
 
@@ -95,7 +113,7 @@ export async function statusCommand(opts: { broker?: string; json?: boolean }): 
 
   const usdc = network.usdc?.address;
   const summary: Array<[string, string]> = [
-    ["network", `Monad ${network.label ?? networkLabel(network.network)} ${ui.c.muted(`· ${network.network}`)}`],
+    ["network", `Arc ${network.label ?? networkLabel(network.network)} ${ui.c.muted(`· ${network.network}`)}`],
     ["usdc", usdc ? `${usdc} ${ui.c.muted(link(() => explorerAddress(network.network, usdc)))}` : ui.c.muted("—")],
     [
       "facilitator",
@@ -103,6 +121,9 @@ export async function statusCommand(opts: { broker?: string; json?: boolean }): 
     ],
   ];
   if (network.erc8004?.identity) summary.push(["identity", ui.c.muted(`ERC-8004 registry ${network.erc8004.identity}`)]);
+  if (network.arc?.reputation) {
+    summary.push(["reputation", ui.c.muted(`XorvReputation ${network.arc.reputation.address} — escrow outcomes → ERC-8004`)]);
+  }
   const ai = network.ai
     ? (
         [
@@ -121,6 +142,11 @@ export async function statusCommand(opts: { broker?: string; json?: boolean }): 
     ["settled", ui.c.money(formatUsd(network.stats.paidUsdMicros))],
   );
   console.log(ui.box(ui.kv(summary), { title: "network" }));
+
+  if (reputation && config) {
+    ui.heading("this node's reputation");
+    console.log(ui.box(ui.kv(reputationRows(network.network, reputation, config.agentId)), { title: "XorvReputation" }));
+  }
 
   // -- the audit trail ------------------------------------------------------
 

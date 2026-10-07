@@ -46,7 +46,7 @@ export function vetQuote(
     throw new XorvPluginError(
       "XORV_UNSUPPORTED_NETWORK",
       `the broker quotes on ${quote.network || "an unnamed network"}, which this plugin does not sign for`,
-      `mm xorv only pays on Monad (chain ${TARGET_CHAIN_IDS.join(" or ")}); point --broker at a Monad broker.`,
+      `mm xorv only pays on Arc (chain ${TARGET_CHAIN_IDS.join(" or ")}); point --broker at an Arc broker.`,
     );
   }
   if (opts.chainId && opts.chainId !== chainId) {

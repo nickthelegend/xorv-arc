@@ -8,12 +8,11 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { NO_AGENT, deployErc8004, makeRating, makeReceipt, registerAgent, signRating, textHash } from "./helpers.js";
 
 // Gas report for the calls the broker pays for. Printed, and loosely bounded so a regression that
-// doubles a cost fails CI instead of silently doubling the broker's MON bill.
+// doubles a cost fails CI instead of silently doubling the broker's gas bill (paid in USDC on Arc).
 //
-// These figures come from Hardhat's simulated chain, which uses Ethereum's gas schedule. Monad reprices
-// cold state (10,100 per cold account, 8,100 per cold 128-slot storage page, 27,900 for a fresh slot on
-// a new page), so the numbers on Monad differ; `pnpm gas:monad` measures the same calls against the live
-// Monad RPC with eth_estimateGas and state overrides (read-only: nothing is deployed or signed).
+// These figures come from Hardhat's simulated chain, which uses Ethereum's gas schedule; for live Arc
+// figures, eth_estimateGas the same calls against the Arc RPC. On Arc the cost is gas × the fee per
+// gas (base fee floor 20 gwei), paid in native USDC (18 decimals).
 
 interface Row {
   call: string;
@@ -123,7 +122,7 @@ describe("gas report (Hardhat simulated chain, Ethereum gas schedule)", async fu
 
     const pad = (s: string, n: number) => s.padEnd(n);
     const num = (v: bigint | undefined, n: number) => (v === undefined ? "" : v.toLocaleString("en-US")).padStart(n);
-    console.log("\n  XorvLedger gas (Hardhat EDR, Ethereum schedule; Monad figures: pnpm gas:monad)");
+    console.log("\n  XorvLedger gas (Hardhat EDR, Ethereum schedule)");
     console.log(`  ${pad("call", 46)}${"gasUsed".padStart(12)}${"estimate".padStart(12)}${"per job".padStart(10)}`);
     for (const r of rows) console.log(`  ${pad(r.call, 46)}${num(r.gasUsed, 12)}${num(r.estimate, 12)}${num(r.perJob, 10)}`);
     console.log();

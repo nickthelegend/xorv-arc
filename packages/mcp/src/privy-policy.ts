@@ -6,13 +6,19 @@
  * agent's real spending limit — not a promise the MCP server makes about its
  * own behaviour, but a rule enforced by the party holding the key.
  *
- * Two rules, both `eth_signTypedData_v4` (the only method the wallet ever
- * needs — it never sends a transaction, since the x402 facilitator pays gas):
+ * Up to three rules, all `eth_signTypedData_v4` (the only method the wallet
+ * ever needs — it never sends a transaction, since the broker's self-hosted
+ * x402 facilitator pays the gas on Arc, where gas is USDC too):
  *
  *  1. **Pay for jobs.** An EIP-3009 `TransferWithAuthorization` whose domain
- *     is USDC on this chain (`chainId`, `verifyingContract`) and whose `value`
- *     is at most the cap. Optionally, only to an allow-list of payees.
- *  2. **Rate jobs** (when the XorvLedger address is known). Any typed data
+ *     is USDC on this Arc chain (`chainId` 5042002 / 5042, `verifyingContract`)
+ *     and whose `value` is at most the cap. Optionally, only to an allow-list
+ *     of payees.
+ *  2. **Pay into escrow** (when the XorvEscrow address is known). An EIP-3009
+ *     `ReceiveWithAuthorization` on the same USDC, at most the cap, whose `to`
+ *     is XorvEscrow — the only contract that can redeem it — which holds the
+ *     money until the job delivers (or refunds it).
+ *  3. **Rate jobs** (when the XorvLedger address is known). Any typed data
  *     whose domain is the ledger on this chain — which in practice means a
  *     `Rating`, the only struct XorvLedger verifies. No money moves.
  *
@@ -42,6 +48,11 @@ export const TRANSFER_WITH_AUTHORIZATION_TYPES = {
   ],
 };
 
+/** EIP-3009 `ReceiveWithAuthorization`: what an x402 `escrow` payment into XorvEscrow signs. */
+export const RECEIVE_WITH_AUTHORIZATION_TYPES = {
+  ReceiveWithAuthorization: TRANSFER_WITH_AUTHORIZATION_TYPES.TransferWithAuthorization,
+};
+
 /** A policy condition in Privy's wire format (the subset used here). */
 export type PolicyCondition =
   | {
@@ -55,7 +66,10 @@ export type PolicyCondition =
       field: string;
       operator: "eq" | "in" | "lte";
       value: string | string[];
-      typed_data: { primary_type: string; types: typeof TRANSFER_WITH_AUTHORIZATION_TYPES };
+      typed_data: {
+        primary_type: string;
+        types: typeof TRANSFER_WITH_AUTHORIZATION_TYPES | typeof RECEIVE_WITH_AUTHORIZATION_TYPES;
+      };
     };
 
 export interface PolicyRule {
@@ -97,6 +111,8 @@ export function buildAgentPolicy(opts: {
   payTo?: string[];
   /** XorvLedger address; enables the rating rule. */
   ledger?: string | null;
+  /** XorvEscrow address; enables the escrow-payment rule. */
+  escrow?: string | null;
   name?: string;
 }): AgentPolicy {
   const cfg = networkConfig(opts.network);
@@ -141,6 +157,31 @@ export function buildAgentPolicy(opts: {
       conditions: payConditions,
     },
   ];
+  if (opts.escrow) {
+    const rwa = { primary_type: "ReceiveWithAuthorization", types: RECEIVE_WITH_AUTHORIZATION_TYPES };
+    rules.push({
+      name: `x402 escrow USDC <= ${formatUsdc(opts.capUnits)} into XorvEscrow`,
+      method: "eth_signTypedData_v4",
+      action: "ALLOW",
+      conditions: [
+        { field_source: "ethereum_typed_data_domain", field: "chainId", operator: "eq", value: chainId },
+        {
+          field_source: "ethereum_typed_data_domain",
+          field: "verifyingContract",
+          operator: "in",
+          value: addressVariants(cfg.usdc.address),
+        },
+        { field_source: "ethereum_typed_data_message", field: "value", operator: "lte", value: opts.capUnits.toString(), typed_data: rwa },
+        {
+          field_source: "ethereum_typed_data_message",
+          field: "to",
+          operator: "in",
+          value: addressVariants(normalizeAddress(opts.escrow)),
+          typed_data: rwa,
+        },
+      ],
+    });
+  }
   if (opts.ledger) {
     rules.push({
       name: "XorvLedger job ratings",

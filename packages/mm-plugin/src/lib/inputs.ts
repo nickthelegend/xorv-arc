@@ -52,7 +52,7 @@ export const maxField = {
 export const chainIdField = {
   type: InputFieldType.Text,
   flag: "chain-id",
-  message: "Only pay if the broker quotes on this chain: 10143 (Monad testnet) or 143 (Monad mainnet)",
+  message: "Only pay if the broker quotes on this chain: 5042002 (Arc testnet) or 5042 (Arc mainnet)",
   required: false,
   prompt: false,
 } as const;

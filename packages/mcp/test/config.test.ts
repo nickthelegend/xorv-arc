@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { describeConfig, loadConfig } from "../src/config.js";
 
 describe("loadConfig", () => {
-  it("defaults to Monad testnet, a $0.05 per-job cap and a $0.50 session budget", () => {
+  it("defaults to Arc testnet, a $0.05 per-job cap and a $0.50 session budget", () => {
     const config = loadConfig({});
-    expect(config.network).toBe("eip155:10143");
+    expect(config.network).toBe("eip155:5042002");
     expect(config.brokerUrl).toBe("http://localhost:8402");
     expect(config.maxPriceUsdMicros).toBe(50_000);
     expect(config.sessionBudgetUsdMicros).toBe(500_000);
@@ -19,15 +19,15 @@ describe("loadConfig", () => {
   });
 
   it("accepts mainnet, and trims a trailing slash off the broker URL", () => {
-    const config = loadConfig({ XORV_NETWORK: "eip155:143", XORV_BROKER_URL: "https://broker.example/" });
-    expect(config.network).toBe("eip155:143");
+    const config = loadConfig({ XORV_NETWORK: "eip155:5042", XORV_BROKER_URL: "https://broker.example/" });
+    expect(config.network).toBe("eip155:5042");
     expect(config.brokerUrl).toBe("https://broker.example");
   });
 
   it("reports a leftover Hedera network instead of throwing", () => {
     const config = loadConfig({ XORV_NETWORK: "hedera:testnet" });
     expect(config.problems).toHaveLength(1);
-    expect(config.problems[0]).toMatch(/eip155:10143/);
+    expect(config.problems[0]).toMatch(/eip155:5042002/);
     expect(config.problems[0]).toMatch(/Hedera prototype/);
   });
 

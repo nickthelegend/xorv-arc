@@ -2,7 +2,7 @@
 
 A [MetaMask Agent Wallet](https://docs.metamask.io/agent-wallet/) plugin that lets an agent **buy AI work
 from the Xorv network and pay for it from its MetaMask wallet**, one job at a time, in USDC over
-[x402](https://www.x402.org/) on Monad.
+[x402](https://www.x402.org/) on Arc.
 
 ```bash
 mm xorv run "Explain EIP-3009 in two paragraphs" --max 0.05
@@ -11,13 +11,15 @@ mm xorv run "Explain EIP-3009 in two paragraphs" --max 0.05
 That one command gets a quote from the Xorv broker and checks it. It then has **MetaMask sign** the
 EIP-3009 `TransferWithAuthorization` through `ctx.walletExecutor`, so the user's MetaMask policy
 decides, and retries with the x402 `PAYMENT-SIGNATURE` header. The job runs on a stranger's idle
-Claude Code / Codex / Qwen / Kimi / Hunyuan capacity. The command returns the answer, the Monad
+Claude Code / Codex / Qwen / Kimi / Hunyuan capacity. The command returns the answer, the Arc
 settlement link and the XorvLedger receipt. The USDC goes straight from the user's wallet to the
-provider. The broker never holds it, and the wallet needs no MON because the facilitator pays the gas.
+provider (or into XorvEscrow for it). The broker never holds it, and the wallet needs nothing but USDC:
+the broker's self-hosted facilitator pays the gas, which on Arc is USDC too.
 
 - **Commands:** `mm xorv providers`, `quote`, `run`, `job`, `rate`
-- **Chains:** Monad testnet `10143` (default broker network) and Monad mainnet `143`. Both are
-  preconfigured in Agent Wallet, and Transaction Shield covers mainnet.
+- **Chains:** Arc testnet `5042002` (default broker network) and Arc mainnet `5042`, Circle's
+  stablecoin L1 (RPC `https://rpc.testnet.arc.io` / `https://rpc.mainnet.arc.io`). The wallet's
+  `ctx.publicClient` must be able to reach the chain the broker quotes on.
 - **Signing:** only through MetaMask's wallet executor. The plugin never sees a key, a session or a
   seed phrase.
 - **Licence:** MIT
@@ -44,21 +46,21 @@ balance (`ctx.walletStateManager`, `ctx.publicClient(chainId)`). `wallet-submit`
 ```
 mm xorv run "<task>"
  │ 1  POST /api/quotes ─────────────────────► broker: frozen quote {provider 0x…, agentId, usdcAmount}, 5-min TTL
- │ 2  vetQuote: Monad only, price ≤ --max, amount == price, accepts row == provider+amount, not paying yourself
- │ 3  USDC balanceOf(payer) via ctx.publicClient(10143)   (skips a 2FA prompt for a payment that can't settle)
- │ 4  POST /api/jobs/:quoteId ─────────────► 402  PAYMENT-REQUIRED {exact, eip155:10143, USDC, amount, payTo: provider,
+ │ 2  vetQuote: Arc only, price ≤ --max, amount == price, accepts row == provider+amount, not paying yourself
+ │ 3  USDC balanceOf(payer) via ctx.publicClient(5042002)   (skips a 2FA prompt for a payment that can't settle)
+ │ 4  POST /api/jobs/:quoteId ─────────────► 402  PAYMENT-REQUIRED {exact, eip155:5042002, USDC, amount, payTo: provider,
  │                                                                   extra: {name: "USDC", version: "2"}}
  │ 5  buyerX402Client policies: exact-USDC on this chain, ≤ --max, and payTo/amount == the quote
  │ 6  @x402/evm builds TransferWithAuthorization → ClientEvmSigner.signTypedData
  │        └─► ctx.walletExecutor({kind: "typed-data", chainId, typedData, intent})   ◄── MetaMask policy / 2FA
  │ 7  recover the signature, check it is the payer
- │ 8  POST /api/jobs/:quoteId + PAYMENT-SIGNATURE ─► facilitator settles on Monad (buyer → provider), job dispatched
+ │ 8  POST /api/jobs/:quoteId + PAYMENT-SIGNATURE ─► facilitator settles on Arc (buyer → provider), job dispatched
  │ 9  GET /api/jobs/:id/stream (SSE; polling fallback) ─► result
  ▼ 10 { result, payment.explorerUrl, receiptExplorerUrl, rate: "mm xorv rate <id> --stars 5" }
 ```
 
 MetaMask's x402 support covers the `exact` scheme with EIP-3009 only, and it needs the token's EIP-712
-`name`/`version` in `extra`. Xorv's broker offers exactly that: Monad USDC, `name: "USDC"`,
+`name`/`version` in `extra`. Xorv's broker offers exactly that: Arc USDC, `name: "USDC"`,
 `version: "2"`.
 
 ### The checks that keep the buyer safe
@@ -161,13 +163,13 @@ template's `^6.2.0` would refuse every 7.x release.
 |---|---|---|
 | Broker | `--broker <url>` or `XORV_BROKER_URL` | `http://localhost:8402` |
 | Spend ceiling per job | `--max <usd>` | `0.05` |
-| Pin the chain | `--chain-id 10143` or `--chain-id 143` | whatever the broker quotes, if it is Monad |
+| Pin the chain | `--chain-id 5042002` or `--chain-id 5042` | whatever the broker quotes, if it is Arc |
 | Wait for the job | `--timeout <seconds>` (5–3600) | `600` |
 | Paying wallet | `--from <0x…>` | the selected Agent Wallet EVM wallet |
 
 The payment URL is always built from the broker URL you configured, never from the `payUrl` the
-broker returns. Test USDC is at <https://faucet.circle.com> (pick Monad Testnet). No MON is needed to
-buy.
+broker returns. Test USDC is at <https://faucet.circle.com> (pick Arc Testnet). Nothing else is
+needed to buy.
 
 ## Example session
 
@@ -179,7 +181,7 @@ blocks show what the commands print against a live broker, but the hashes and jo
 ```text
 $ mm xorv providers --format text
 broker:    http://127.0.0.1:8402
-network:   eip155:10143
+network:   eip155:5042002
 count:     1
 providers:
   - id: prv_alice
@@ -187,7 +189,7 @@ providers:
     status: online
     address: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
     agentId: 42
-    agentUrl: https://testnet.monadscan.com/nft/0x8004A818BFB912233c491871b3d84c89A494BD9e/42
+    agentUrl: https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/42
     from: $0.0040
     capabilities:
       - adapter: claude-code
@@ -207,10 +209,10 @@ providers:
 
 Hint: 1 provider online; cheapest $0.0040 (alice-mbp). Next: mm xorv quote "<task>"
 
-$ mm xorv quote "Write a haiku about Monad" --max 0.02 --format text
+$ mm xorv quote "Write a haiku about Arc" --max 0.02 --format text
 quoteId:          qte_smoke
-network:          eip155:10143
-chainId:          10143
+network:          eip155:5042002
+chainId:          5042002
 price:            $0.0100
 usdcAmount:       10000
 usdc:             0.0100 USDC
@@ -230,11 +232,11 @@ $ mm xorv quote --prompt "Write a haiku" --max 0.005 --json
 { "ok": false, "error": { "code": "XORV_QUOTE_REFUSED",
   "message": "quoted $0.0100, above your --max of $0.0050", "hint": "Raise --max if that price is acceptable." } }
 
-$ mm xorv run "Write a haiku about Monad" --max 0.02          # placeholders below
-Quote qte_Q3k…: $0.0100 to alice-mbp (claude-code, ERC-8004 agent #42) on Monad Testnet
+$ mm xorv run "Write a haiku about Arc" --max 0.02          # placeholders below
+Quote qte_Q3k…: $0.0100 to alice-mbp (claude-code, ERC-8004 agent #42) on Arc Testnet
 Paying 0.0100 USDC to 0x7099…79C8 from 0x1a2B…9fE0 — approve in MetaMask if asked
 [AWAITING_MFA] Approve the signature request in MetaMask Mobile          # Guard Mode only
-Paid: https://testnet.monadscan.com/tx/0x5c1d…e2a7
+Paid: https://explorer.testnet.arc.io/tx/0x5c1d…e2a7
 Job job_Vb7… is assigned on alice-mbp
   › Drafting the haiku…
 Done in 9.4s
@@ -243,14 +245,14 @@ status:  completed
 result:  Ten thousand lanes wide / blocks land before you blink / parallel sunrise
 payment:
   txHash:      0x5c1d…e2a7
-  explorerUrl: https://testnet.monadscan.com/tx/0x5c1d…e2a7
-receiptExplorerUrl: https://testnet.monadscan.com/tx/0x91f0…44bc
+  explorerUrl: https://explorer.testnet.arc.io/tx/0x5c1d…e2a7
+receiptExplorerUrl: https://explorer.testnet.arc.io/tx/0x91f0…44bc
 rate:    mm xorv rate job_Vb7… --stars 5
 
-Hint: Paid $0.0100 to alice-mbp: https://testnet.monadscan.com/tx/0x5c1d…e2a7. Rate it: mm xorv rate job_Vb7… --stars 5
+Hint: Paid $0.0100 to alice-mbp: https://explorer.testnet.arc.io/tx/0x5c1d…e2a7. Rate it: mm xorv rate job_Vb7… --stars 5
 
 $ mm xorv rate job_Vb7… --stars 5                             # placeholders below
-Rated ★★★★★ — relayed to ERC-8004: https://testnet.monadscan.com/tx/0x7e22…0b19
+Rated ★★★★★ — relayed to ERC-8004: https://explorer.testnet.arc.io/tx/0x7e22…0b19
 ```
 
 With `--json`, stdout carries a single envelope, `{"ok": true, "data": {…}, "hint": "…"}`. Progress
@@ -264,7 +266,7 @@ lines are human-only, and the host drops them in structured mode. Failures print
 | `XORV_INVALID_INPUT` | a missing prompt or job id, a bad `--max`, `--stars`, `--chain-id`, `--timeout` or `--from` |
 | `XORV_BROKER_UNREACHABLE` / `XORV_BROKER_ERROR` | no broker at the URL, or the broker refused the request (its message is included) |
 | `XORV_NO_PROVIDERS` | no online provider under the ceiling |
-| `XORV_UNSUPPORTED_NETWORK` | the broker is not on Monad, or not on the `--chain-id` chain |
+| `XORV_UNSUPPORTED_NETWORK` | the broker is not on Arc, or not on the `--chain-id` chain |
 | `XORV_QUOTE_REFUSED` | over `--max`, an inconsistent quote, an expired quote, or paying yourself |
 | `XORV_NO_WALLET` | no EVM wallet in Agent Wallet |
 | `XORV_INSUFFICIENT_USDC` | balance below the price (checked before signing, or reported by the facilitator) |
@@ -305,7 +307,7 @@ context:
 | File | Covers |
 |---|---|
 | `test/commands.test.ts` | every command end to end on a mocked `ctx`: executor source ids, the typed data and intent sent to MetaMask, balance gating, denials, failed jobs, ratings |
-| `test/executor.test.ts` | the signer adapter produces a 65-byte signature over a complete `TransferWithAuthorization` that verifies against Monad USDC's domain; a missing `EIP712Domain` and a wrong wallet are both caught |
+| `test/executor.test.ts` | the signer adapter produces a 65-byte signature over a complete `TransferWithAuthorization` that verifies against Arc USDC's domain; a missing `EIP712Domain` and a wrong wallet are both caught |
 | `test/policy.test.ts` | quotes, and 402s that swap the payee, bump the amount, change the asset or exceed `--max`, are refused, and MetaMask is never asked |
 | `test/flows.test.ts` | SSE with polling fallback and timeout; a tampered rating proposal is refused; wallet selection |
 | `test/manifest.test.ts` | `package.json#mm` passes MetaMask's own `PluginManifestSchema`; the ids match the command classes |

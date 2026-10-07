@@ -49,7 +49,7 @@ describe("vetQuote", () => {
   });
 
   it("refuses a quote on another network", () => {
-    expect(() => vetQuote(quote({ network: "eip155:143" }), ctx)).toThrow(/quotes on eip155:143 but this server pays on eip155:10143/);
+    expect(() => vetQuote(quote({ network: "eip155:5042" }), ctx)).toThrow(/quotes on eip155:5042 but this server pays on eip155:5042002/);
   });
 
   it("refuses a quote over the ceiling, even if the broker ignored it", () => {
@@ -69,7 +69,7 @@ describe("vetQuote", () => {
 
   it("is a BuyError at the quote stage", () => {
     try {
-      vetQuote(quote({ network: "eip155:143" }), ctx);
+      vetQuote(quote({ network: "eip155:5042" }), ctx);
     } catch (err) {
       expect(err).toBeInstanceOf(BuyError);
       expect((err as BuyError).stage).toBe("quote");
@@ -148,7 +148,7 @@ describe("buyJob against a mock broker", () => {
   });
 
   it("refuses to sign for another chain's USDC", async () => {
-    const { broker, deps } = await setup({ requirements: { network: "eip155:143" } });
+    const { broker, deps } = await setup({ requirements: { network: "eip155:5042" } });
     await expect(buyJob(deps, { prompt: "x" })).rejects.toThrow(BuyError);
     expect(broker.payments).toHaveLength(0);
   });

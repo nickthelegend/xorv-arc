@@ -33,7 +33,7 @@ const OTHER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 
 const config = (over: Partial<NodeConfig> = {}): NodeConfig =>
   ({
-    network: "eip155:10143",
+    network: "eip155:5042002",
     address: PAYOUT,
     privateKey: "",
     agentId: null,
@@ -125,23 +125,23 @@ describe("sandboxChecks", () => {
 });
 
 describe("rpcChecks", () => {
-  const url = "https://testnet-rpc.monad.xyz";
+  const url = "https://rpc.testnet.arc.io";
 
   it("passes an RPC on the expected chain", () => {
-    const [check] = rpcChecks("eip155:10143", url, { chainId: 10143, latencyMs: 42 });
+    const [check] = rpcChecks("eip155:5042002", url, { chainId: 5042002, latencyMs: 42 });
     expect(check!.status).toBe("ok");
-    expect(check!.detail).toContain("chain 10143");
+    expect(check!.detail).toContain("chain 5042002");
   });
 
   it("fails an RPC on the wrong chain — signatures and identities would land elsewhere", () => {
-    const [check] = rpcChecks("eip155:10143", url, { chainId: 143, latencyMs: 42 });
+    const [check] = rpcChecks("eip155:5042002", url, { chainId: 8453, latencyMs: 42 });
     expect(check!.status).toBe("fail");
-    expect(check!.detail).toMatch(/chain 143.*eip155:10143/);
+    expect(check!.detail).toMatch(/chain 8453.*eip155:5042002/);
     expect(check!.fix).toContain("XORV_RPC_URL");
   });
 
   it("fails an unreachable RPC and says where to look", () => {
-    const [check] = rpcChecks("eip155:143", url, { error: "fetch failed" });
+    const [check] = rpcChecks("eip155:5042", url, { error: "fetch failed" });
     expect(check!.status).toBe("fail");
     expect(check!.detail).toContain("fetch failed");
   });
@@ -149,22 +149,23 @@ describe("rpcChecks", () => {
 
 describe("payoutChecks", () => {
   it("links the payout address on the explorer", () => {
-    const checks = payoutChecks("eip155:10143", PAYOUT, { monWei: "0", usdcUnits: "1250000" });
-    expect(find(checks, "payout")?.detail).toContain(`https://testnet.monadscan.com/address/${PAYOUT}`);
+    const checks = payoutChecks("eip155:5042002", PAYOUT, { nativeWei: "0", usdcUnits: "1250000" });
+    expect(find(checks, "payout")?.detail).toContain(`https://explorer.testnet.arc.io/address/${PAYOUT}`);
   });
 
-  it("does not treat a zero MON balance as a problem", () => {
+  it("does not treat a zero gas balance as a problem", () => {
     // The facilitator pays gas and any address can receive USDC; a provider
-    // never needs MON to earn.
-    const checks = payoutChecks("eip155:10143", PAYOUT, { monWei: "0", usdcUnits: "1250000" });
+    // never needs gas to earn.
+    const checks = payoutChecks("eip155:5042002", PAYOUT, { nativeWei: "0", usdcUnits: "1250000" });
     expect(find(checks, "balance")?.status).toBe("ok");
-    expect(find(checks, "balance")?.detail).toContain("facilitator pays gas");
+    expect(find(checks, "balance")?.detail).toContain("the facilitator pays it");
     expect(find(checks, "balance")?.detail).toContain("$1.25");
   });
 
-  it("reports MON when there is some", () => {
-    const checks = payoutChecks("eip155:10143", PAYOUT, { monWei: 2n * 10n ** 18n, usdcUnits: 0n });
-    expect(find(checks, "balance")?.detail).toContain("2 MON");
+  it("shows the native (gas) view of the USDC when there is some — on Arc gas is USDC", () => {
+    const checks = payoutChecks("eip155:5042002", PAYOUT, { nativeWei: 2n * 10n ** 18n, usdcUnits: 2_000_000n });
+    expect(find(checks, "balance")?.detail).toContain("$2.00");
+    expect(find(checks, "balance")?.detail).toContain("gas view 2 USDC");
   });
 });
 
@@ -181,30 +182,30 @@ describe("identityChecks", () => {
   });
 
   it("warns — not fails — when there is no identity; the node still earns", () => {
-    const [check] = identityChecks("eip155:10143", config({ privateKey: "0x01" }), null);
+    const [check] = identityChecks("eip155:5042002", config({ privateKey: "0x01" }), null);
     expect(check!.status).toBe("warn");
     expect(check!.fix).toBe("xorv identity register");
   });
 
   it("points an address-only node at the wallet that holds its key", () => {
-    const [check] = identityChecks("eip155:10143", config({ privateKey: "" }), null);
+    const [check] = identityChecks("eip155:5042002", config({ privateKey: "" }), null);
     expect(check!.fix).toMatch(/wallet that holds the payout key/);
   });
 
   it("passes an identity whose wallet is the payout address, with its explorer link", () => {
-    const [check] = identityChecks("eip155:10143", config({ agentId: "42" }), state());
+    const [check] = identityChecks("eip155:5042002", config({ agentId: "42" }), state());
     expect(check!.status).toBe("ok");
-    expect(check!.detail).toContain("/nft/0x8004A818BFB912233c491871b3d84c89A494BD9e/42");
+    expect(check!.detail).toContain("/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/42");
   });
 
   it("fails when the agent wallet is not the payout address — receipts would not bind", () => {
-    const [check] = identityChecks("eip155:10143", config({ agentId: "42" }), state({ wallet: OTHER, walletMatches: false }));
+    const [check] = identityChecks("eip155:5042002", config({ agentId: "42" }), state({ wallet: OTHER, walletMatches: false }));
     expect(check!.status).toBe("fail");
     expect(check!.detail).toContain(OTHER);
   });
 
   it("fails when the registry cannot be read for a configured agent", () => {
-    const [check] = identityChecks("eip155:10143", config({ agentId: "42" }), { error: "execution reverted" });
+    const [check] = identityChecks("eip155:5042002", config({ agentId: "42" }), { error: "execution reverted" });
     expect(check!.status).toBe("fail");
     expect(check!.detail).toContain("execution reverted");
   });
@@ -212,7 +213,7 @@ describe("identityChecks", () => {
 
 describe("brokerChecks", () => {
   const info = {
-    network: "eip155:10143",
+    network: "eip155:5042002",
     facilitator: { description: "self-hosted facilitator", address: "0x00000000219ab540356cBB839Cbe05303d7705Fa" },
     ledger: { address: "0x1111111111111111111111111111111111111111" },
     ai: { router: { model: "qwen3.8-max" }, screener: { model: "hy4-preview" }, verifier: { model: "kimi-k3" } },
@@ -220,35 +221,35 @@ describe("brokerChecks", () => {
   };
 
   it("fails a network mismatch, which breaks every settlement", () => {
-    const checks = brokerChecks("http://b", { ...info, network: "eip155:143" }, "eip155:10143");
+    const checks = brokerChecks("http://b", { ...info, network: "eip155:5042" }, "eip155:5042002");
     expect(find(checks, "network")?.status).toBe("fail");
-    expect(find(checks, "network")?.fix).toContain("eip155:143");
+    expect(find(checks, "network")?.fix).toContain("eip155:5042");
   });
 
   it("passes when both sides agree", () => {
-    expect(find(brokerChecks("http://b", info, "eip155:10143"), "network")?.status).toBe("ok");
+    expect(find(brokerChecks("http://b", info, "eip155:5042002"), "network")?.status).toBe("ok");
   });
 
   it("names the facilitator's gas payer and the AI roles", () => {
-    const checks = brokerChecks("http://b", info, "eip155:10143");
+    const checks = brokerChecks("http://b", info, "eip155:5042002");
     expect(find(checks, "facilitator")?.detail).toContain(info.facilitator.address);
     expect(find(checks, "ai roles")?.detail).toBe("router qwen3.8-max · screener hy4-preview · verifier kimi-k3");
   });
 
-  it("reads a broker not yet moved to Monad as a mismatch, not a crash", () => {
+  it("reads a broker not yet moved to Arc as a mismatch, not a crash", () => {
     // The Hedera broker's shape: no ledger, no ai, a feePayer instead of an address.
     const hedera = {
       network: "hedera:testnet",
       facilitator: { description: "self-hosted", feePayer: "0.0.9842030" },
       stats: { providersLive: 1 },
     } as never;
-    const checks = brokerChecks("http://b", hedera, "eip155:10143");
+    const checks = brokerChecks("http://b", hedera, "eip155:5042002");
     expect(find(checks, "network")?.status).toBe("fail");
     expect(find(checks, "facilitator")?.detail).toBe("self-hosted");
   });
 
   it("warns when the broker keeps no on-chain receipts", () => {
-    expect(find(brokerChecks("http://b", { ...info, ledger: null }, "eip155:10143"), "ledger")?.status).toBe("warn");
+    expect(find(brokerChecks("http://b", { ...info, ledger: null }, "eip155:5042002"), "ledger")?.status).toBe("warn");
   });
 });
 

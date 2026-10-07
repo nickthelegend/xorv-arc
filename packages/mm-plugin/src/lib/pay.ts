@@ -2,7 +2,7 @@
  * Paying for a quote: 402 → MetaMask-signed EIP-3009 → retry.
  *
  *  1. `POST /api/jobs/:quoteId` with no payment answers 402, with the x402 v2
- *     `PAYMENT-REQUIRED` header: `exact` scheme, Monad USDC, amount, payTo =
+ *     `PAYMENT-REQUIRED` header: `exact` scheme, Arc USDC, amount, payTo =
  *     the provider, `extra: { name: "USDC", version: "2" }` (the token's
  *     EIP-712 domain — MetaMask's x402 support requires it, and so does ours).
  *  2. `buyerX402Client` (`@xorv/protocol`) decides whether to sign: only
@@ -15,8 +15,8 @@
  *     facilitator settles on-chain before dispatching (upfront settlement) and
  *     answers with the job id plus a `PAYMENT-RESPONSE` settlement receipt.
  *
- * The buyer needs USDC only: the facilitator submits the authorization and
- * pays the MON gas.
+ * The buyer needs USDC only: the broker's self-hosted facilitator submits the
+ * authorization and pays the gas (on Arc the gas token is USDC as well).
  */
 
 import { wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
@@ -157,8 +157,8 @@ export function paymentRejected(reason: string | undefined, amount: string, netw
       "XORV_INSUFFICIENT_USDC",
       `the wallet holds less than ${usdcLabel(amount)} on ${cfg.name} (${reason})`,
       cfg.faucets.usdc
-        ? `Get test USDC at ${cfg.faucets.usdc} (pick ${cfg.name}); no MON is needed.`
-        : `Fund the wallet with ${cfg.usdc.symbol} on ${cfg.name}; no MON is needed.`,
+        ? `Get test USDC at ${cfg.faucets.usdc} (pick ${cfg.name}); nothing else is needed — the broker pays the gas.`
+        : `Fund the wallet with ${cfg.usdc.symbol} on ${cfg.name}; nothing else is needed — the broker pays the gas.`,
     );
   }
   return new XorvPluginError(
@@ -200,8 +200,8 @@ export async function checkUsdcBalance(opts: {
       "XORV_INSUFFICIENT_USDC",
       `${opts.owner} holds ${usdcLabel(balance)} on ${cfg.name}; this job costs ${usdcLabel(opts.amount)}`,
       cfg.faucets.usdc
-        ? `Get test USDC at ${cfg.faucets.usdc} (pick ${cfg.name}); no MON is needed.`
-        : `Fund the wallet with ${cfg.usdc.symbol} on ${cfg.name}; no MON is needed.`,
+        ? `Get test USDC at ${cfg.faucets.usdc} (pick ${cfg.name}); nothing else is needed — the broker pays the gas.`
+        : `Fund the wallet with ${cfg.usdc.symbol} on ${cfg.name}; nothing else is needed — the broker pays the gas.`,
     );
   }
   return balance;

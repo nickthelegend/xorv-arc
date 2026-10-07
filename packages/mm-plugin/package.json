@@ -1,23 +1,23 @@
 {
   "name": "@xorv/mm-plugin",
   "version": "0.1.0",
-  "description": "MetaMask Agent Wallet plugin for Xorv: `mm xorv run` buys an AI job from a stranger's idle subscription and pays the provider in USDC over x402 on Monad, signed by the wallet under MetaMask policy.",
+  "description": "MetaMask Agent Wallet plugin for Xorv: `mm xorv run` buys an AI job from a stranger's idle subscription and pays the provider in USDC over x402 on Arc, signed by the wallet under MetaMask policy.",
   "license": "MIT",
   "author": "Nivesh Gajengi <niveshgajengi@gmail.com>",
-  "homepage": "https://github.com/nickthelegend/xorv-monad/tree/main/packages/mm-plugin#readme",
+  "homepage": "https://github.com/nickthelegend/xorv-arc/tree/main/packages/mm-plugin#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nickthelegend/xorv-monad.git",
+    "url": "git+https://github.com/nickthelegend/xorv-arc.git",
     "directory": "packages/mm-plugin"
   },
-  "bugs": "https://github.com/nickthelegend/xorv-monad/issues",
+  "bugs": "https://github.com/nickthelegend/xorv-arc/issues",
   "type": "module",
   "keywords": [
     "oclif-plugin",
     "metamask",
     "agent-wallet",
     "x402",
-    "monad",
+    "arc",
     "usdc",
     "ai-agents"
   ],
@@ -43,7 +43,7 @@
     "topicSeparator": " ",
     "topics": {
       "xorv": {
-        "description": "Buy AI jobs on the Xorv network, paid in USDC over x402 on Monad"
+        "description": "Buy AI jobs on the Xorv network, paid in USDC over x402 on Arc"
       }
     }
   },
@@ -56,31 +56,31 @@
         "id": "xorv:providers",
         "capabilities": [],
         "dataAccess": [],
-        "targetChains": [10143, 143]
+        "targetChains": [5042002, 5042]
       },
       {
         "id": "xorv:quote",
         "capabilities": [],
         "dataAccess": [],
-        "targetChains": [10143, 143]
+        "targetChains": [5042002, 5042]
       },
       {
         "id": "xorv:run",
         "capabilities": ["wallet-read", "wallet-submit"],
         "dataAccess": ["accounts", "balances"],
-        "targetChains": [10143, 143]
+        "targetChains": [5042002, 5042]
       },
       {
         "id": "xorv:job",
         "capabilities": [],
         "dataAccess": [],
-        "targetChains": [10143, 143]
+        "targetChains": [5042002, 5042]
       },
       {
         "id": "xorv:rate",
         "capabilities": ["wallet-read", "wallet-submit"],
         "dataAccess": ["accounts"],
-        "targetChains": [10143, 143]
+        "targetChains": [5042002, 5042]
       }
     ]
   },

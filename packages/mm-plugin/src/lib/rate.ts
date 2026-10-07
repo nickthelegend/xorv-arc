@@ -4,7 +4,7 @@
  * The buyer who paid signs XorvLedger's `Rating` struct; the broker relays it
  * to `XorvLedger.rateJob`, which checks the signature against the job's
  * recorded payer and forwards `giveFeedback` to the ERC-8004 Reputation
- * Registry for the provider's agent. The buyer spends no MON.
+ * Registry for the provider's agent. The buyer spends no gas.
  *
  * The broker proposes the typed data (it knows the feedback file URI/hash and
  * the deadline), but the plugin does not sign what it is handed: it rebuilds
@@ -53,7 +53,7 @@ export function verifyRatingRequest(opts: {
     throw new XorvPluginError(
       "XORV_UNSUPPORTED_NETWORK",
       `the broker runs on ${network.network}, which this plugin does not sign for`,
-      "Point --broker at a Monad broker.",
+      "Point --broker at an Arc broker.",
     );
   }
   if (!network.ledger?.address) {

@@ -18,7 +18,7 @@ import {
 import type { PaymentPayload, PaymentRequired } from "@x402/core/types";
 import { authorizationTypes } from "@x402/evm";
 import {
-  MONAD_TESTNET,
+  ARC_TESTNET,
   explorerAddress,
   explorerTx,
   jobIdHash,
@@ -37,14 +37,14 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { LeaderboardRow, RatingRequest } from "../src/lib/broker.js";
 import type { TypedDataRequest, WalletExecutor, WalletExecutorResult } from "../src/lib/executor.js";
 
-// Well-known local-devnet keys (anvil/hardhat #0 and #1) — never funded on Monad.
+// Well-known local-devnet keys (anvil/hardhat #0 and #1) — never funded on Arc.
 export const PAYER = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
 export const OTHER = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 export const PROVIDER_ADDRESS = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 export const ATTACKER_ADDRESS = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 export const LEDGER_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 export const BROKER_URL = "http://broker.test";
-export const NETWORK = MONAD_TESTNET;
+export const NETWORK = ARC_TESTNET;
 export const USDC = networkConfig(NETWORK).usdc;
 export const SETTLE_TX = `0x${"ab".repeat(32)}` as Hex;
 export const RECEIPT_TX = `0x${"cd".repeat(32)}` as Hex;
@@ -162,7 +162,7 @@ export function job(overrides: Partial<PublicJob> = {}): PublicJob {
   return {
     id: JOB_ID,
     title: null,
-    prompt: "Write a haiku about Monad",
+    prompt: "Write a haiku about Arc",
     adapter: "claude-code",
     status: "completed",
     createdAt: Date.now() - 5_000,

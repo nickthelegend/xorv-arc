@@ -34,7 +34,7 @@ describe("rateJob", () => {
     const { broker, deps } = await setup();
     const result = await rateJob(deps, { jobId: "job_test1", value: 87 });
     expect(result.txHash).toBe(RATE_TX);
-    expect(result.explorerUrl).toBe(`https://testnet.monadscan.com/tx/${RATE_TX}`);
+    expect(result.explorerUrl).toBe(`https://explorer.testnet.arc.io/tx/${RATE_TX}`);
     expect(result.offer.agentId).toBe("7");
     expect(broker.ratings).toEqual([expect.objectContaining({ value: 87, valid: true })]);
     expect(broker.hits).toEqual(["GET /api/jobs/job_test1/rating", "POST /api/jobs/job_test1/rate"]);
@@ -81,10 +81,10 @@ describe("rateJob", () => {
   it("refuses to sign for another chain or another contract type", async () => {
     const { deps } = await setup({
       tamperRating: (offer) => {
-        (offer.typedData as { domain: { chainId: number } }).domain.chainId = 143;
+        (offer.typedData as { domain: { chainId: number } }).domain.chainId = 8453;
       },
     });
-    await expect(rateJob(deps, { jobId: "job_test1", value: 10 })).rejects.toThrow(/chain 143/);
+    await expect(rateJob(deps, { jobId: "job_test1", value: 10 })).rejects.toThrow(/chain 8453/);
 
     await broker!.close();
     const again = await setup({
