@@ -1,7 +1,7 @@
 # Private jobs — one passkey, many keys
 
 A Xorv job normally runs in the open: the prompt, the streamed log and the answer are
-visible on the job page, and the XorvLedger receipt on Monad commits to the answer's hash.
+visible on the job page, and the XorvLedger receipt on Arc commits to the answer's hash.
 A **private job** keeps the *answer* for the buyer alone. The provider encrypts it on their
 own machine, before it leaves, to a key that only the buyer's passkey can re-derive. The
 broker stores and serves an envelope it cannot open, the public job list shows only that a
@@ -11,7 +11,10 @@ The buyer's key material comes from **[Mera](https://mera.category.xyz/)**
 (`@category-labs/mera`), which evaluates the WebAuthn PRF extension on a passkey. Nothing
 here signs a blockchain transaction: Privy's embedded wallet still pays for the job. The
 passkey is used only as a source of deterministic, device-synced key material, split into
-three namespaces that each become a different kind of key:
+three namespaces that each become a different kind of key. None of it depends on the chain:
+only the place the receipt lives changed when Xorv moved to Arc.
+
+The three namespaces:
 
 | Namespace (PRF salt label) | Key | What it does |
 |---|---|---|
@@ -134,7 +137,7 @@ The record holds job id, prompt, title, price, provider, timestamp and the `encr
 | Passkey manager | The passkey itself, synced across the buyer's devices by the OS or password manager. | Yes, but it never leaves the authenticator. |
 | Broker (SQLite / Mongo) | The job, with its prompt (screening, routing and reassignment need it), `encryptTo`, the **sealed envelope** as `result`, and coarse status events. Vaults: ciphertext, nonce, version and the vault's public key. | The prompt, yes: see §5. The result and history, no: ciphertext. |
 | Public API (`/api/jobs`, SSE stream) | `private: true`, price, provider, payment and status. `prompt: ""`, `title: null`, `result` is the envelope, events are status lines only, and `encryptTo` is never served. The Hunyuan screen's and the Qwen router's records keep their verdict, adapter, model and timings, but their free-text `reason` reads "withheld for a private job" (it would paraphrase the prompt). | No. |
-| Monad (XorvLedger receipt) | `resultHash = keccak256(envelope)`, `requestHash = keccak256(prompt)`, payment and provider. | No for the result, which is ciphertext. For `requestHash`, see §5. |
+| Arc (XorvLedger receipt; for an escrowed job also the `JobReleased` event and its Memo tag) | `resultHash = keccak256(envelope)` in the receipt and in the escrow release, `requestHash = keccak256(prompt)` in the receipt, payment and provider. The Memo tag carries only the escrow job id and a short label such as `xorv:release`. | No for the result, which is ciphertext. For `requestHash`, see §5. |
 | Provider machine | The prompt and the answer in the operator's own live view, since they ran the job. Only the envelope is reported. | By necessity. |
 
 ## 5. Threat model
@@ -145,7 +148,7 @@ The record holds job id, prompt, title, price, provider, timestamp and the `encr
 | **The broker** operator or a DB leak | The prompt, the buyer's payer address and inbox public key, timing, price and result *length* (AES-GCM does not hide length). | The answer, the history and any key. |
 | **AI roles** (Hunyuan screen, Qwen router) | The prompt, which they need before a provider is chosen. Their written reasons reach only the buyer's own quote response. | The answer. The Kimi **verifier is skipped** for private jobs because it would need the plaintext. |
 | **The public** (job list, API, SSE) | That a private job ran, with its price, provider, status and the envelope. | The prompt, title, answer and the buyer's inbox key. Each envelope's ephemeral key is fresh, so envelopes aren't linkable by recipient. |
-| **Chain observers** | The receipt: `keccak256(envelope)` and `keccak256(prompt)`. | The answer. |
+| **Chain observers** | The receipt: `keccak256(envelope)` and `keccak256(prompt)`; for an escrowed job, the release's `keccak256(envelope)`, the amount and the parties. | The answer. |
 | **Someone with a share link** | That one result. | Anything else. |
 | **Another passkey or site** | Unrelated keys. Passkeys are bound to their relying-party id, and a different credential gives a different PRF. | This buyer's keys. |
 
@@ -214,7 +217,8 @@ is a phone or a **fresh browser profile** signed in to the same passkey manager.
 3. **Pay** with the Privy wallet. On the job page, the execution log shows only
    *working privately · N steps*. The result arrives as an envelope and **decrypts in the
    tab**. In the receipt panel, show *✓ the sealed envelope hashes to the resultHash in this
-   job's XorvLedger receipt on Monad*, then open that receipt on MonadScan.
+   job's XorvLedger receipt on Arc*, then open that receipt on Arc's explorer
+   (`explorer.testnet.arc.io`).
 4. **Show the ciphertext.** Run `curl $BROKER/api/jobs/<id> | jq .job` and show
    `private: true`, `prompt: ""` and `result` as the envelope. On the public job list, the
    job reads *Private · sealed to the buyer's passkey*.
@@ -244,6 +248,6 @@ is a phone or a **fresh browser profile** signed in to the same passkey manager.
 | Vault client (merge and retry on 409, rollback check per vault id, fitting to the 176 KiB cap) | `apps/app/lib/private/vault-client.ts` |
 | Unsaved history entries, per vault, dropped on Lock | `apps/app/lib/private/pending.ts` |
 | Job-page decrypt decisions, share links | `apps/app/lib/private/result.ts` |
-| The envelope checked against the `resultHash` in the job's XorvLedger receipt on Monad | `apps/app/lib/private/receipt-check.ts` |
+| The envelope checked against the `resultHash` in the job's XorvLedger receipt on Arc | `apps/app/lib/private/receipt-check.ts` |
 | UI: keyring provider, passkey panel, composer switch, sealed result, history page | `apps/app/components/private-keys.tsx`, `apps/app/components/passkey-panel.tsx`, `apps/app/components/composer.tsx`, `apps/app/components/private-result.tsx`, `apps/app/components/private-history.tsx`, `apps/app/app/private/page.tsx` |
 | App tests (real Mera plus a fake *synced* authenticator: the cross-device test, pinning, zeroing, 409 merge, rollback, share links, storage scan, trimming to the cap; the on-chain receipt check; unsaved entries per vault) | `apps/app/test/private-keyring.test.ts`, `apps/app/test/support/fake-authenticator.ts`, `apps/app/test/receipt-check.test.ts`, `apps/app/test/private-pending.test.ts` |
