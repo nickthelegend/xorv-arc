@@ -165,7 +165,7 @@ describe("entry points", () => {
         "@x402/evm/exact/client",
         "viem",
         "viem/accounts",
-        "viem/chains",
+        
         // Private jobs: pure-JS, audited, and the same code on a provider and in a tab.
         "@noble/ciphers/aes.js",
         "@noble/curves/ed25519.js",

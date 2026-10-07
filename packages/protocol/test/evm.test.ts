@@ -9,13 +9,13 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, getAddress } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_TESTNET } from "../src/chains.js";
+import { ARC_TESTNET } from "../src/chains.js";
 import {
   ERC20_ABI,
   GAS_HEADROOM_PERCENT,
   accountFromKey,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   isEvmAddress,
   normalizeAddress,
   parsePrivateKey,
@@ -59,10 +59,10 @@ describe("parsePrivateKey", () => {
     expect(parsePrivateKey(portalHex)).toBe(portalHex);
   });
 
-  it("refuses a DER-encoded ED25519 key, saying Hedera ED25519 keys cannot be reused on Monad", () => {
+  it("refuses a DER-encoded ED25519 key, saying Hedera ED25519 keys cannot be reused on Arc", () => {
     expect(() => parsePrivateKey(HEDERA_DER_ED25519)).toThrow(/ED25519/);
-    expect(() => parsePrivateKey(HEDERA_DER_ED25519)).toThrow(/Hedera ED25519 keys cannot be reused on Monad/);
-    expect(() => parsePrivateKey(`0x${HEDERA_DER_ED25519}`)).toThrow(/cannot be reused on Monad/);
+    expect(() => parsePrivateKey(HEDERA_DER_ED25519)).toThrow(/Hedera ED25519 keys cannot be reused on Arc/);
+    expect(() => parsePrivateKey(`0x${HEDERA_DER_ED25519}`)).toThrow(/cannot be reused on Arc/);
   });
 
   it("refuses a DER-encoded ECDSA key and points at the raw hex instead", () => {
@@ -71,7 +71,7 @@ describe("parsePrivateKey", () => {
   });
 
   it("refuses other DER shapes with the Hedera hint", () => {
-    expect(() => parsePrivateKey(`3077020101${"ab".repeat(40)}`)).toThrow(/DER-encoded key.*cannot be reused on Monad/);
+    expect(() => parsePrivateKey(`3077020101${"ab".repeat(40)}`)).toThrow(/DER-encoded key.*cannot be reused on Arc/);
   });
 
   it("fails loudly on an empty or unparseable key instead of returning something wrong", () => {
@@ -97,7 +97,7 @@ describe("accountFromKey", () => {
   });
 
   it("propagates the parse error", () => {
-    expect(() => accountFromKey(HEDERA_DER_ED25519)).toThrow(/cannot be reused on Monad/);
+    expect(() => accountFromKey(HEDERA_DER_ED25519)).toThrow(/cannot be reused on Arc/);
   });
 });
 
@@ -148,13 +148,13 @@ describe("addresses", () => {
 
 describe("clients", () => {
   it("builds a public client on the configured chain", () => {
-    const client = publicClientFor(MONAD_TESTNET);
-    expect(client.chain?.id).toBe(10143);
+    const client = publicClientFor(ARC_TESTNET);
+    expect(client.chain?.id).toBe(5042002);
   });
 
   it("builds a wallet client that can also read", () => {
     const account = accountFromKey(generatePrivateKey());
-    const wallet = walletClientFor(MONAD_TESTNET, account);
+    const wallet = walletClientFor(ARC_TESTNET, account);
     expect(wallet.account.address).toBe(account.address);
     expect(typeof wallet.readContract).toBe("function");
     expect(typeof wallet.writeContract).toBe("function");
@@ -168,20 +168,20 @@ describe("clients", () => {
 describe("fetchBalances", () => {
   const owner = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
 
-  it("reads MON via eth_getBalance and USDC via balanceOf on the network's USDC", async () => {
+  it("reads native USDC via eth_getBalance and USDC via balanceOf on the network's USDC", async () => {
     const { transport, calls } = fakeRpc({
       eth_getBalance: () => hex(1_500_000_000_000_000_000n),
       eth_call: ([tx]) => {
         const call = tx as { to: string; data: string };
-        expect(getAddress(call.to)).toBe("0x534b2f3A21130d7a60830c2Df862319e593943A3");
+        expect(getAddress(call.to)).toBe("0x3600000000000000000000000000000000000000");
         // balanceOf(address) selector, owner checksummed into the calldata.
         expect(call.data.startsWith("0x70a08231")).toBe(true);
         expect(call.data.toLowerCase()).toContain(owner.slice(2));
         return encodeAbiParameters([{ type: "uint256" }], [25_000n]);
       },
     });
-    const balances = await fetchBalances(MONAD_TESTNET, owner, { transport });
-    expect(balances).toEqual({ monWei: "1500000000000000000", usdcUnits: "25000" });
+    const balances = await fetchBalances(ARC_TESTNET, owner, { transport });
+    expect(balances).toEqual({ nativeWei: "1500000000000000000", usdcUnits: "25000" });
     expect(calls.map((c) => c.method).sort()).toEqual(["eth_call", "eth_getBalance"]);
   });
 
@@ -192,12 +192,12 @@ describe("fetchBalances", () => {
       },
       eth_call: () => encodeAbiParameters([{ type: "uint256" }], [0n]),
     });
-    await expect(fetchBalances(MONAD_TESTNET, owner, { transport })).rejects.toThrow(/upstream unavailable/);
+    await expect(fetchBalances(ARC_TESTNET, owner, { transport })).rejects.toThrow(/upstream unavailable/);
   });
 
   it("refuses a malformed address before touching the network", async () => {
     const { transport, calls } = fakeRpc({});
-    await expect(fetchBalances(MONAD_TESTNET, "0.0.1234", { transport })).rejects.toThrow(/not an EVM address/);
+    await expect(fetchBalances(ARC_TESTNET, "0.0.1234", { transport })).rejects.toThrow(/not an EVM address/);
     expect(calls).toHaveLength(0);
   });
 
@@ -206,22 +206,22 @@ describe("fetchBalances", () => {
   });
 });
 
-describe("formatMon", () => {
-  it("renders whole and fractional MON, truncated rather than rounded up", () => {
-    expect(formatMon("0")).toBe("0 MON");
-    expect(formatMon(10n ** 18n)).toBe("1 MON");
-    expect(formatMon("1500000000000000000")).toBe("1.5 MON");
-    expect(formatMon(1_234_567_890_000_000_000n)).toBe("1.2345 MON");
-    expect(formatMon(999_999_999_999_999_999n)).toBe("0.999999 MON");
-    expect(formatMon(21_000n * 102_000_000_000n)).toBe("0.002142 MON");
+describe("formatGasUsdc", () => {
+  it("renders whole and fractional native USDC, truncated rather than rounded up", () => {
+    expect(formatGasUsdc("0")).toBe("0 USDC");
+    expect(formatGasUsdc(10n ** 18n)).toBe("1 USDC");
+    expect(formatGasUsdc("1500000000000000000")).toBe("1.5 USDC");
+    expect(formatGasUsdc(1_234_567_890_000_000_000n)).toBe("1.2345 USDC");
+    expect(formatGasUsdc(999_999_999_999_999_999n)).toBe("0.999999 USDC");
+    expect(formatGasUsdc(21_000n * 102_000_000_000n)).toBe("0.002142 USDC");
   });
 
   it("marks dust instead of printing it as zero", () => {
-    expect(formatMon(1n)).toBe("<0.000001 MON");
+    expect(formatGasUsdc(1n)).toBe("<0.000001 USDC");
   });
 
   it("handles negatives (e.g. a balance delta)", () => {
-    expect(formatMon(-(10n ** 18n))).toBe("-1 MON");
+    expect(formatGasUsdc(-(10n ** 18n))).toBe("-1 USDC");
   });
 });
 

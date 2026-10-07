@@ -6,22 +6,22 @@
  * floating point starts lying. A `number` holds micro-USD losslessly well past
  * any price this network will ever see, and JSON carries it without ceremony.
  *
- * Circle's USDC on Monad has 6 decimals, so micro-USD and USDC's smallest unit
+ * Circle's USDC on Arc has 6 decimals (its ERC-20 view), so micro-USD and USDC's smallest unit
  * are the same integer. That is a happy coincidence, not a law, so the
  * conversion still goes through a named function — if this ever runs against a
  * token with different precision, there's one place to fix.
  *
- * There is deliberately no native-token (MON) pricing here. x402's `exact`
- * scheme on EVM moves ERC-20s only (EIP-3009 or Permit2), so there is no way to
- * pay a job in MON, and quoting one would need a price oracle for a figure
- * nobody can act on.
+ * On Arc the native gas token is USDC too, so there is exactly one asset: a
+ * price, a payment, a refund and the gas behind them are all dollars. The
+ * native view counts the same USDC with 18 decimals; money in this codebase
+ * never uses it.
  */
 
 /** One US dollar, in micro-USD. */
 export const USD_MICROS = 1_000_000;
 
 /**
- * USDC's decimals on Monad (mainnet and testnet alike — confirmed on-chain via
+ * USDC's ERC-20 decimals on Arc (mainnet and testnet alike — confirmed on-chain via
  * `decimals()`). Also the EIP-712 domain is `name: "USDC", version: "2"`; see
  * `NetworkConfig.usdc` for where that lives.
  */

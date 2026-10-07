@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeAbiParameters, getAddress, keccak256, stringToBytes } from "viem";
-import { MONAD_MAINNET, MONAD_TESTNET } from "../src/chains.js";
+import { ARC_MAINNET, ARC_TESTNET } from "../src/chains.js";
 import {
   ERC8004_REGISTRATION_TYPE,
   IDENTITY_ABI,
@@ -29,8 +29,8 @@ const WALLET = "0x00000000219ab540356cBB839Cbe05303d7705Fa";
 
 describe("agentRegistryId", () => {
   it("is eip155:<chainId>:<identity registry>", () => {
-    expect(agentRegistryId(MONAD_TESTNET)).toBe("eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e");
-    expect(agentRegistryId(MONAD_MAINNET)).toBe("eip155:143:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
+    expect(agentRegistryId(ARC_TESTNET)).toBe("eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e");
+    expect(agentRegistryId(ARC_MAINNET)).toBe("eip155:5042:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
   });
 });
 
@@ -42,7 +42,7 @@ describe("buildAgentRegistration", () => {
 
   it("produces a registration-v1 file that declares x402 and reputation trust", () => {
     const file = buildAgentRegistration({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       agentId: "42",
       name: "xorv-node-7f3a (Claude Code)",
       description: "Rents idle Claude Code capacity; pay per job in USDC via x402 on Monad.",
@@ -60,28 +60,28 @@ describe("buildAgentRegistration", () => {
       ],
       x402Support: true,
       active: true,
-      registrations: [{ agentId: 42, agentRegistry: "eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e" }],
+      registrations: [{ agentId: 42, agentRegistry: "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e" }],
       supportedTrust: ["reputation"],
     });
     expect(file.type).toBe(ERC8004_REGISTRATION_TYPE);
   });
 
   it("has no registrations until the agent id is known, and no image unless given", () => {
-    const file = buildAgentRegistration({ network: MONAD_MAINNET, name: "n", description: "d", services: [], active: false });
+    const file = buildAgentRegistration({ network: ARC_MAINNET, name: "n", description: "d", services: [], active: false });
     expect(file.registrations).toEqual([]);
     expect(file.active).toBe(false);
     expect("image" in file).toBe(false);
   });
 
   it("accepts numeric and bigint ids", () => {
-    const file = buildAgentRegistration({ network: MONAD_MAINNET, agentId: 10_259n, name: "n", description: "d", services: [] });
+    const file = buildAgentRegistration({ network: ARC_MAINNET, agentId: 10_259n, name: "n", description: "d", services: [] });
     expect(file.registrations[0]!.agentId).toBe(10_259);
   });
 });
 
 describe("buildFeedbackFile", () => {
   const base = {
-    network: MONAD_TESTNET,
+    network: ARC_TESTNET,
     agentId: "42",
     clientAddress: LEDGER.toLowerCase(),
     createdAt: "2026-10-05T12:00:00Z",
@@ -105,9 +105,9 @@ describe("buildFeedbackFile", () => {
       xorv: { jobIdHash: "0x01" },
     });
     expect(file).toEqual({
-      agentRegistry: "eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      agentRegistry: "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e",
       agentId: 42,
-      clientAddress: `eip155:10143:${LEDGER}`,
+      clientAddress: `eip155:5042002:${LEDGER}`,
       createdAt: "2026-10-05T12:00:00.000Z",
       value: 92,
       valueDecimals: 0,
@@ -117,7 +117,7 @@ describe("buildFeedbackFile", () => {
       proofOfPayment: {
         fromAddress: BUYER,
         toAddress: WALLET,
-        chainId: "10143",
+        chainId: "5042002",
         txHash: `0x${"ab".repeat(32)}`,
         amount: "250000",
         currency: "USDC",
@@ -130,11 +130,11 @@ describe("buildFeedbackFile", () => {
   });
 
   it("omits optional fields that were not provided", () => {
-    const file = buildFeedbackFile({ network: MONAD_MAINNET, agentId: 1, clientAddress: LEDGER, value: 0, tag1: "xorv-job" });
+    const file = buildFeedbackFile({ network: ARC_MAINNET, agentId: 1, clientAddress: LEDGER, value: 0, tag1: "xorv-job" });
     expect(Object.keys(file).sort()).toEqual(
       ["agentId", "agentRegistry", "clientAddress", "createdAt", "tag1", "value", "valueDecimals"].sort(),
     );
-    expect(file.clientAddress).toBe(`eip155:143:${LEDGER}`);
+    expect(file.clientAddress).toBe(`eip155:5042:${LEDGER}`);
     expect(Date.parse(file.createdAt)).not.toBeNaN();
   });
 
@@ -170,15 +170,15 @@ describe("registry reads", () => {
 
   it("reads an agent's wallet and owner from the Identity Registry", async () => {
     const { transport } = identityChain(WALLET.toLowerCase(), BUYER.toLowerCase());
-    const client = publicClientFor(MONAD_TESTNET, { transport });
-    expect(await getAgentWallet(MONAD_TESTNET, 42, { client })).toBe(WALLET);
-    expect(await agentOwner(MONAD_TESTNET, "42", { client })).toBe(BUYER);
+    const client = publicClientFor(ARC_TESTNET, { transport });
+    expect(await getAgentWallet(ARC_TESTNET, 42, { client })).toBe(WALLET);
+    expect(await agentOwner(ARC_TESTNET, "42", { client })).toBe(BUYER);
   });
 
   it("reports a cleared wallet (zero address, e.g. after an NFT transfer) as null", async () => {
     const { transport } = identityChain("0x0000000000000000000000000000000000000000", BUYER);
-    const client = publicClientFor(MONAD_TESTNET, { transport });
-    expect(await getAgentWallet(MONAD_TESTNET, 42n, { client })).toBeNull();
+    const client = publicClientFor(ARC_TESTNET, { transport });
+    expect(await getAgentWallet(ARC_TESTNET, 42n, { client })).toBeNull();
   });
 
   it("summarizes reputation from the listed clients, filtered by tag", async () => {
@@ -195,16 +195,16 @@ describe("registry reads", () => {
         );
       },
     });
-    const client = publicClientFor(MONAD_TESTNET, { transport });
-    const summary = await reputationSummary(MONAD_TESTNET, 42, [LEDGER.toLowerCase()], { client, tag1: "starred" });
+    const client = publicClientFor(ARC_TESTNET, { transport });
+    const summary = await reputationSummary(ARC_TESTNET, 42, [LEDGER.toLowerCase()], { client, tag1: "starred" });
     expect(summary).toEqual({ count: 3, summaryValue: "8733", summaryValueDecimals: 2, average: 87.33 });
     expect(calls).toHaveLength(1);
   });
 
   it("short-circuits an empty client list instead of calling getSummary (which reverts on it)", async () => {
     const { transport, calls } = fakeRpc({});
-    const client = publicClientFor(MONAD_TESTNET, { transport });
-    expect(await reputationSummary(MONAD_TESTNET, 42, [], { client })).toEqual({
+    const client = publicClientFor(ARC_TESTNET, { transport });
+    expect(await reputationSummary(ARC_TESTNET, 42, [], { client })).toEqual({
       count: 0,
       summaryValue: "0",
       summaryValueDecimals: 0,

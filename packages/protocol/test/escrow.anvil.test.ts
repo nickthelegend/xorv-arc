@@ -62,7 +62,7 @@ const PORT = await new Promise<number>((resolve, reject) => {
   });
 });
 const chain = defineChain({
-  id: 10143,
+  id: 5042002,
   name: "anvil-as-monad-testnet",
   nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: [`http://127.0.0.1:${PORT}`] } },
@@ -109,7 +109,7 @@ describe.skipIf(!hasAnvil || !hasBuild)("escrow scheme on anvil", () => {
     const block = await pub.getBlock();
     return {
       scheme: ESCROW_SCHEME,
-      network: "eip155:10143",
+      network: "eip155:5042002",
       asset: token,
       amount: "250000",
       payTo: escrow,
@@ -139,7 +139,7 @@ describe.skipIf(!hasAnvil || !hasBuild)("escrow scheme on anvil", () => {
   }
 
   beforeAll(async () => {
-    node = spawn("anvil", ["--port", String(PORT), "--chain-id", "10143", "--silent"]);
+    node = spawn("anvil", ["--port", String(PORT), "--chain-id", "5042002", "--silent"]);
     pub = createPublicClient({ chain, transport: http() }) as PublicClient;
     wallet = createWalletClient({ chain, transport: http(), account: operator });
     for (let i = 0; i < 50; i++) {
@@ -212,7 +212,7 @@ describe.skipIf(!hasAnvil || !hasBuild)("escrow scheme on anvil", () => {
   it("releases through the broker's writer with the receipt in the send's own response (eth_sendRawTransactionSync)", async () => {
     const { req, p, facilitator } = await pay("q_sync");
     expect((await facilitator.settle(p, req)).success).toBe(true);
-    const writer = escrowWriter(walletClientFor("eip155:10143", operator, { rpcUrl: `http://127.0.0.1:${PORT}` }), operator);
+    const writer = escrowWriter(walletClientFor("eip155:5042002", operator, { rpcUrl: `http://127.0.0.1:${PORT}` }), operator);
     const resultHash = keccak256(stringToHex("synced")).slice(2);
     const tx = await releaseEscrow({ public: pub, wallet: writer }, escrow, escrowJobId("q_sync"), resultHash);
     expect(sendModeOf(tx)).toBe("sync");

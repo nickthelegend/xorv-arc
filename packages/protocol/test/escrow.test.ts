@@ -25,7 +25,7 @@ const DEADLINE = 1_800_001_800;
 function requirements(over: Partial<PaymentRequirements> = {}): PaymentRequirements {
   return {
     scheme: ESCROW_SCHEME,
-    network: "eip155:10143",
+    network: "eip155:5042002",
     asset: AUSD,
     amount: "250000",
     payTo: ESCROW,
@@ -89,8 +89,9 @@ function facilitator(state: Parameters<typeof fakePublic>[0] = {}) {
 
 describe("fundingNonce", () => {
   it("matches the Solidity derivation byte for byte", () => {
-    // Vector read from the deployed Solidity contract (XorvEscrow.fundingNonce) on an
-    // Anvil node running chain id 10143.
+    // Vector for Arc testnet's chain id, computed independently with
+    // `cast keccak $(cast abi-encode "f(bytes32,uint256,address,bytes32,uint40)" …)`,
+    // the same abi.encode XorvEscrow.fundingNonce hashes.
     expect(FUNDING_NONCE_TYPEHASH).toBe(
       "0xa14b469f1309f59441d2220e88466e0a08887bf463c50943f38c74f7eb456b45",
     );
@@ -98,14 +99,14 @@ describe("fundingNonce", () => {
       "0x403d34b7a3fa0bc80a0ec9797fb41902c153042e27dfbc3dd7cf020fa030c063",
     );
     expect(
-      fundingNonce({ chainId: 10143, escrow: ESCROW, jobId: escrowJobId("q_123"), deadline: DEADLINE }),
-    ).toBe("0x64ad445b5eb8cb18395bc1a8a792f93e4b120877a9b585b7c11454ee7bf22332");
+      fundingNonce({ chainId: 5042002, escrow: ESCROW, jobId: escrowJobId("q_123"), deadline: DEADLINE }),
+    ).toBe("0x9e3b8d0c7dd06170fc5854d85eaa765f31b0c2958918d7614fb1f6e6043d3d0b");
   });
 
   it("changes with the chain, the job and the deadline", () => {
-    const base = { chainId: 10143, escrow: ESCROW, jobId: escrowJobId("a"), deadline: DEADLINE };
+    const base = { chainId: 5042002, escrow: ESCROW, jobId: escrowJobId("a"), deadline: DEADLINE };
     const n = fundingNonce(base);
-    expect(fundingNonce({ ...base, chainId: 143 })).not.toBe(n);
+    expect(fundingNonce({ ...base, chainId: 5042 })).not.toBe(n);
     expect(fundingNonce({ ...base, jobId: escrowJobId("b") })).not.toBe(n);
     expect(fundingNonce({ ...base, deadline: DEADLINE + 1 })).not.toBe(n);
   });
@@ -119,7 +120,7 @@ describe("EscrowClientScheme", () => {
     expect(body.authorization.value).toBe("250000");
     expect(body.authorization.validBefore).toBe(String(NOW / 1000 + 300));
     expect(body.authorization.nonce).toBe(
-      fundingNonce({ chainId: 10143, escrow: ESCROW, jobId: escrowJobId("q_123"), deadline: DEADLINE }),
+      fundingNonce({ chainId: 5042002, escrow: ESCROW, jobId: escrowJobId("q_123"), deadline: DEADLINE }),
     );
   });
 

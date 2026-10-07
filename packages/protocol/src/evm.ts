@@ -1,7 +1,7 @@
 /**
  * EVM plumbing shared by the broker, the CLI, the MCP server and the apps.
  *
- * On Monad an account *is* a secp256k1 key: the address is derived from it, so
+ * On Arc an account *is* a secp256k1 key: the address is derived from it, so
  * there is no separate account id to configure, no token association to run
  * before someone can be paid, and no key-curve guessing. What replaces those
  * Hedera chores is smaller but sharper:
@@ -15,10 +15,12 @@
  *    reputation relay) may sign from one EOA. `accountFromKey` wires viem's
  *    shared `nonceManager`, and `withSignerLock` serializes broadcasts per
  *    address so two concurrent sends cannot race for the same nonce.
- *  - **Gas limits.** Monad bills the gas *limit*, not gas used, so a padded
- *    constant is money thrown away on every transaction, while an unpadded
- *    estimate can run out when state shifts between estimate and inclusion.
- *    `withGasHeadroom` is the one agreed margin.
+ *  - **Gas limits.** An unpadded estimate can run out when state shifts
+ *    between estimate and inclusion (the escrow's reputation hook is the
+ *    classic case). `withGasHeadroom` is the one agreed margin.
+ *  - **Gas is USDC.** Arc meters gas in native USDC (18 decimals), the same
+ *    balance the USDC ERC-20 shows with 6. `fetchBalances` reads both views
+ *    and `formatGasUsdc` renders the 18-decimal one.
  */
 
 import {
@@ -71,7 +73,7 @@ const DER_SECP256K1_PREFIX = "3030020100300706052b8104000a04220420";
  * message that says what to do, because the likeliest wrong input is a key
  * left over from the Hedera prototype:
  *
- *  - DER-encoded **ED25519** cannot be used at all — Monad accounts are
+ *  - DER-encoded **ED25519** cannot be used at all — Arc accounts are
  *    secp256k1 — so the error says to create a new EVM key.
  *  - DER-encoded **ECDSA secp256k1** *is* usable, but only as its raw 32
  *    bytes, so the error points at the raw hex instead of silently unwrapping
@@ -91,20 +93,20 @@ export function parsePrivateKey(raw: string): Hex {
   if (hex.startsWith(DER_ED25519_PREFIX)) {
     throw new Error(
       "this is a DER-encoded ED25519 key (the Hedera prototype's format). Hedera ED25519 keys " +
-        "cannot be reused on Monad, whose accounts are secp256k1 — create a new EVM key " +
-        "(e.g. `cast wallet new`) and fund it with MON",
+        "cannot be reused on Arc, whose accounts are secp256k1 — create a new EVM key " +
+        "(e.g. `cast wallet new`) and fund it with USDC",
     );
   }
   if (hex.startsWith(DER_SECP256K1_PREFIX)) {
     throw new Error(
-      "this is a DER-encoded ECDSA key. Monad wants the raw 32-byte hex: use the last 64 hex " +
+      "this is a DER-encoded ECDSA key. Arc wants the raw 32-byte hex: use the last 64 hex " +
         "characters (the Hedera portal's \"HEX Encoded Private Key\")",
     );
   }
   if (/^30[0-9a-f]+$/.test(hex) && hex.length > 64) {
     throw new Error(
-      "this looks like a DER-encoded key. Monad needs a raw 32-byte secp256k1 key (64 hex " +
-        "characters, optional 0x); Hedera ED25519 keys cannot be reused on Monad",
+      "this looks like a DER-encoded key. Arc needs a raw 32-byte secp256k1 key (64 hex " +
+        "characters, optional 0x); Hedera ED25519 keys cannot be reused on Arc",
     );
   }
   if (!/^[0-9a-f]{64}$/.test(hex)) {
@@ -251,14 +253,18 @@ export const ERC20_ABI = [
 ] as const;
 
 export interface AccountBalances {
-  /** Native MON, in wei (18 decimals), as an integer string. */
-  monWei: string;
+  /**
+   * The native (gas) view of the account's USDC, 18 decimals, as an integer
+   * string. On Arc this is the same money as `usdcUnits`, with 12 more digits:
+   * the ERC-20 view truncates below a millionth of a dollar.
+   */
+  nativeWei: string;
   /** The network's stablecoin (USDC), in its smallest unit, as an integer string. */
   usdcUnits: string;
 }
 
 /**
- * MON and USDC balances for an address.
+ * Both views of an address's USDC: native (gas, 18 decimals) and ERC-20 (6).
  *
  * Throws on any RPC error rather than reporting zero: "you have no USDC" and
  * "we couldn't ask" call for very different actions, and a zero shown for an
@@ -274,7 +280,7 @@ export async function fetchBalances(
 ): Promise<AccountBalances> {
   const owner = normalizeAddress(address);
   const client = opts.client ?? publicClientFor(network, opts);
-  const [monWei, usdcUnits] = await Promise.all([
+  const [nativeWei, usdcUnits] = await Promise.all([
     client.getBalance({ address: owner }),
     client.readContract({
       address: networkConfig(network).usdc.address,
@@ -283,27 +289,28 @@ export async function fetchBalances(
       args: [owner],
     }),
   ]);
-  return { monWei: monWei.toString(), usdcUnits: usdcUnits.toString() };
+  return { nativeWei: nativeWei.toString(), usdcUnits: usdcUnits.toString() };
 }
 
 /**
- * Render wei as a MON figure: "1.2345 MON", "0.000021 MON".
+ * Render a native (18-decimal) USDC amount: "1.2345 USDC", "0.000021 USDC".
  *
+ * Used for gas: on Arc the gas token is USDC, metered with 18 decimals.
  * Truncated, never rounded up — a balance display that overstates what is
  * there by half a digit is a small lie told at exactly the moment someone is
- * deciding whether they can afford gas. Four decimals at ≥ 1 MON, six below,
+ * deciding whether they can afford gas. Four decimals at ≥ 1 USDC, six below,
  * and a "<" marker for dust that would otherwise print as zero.
  */
-export function formatMon(wei: string | bigint): string {
+export function formatGasUsdc(wei: string | bigint): string {
   const value = typeof wei === "bigint" ? wei : BigInt(wei);
-  if (value === 0n) return "0 MON";
+  if (value === 0n) return "0 USDC";
   const negative = value < 0n;
   const abs = negative ? -value : value;
   const [whole = "0", frac = ""] = formatEther(abs).split(".");
   const places = abs >= 10n ** 18n ? 4 : 6;
   const kept = frac.slice(0, places).replace(/0+$/, "");
-  if (whole === "0" && !kept) return `${negative ? "-" : ""}<0.${"0".repeat(places - 1)}1 MON`;
-  return `${negative ? "-" : ""}${whole}${kept ? `.${kept}` : ""} MON`;
+  if (whole === "0" && !kept) return `${negative ? "-" : ""}<0.${"0".repeat(places - 1)}1 USDC`;
+  return `${negative ? "-" : ""}${whole}${kept ? `.${kept}` : ""} USDC`;
 }
 
 /**

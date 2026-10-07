@@ -1,5 +1,5 @@
 /**
- * XorvLedger — Xorv's on-chain audit trail on Monad.
+ * XorvLedger — Xorv's on-chain audit trail on Arc.
  *
  * Three facts a marketplace has to be honest about go on-chain as events: who
  * joined (`ProviderRegistered`), who was actually alive (`ProviderHeartbeat`),
@@ -319,17 +319,17 @@ export const RATING_TAG1 = "starred";
 /** Provider labels are truncated to this many UTF-8 bytes on-chain — log bytes cost gas. */
 export const LEDGER_LABEL_MAX_BYTES = 64;
 
-/** The public Monad RPC's `eth_getLogs` range cap, in blocks (inclusive range). */
-export const MAX_LOG_BLOCK_RANGE = 100;
+/** The public Arc RPC's `eth_getLogs` range cap, in blocks (inclusive range; measured 2026-10-07). */
+export const MAX_LOG_BLOCK_RANGE = 10_000;
 
 /**
- * How far back `readLedgerEvents` scans by default: 20k blocks ≈ 100 minutes
- * of Monad at 300 ms, in 200 requests. Longer history belongs to the indexer.
+ * How far back `readLedgerEvents` scans by default: 100k blocks, about 14
+ * hours of Arc at ~0.5 s, in 10 requests. Longer history belongs to the indexer.
  */
-export const DEFAULT_LEDGER_SCAN_BLOCKS = 20_000;
+export const DEFAULT_LEDGER_SCAN_BLOCKS = 100_000;
 
 /** Hard ceiling on a single scan, so no caller can turn a feed read into an RPC flood. */
-const MAX_LEDGER_SCAN_BLOCKS = 200_000;
+const MAX_LEDGER_SCAN_BLOCKS = 1_000_000;
 
 /** Which contract event backs each feed. */
 export const LEDGER_EVENT_NAMES = {
@@ -612,9 +612,9 @@ export function ledgerEventAbi(kind: LedgerEventKind): AbiEvent {
 /**
  * Read one XorvLedger feed, newest first.
  *
- * The public Monad RPCs refuse `eth_getLogs` over more than 100 blocks — about
- * 30 seconds of chain — so "the last 50 receipts" is answered by walking
- * backwards from the latest block in ≤100-block windows until enough events
+ * The public Arc RPC refuses `eth_getLogs` over more than 10,000 blocks —
+ * about 80 minutes of chain — so "the last 50 receipts" is answered by walking
+ * backwards from the latest block in ≤10,000-block windows until enough events
  * are found or the scan budget runs out. The budget is what keeps a quiet
  * ledger from turning one page load into thousands of requests; anything
  * deeper than it is the Envio indexer's job.

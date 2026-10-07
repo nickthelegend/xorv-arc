@@ -64,7 +64,7 @@ export const FUNDING_NONCE_TYPEHASH = keccak256(
   stringToHex("XorvFunding(uint256 chainId,address escrow,bytes32 jobId,uint40 deadline)"),
 );
 
-/** Must match the token's EIP-3009 typehash; identical on USDC and AUSD. */
+/** Must match the token's EIP-3009 typehash (Circle FiatToken v2.2, as on Arc). */
 export const RECEIVE_WITH_AUTHORIZATION_TYPES = {
   ReceiveWithAuthorization: [
     { name: "from", type: "address" },
@@ -82,7 +82,7 @@ export type EscrowStatus = (typeof ESCROW_STATUS)[number];
 
 /** What `extra` carries on an escrow payment requirement. */
 export interface EscrowExtra {
-  /** The token's EIP-712 domain. AUSD signs under "Agora Dollar", not its `name()`, so it is configured. */
+  /** The token's EIP-712 domain ("USDC", "2" on Arc), carried so the client signs exactly it. */
   name: string;
   version: string;
   escrow: Address;

@@ -1,6 +1,6 @@
 /**
  * @xorv/protocol — everything the CLI, the broker and the web apps must agree
- * on: the domain model, money math, Monad chain config, the XorvLedger and
+ * on: the domain model, money math, Arc chain config, the XorvLedger and
  * ERC-8004 conventions, the x402 wiring and the sponsor-model LLM presets.
  *
  * This is the Node entry. It re-exports the browser-safe surface

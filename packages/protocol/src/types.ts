@@ -110,7 +110,7 @@ export type JobStatus =
 
 /**
  * Which asset a job was paid in. USDC only: x402 `exact` on EVM moves ERC-20s
- * via EIP-3009/Permit2, so there is no native-MON payment path to offer.
+ * via EIP-3009/Permit2; on Arc the native coin is the same USDC anyway.
  */
 export type PayAsset = "usdc";
 
@@ -151,7 +151,7 @@ export interface PaymentRecord {
   assetAddress: string;
   /** Amount in the asset's smallest unit, as an integer string. */
   amount: string;
-  /** CAIP-2 network, e.g. "eip155:10143". */
+  /** CAIP-2 network, e.g. "eip155:5042002". */
   network: string;
   /** Hash of the settlement (`transferWithAuthorization`) transaction. */
   txHash: string;
@@ -177,24 +177,25 @@ export interface PaymentRecord {
 export interface ChainTiming {
   /**
    * Milliseconds from submission to holding the receipt: the transaction has
-   * executed in a proposed block (speculatively final on Monad). Null when it
+   * executed in a block, which on Arc is final (deterministic, sub-second
+   * finality, no reorgs). Null when it
    * wasn't measured.
    */
   confirmMs: number | null;
   /**
    * Milliseconds from submission until the RPC's `finalized` head reached the
-   * transaction's block with the same hash (irreversible on Monad, about two
-   * slots after proposal). Null when it wasn't observed.
+   * transaction's block with the same hash. On Arc this equals confirmMs up
+   * to polling: there is no probabilistic window. Null when it wasn't observed.
    */
   finalMs?: number | null;
   /** "sync": the receipt came back in the send's own response (eth_sendRawTransactionSync); "async": it was polled. */
   sendMode?: "sync" | "async" | null;
-  /** Where it was measured: a Monad network, or a local chain (a fork), whose timings are not Monad's. */
-  chain?: "monad" | "local";
+  /** Where it was measured: an Arc network, or a local chain (a fork), whose timings are not Arc's. */
+  chain?: "arc" | "local";
   blockNumber: number;
   /** Gas used, as an integer string. */
   gasUsed: string;
-  /** gasUsed × effectiveGasPrice, in wei of the native token (MON), as an integer string. */
+  /** gasUsed × effectiveGasPrice, in wei of the native token (USDC, 18 decimals), as an integer string. */
   gasPaidWei: string;
   /** Who paid that gas (the facilitator or the escrow's attester, never the buyer). */
   gasPayer: string;
@@ -457,7 +458,7 @@ export interface LedgerEvent<K extends LedgerEventKind = LedgerEventKind> {
   id: string;
   blockNumber: number;
   txHash: string;
-  /** Block timestamp in epoch ms (Monad timestamps have 1 s resolution). */
+  /** Block timestamp in epoch ms (Arc timestamps have 1 s resolution). */
   at: number;
   data: LedgerEventDataMap[K];
 }
@@ -626,8 +627,8 @@ export interface NetworkInfo {
     releaseMedianMs?: number | null;
     /** How many recent settlements the medians are over. */
     timingSamples?: number;
-    /** Where those timings were measured: a Monad network, or a local chain whose timings are not Monad's. */
-    timingChain?: "monad" | "local";
+    /** Where those timings were measured: an Arc network, or a local chain whose timings are not Arc's. */
+    timingChain?: "arc" | "local";
   };
   heartbeatIntervalMs: number;
   /** XorvEscrow, when jobs are paid into escrow; null pays providers directly. */

@@ -21,7 +21,7 @@ import {
   type Hex,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_FACILITATOR_URL, MONAD_TESTNET } from "../src/chains.js";
+import { ARC_TESTNET } from "../src/chains.js";
 import { accountFromKey, sameAddress, withGasHeadroom } from "../src/evm.js";
 import {
   SETTLEMENT_CONFIRMATION_TIMEOUT_MS,
@@ -35,7 +35,7 @@ import {
 import { buyerX402Client, usdcAssetAmount } from "../src/x402-client.js";
 import { fakeRpc, hex } from "./support/fake-rpc.js";
 
-const USDC = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+const USDC = "0x3600000000000000000000000000000000000000";
 const PROVIDER = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const ESTIMATE = 141_600n;
 
@@ -52,10 +52,10 @@ const TRANSFER_EVENT = [
 ] as const;
 
 function requirements(overrides: Partial<PaymentRequirements> = {}): PaymentRequirements {
-  const price = usdcAssetAmount(MONAD_TESTNET, "10000");
+  const price = usdcAssetAmount(ARC_TESTNET, "10000");
   return {
     scheme: "exact",
-    network: MONAD_TESTNET,
+    network: ARC_TESTNET,
     asset: price.asset,
     amount: price.amount,
     payTo: PROVIDER,
@@ -67,7 +67,7 @@ function requirements(overrides: Partial<PaymentRequirements> = {}): PaymentRequ
 
 async function buyerPayload(reqs: PaymentRequirements) {
   const payer = privateKeyToAccount(generatePrivateKey());
-  const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "1000000" });
+  const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "1000000" });
   const paymentRequired: PaymentRequired = {
     x402Version: 2,
     resource: { url: "https://broker.xorv.xyz/api/jobs/qte_1" },
@@ -80,7 +80,7 @@ async function buyerPayload(reqs: PaymentRequirements) {
 function monadNode() {
   const sent: Hex[] = [];
   const rpc = fakeRpc({
-    eth_chainId: () => hex(10143),
+    eth_chainId: () => hex(5042002),
     eth_blockNumber: () => hex(1_000),
     eth_getCode: ([address]) => (sameAddress(address as string, USDC) ? "0x6080604052" : "0x"),
     // The pre-settlement simulation of transferWithAuthorization: succeeds.
@@ -153,9 +153,9 @@ describe("buildLocalFacilitator", () => {
   it("advertises exact on Monad testnet, signed by its own EOA", async () => {
     const node = monadNode();
     const account = accountFromKey(generatePrivateKey());
-    const facilitator = buildLocalFacilitator({ network: MONAD_TESTNET, account, transport: node.transport, log: () => {} });
+    const facilitator = buildLocalFacilitator({ network: ARC_TESTNET, account, transport: node.transport, log: () => {} });
     const supported = await facilitator.getSupported();
-    expect(supported.kinds).toContainEqual(expect.objectContaining({ x402Version: 2, scheme: "exact", network: MONAD_TESTNET }));
+    expect(supported.kinds).toContainEqual(expect.objectContaining({ x402Version: 2, scheme: "exact", network: ARC_TESTNET }));
     expect(Object.values(supported.signers).flat()).toContain(account.address);
     expect(node.calls).toHaveLength(0); // construction touches nothing
   });
@@ -164,7 +164,7 @@ describe("buildLocalFacilitator", () => {
     const node = monadNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       account: accountFromKey(generatePrivateKey()),
       transport: node.transport,
       log,
@@ -181,7 +181,7 @@ describe("buildLocalFacilitator", () => {
     const node = monadNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       account: accountFromKey(generatePrivateKey()),
       transport: node.transport,
       log,
@@ -200,18 +200,18 @@ describe("buildLocalFacilitator", () => {
     const node = monadNode();
     const log = vi.fn();
     const account = accountFromKey(generatePrivateKey());
-    const facilitator = buildLocalFacilitator({ network: MONAD_TESTNET, account, transport: node.transport, log });
+    const facilitator = buildLocalFacilitator({ network: ARC_TESTNET, account, transport: node.transport, log });
     const reqs = requirements();
     const { payer, payload } = await buyerPayload(reqs);
 
     const result = await facilitator.settle(payload, reqs);
     expect(log).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ success: true, network: MONAD_TESTNET, payer: payer.address });
+    expect(result).toMatchObject({ success: true, network: ARC_TESTNET, payer: payer.address });
     expect(node.sent).toHaveLength(1);
     expect(result.transaction).toBe(keccak256(node.sent[0]!));
 
     const tx = parseTransaction(node.sent[0]!);
-    expect(tx.chainId).toBe(10143);
+    expect(tx.chainId).toBe(5042002);
     expect(getAddress(tx.to!)).toBe(USDC);
     // Monad bills the gas limit: exactly estimate × 1.15, never a padded constant.
     expect(tx.gas).toBe(withGasHeadroom(ESTIMATE));
@@ -228,7 +228,7 @@ describe("buildLocalFacilitator", () => {
     const node = monadNode();
     const log = vi.fn();
     const facilitator = buildLocalFacilitator({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       account: accountFromKey(generatePrivateKey()),
       transport: node.transport,
       log,
@@ -248,30 +248,28 @@ describe("buildLocalFacilitator", () => {
 describe("buildFacilitator", () => {
   it("runs in-process by default and reports the gas-paying EOA", () => {
     const account = accountFromKey(generatePrivateKey());
-    const choice = buildFacilitator({ network: MONAD_TESTNET, account });
+    const choice = buildFacilitator({ network: ARC_TESTNET, account });
     expect(choice).toMatchObject({ mode: "self", address: account.address, url: null });
     expect(choice.description).toMatch(/self-hosted/);
-    expect(buildFacilitator({ mode: "  ", network: MONAD_TESTNET, account }).mode).toBe("self");
+    expect(buildFacilitator({ mode: "  ", network: ARC_TESTNET, account }).mode).toBe("self");
   });
 
   it("refuses self-hosting without a key, naming both fixes", () => {
-    expect(() => buildFacilitator({ mode: "self", network: MONAD_TESTNET })).toThrow(/XORV_FACILITATOR_KEY.*XORV_FACILITATOR=hosted/);
-    expect(() => buildFacilitator({ network: MONAD_TESTNET, account: null })).toThrow(/needs a funded key/);
+    expect(() => buildFacilitator({ mode: "self", network: ARC_TESTNET })).toThrow(/XORV_FACILITATOR_KEY.*XORV_FACILITATOR to a hosted/);
+    expect(() => buildFacilitator({ network: ARC_TESTNET, account: null })).toThrow(/needs a key holding a little USDC/);
   });
 
-  it("maps `hosted` to the facilitator Monad's docs use", () => {
-    const choice = buildFacilitator({ mode: "hosted", network: MONAD_TESTNET });
-    expect(choice).toMatchObject({ mode: "hosted", address: null, url: MONAD_FACILITATOR_URL });
-    expect(choice.description).toBe(`hosted (${MONAD_FACILITATOR_URL})`);
+  it("refuses `hosted` on Arc, which has no public facilitator", () => {
+    expect(() => buildFacilitator({ mode: "hosted", network: ARC_TESTNET })).toThrow(/no public x402 facilitator for Arc Testnet/);
   });
 
   it("accepts any other facilitator by URL", () => {
-    const choice = buildFacilitator({ mode: "https://facilitator.example/x402", network: MONAD_TESTNET });
+    const choice = buildFacilitator({ mode: "https://facilitator.example/x402", network: ARC_TESTNET });
     expect(choice).toMatchObject({ mode: "hosted", url: "https://facilitator.example/x402" });
   });
 
   it("refuses a mode that is neither self, hosted nor a URL", () => {
-    expect(() => buildFacilitator({ mode: "x402.org", network: MONAD_TESTNET })).toThrow(/must be "self", "hosted" or an http/);
+    expect(() => buildFacilitator({ mode: "x402.org", network: ARC_TESTNET })).toThrow(/must be "self", "hosted" or an http/);
   });
 
   it("refuses an unsupported network", () => {
@@ -279,8 +277,8 @@ describe("buildFacilitator", () => {
   });
 
   it("builds a hosted client pointed at the URL", () => {
-    const hosted = buildHostedFacilitator(MONAD_FACILITATOR_URL) as unknown as { url: string };
-    expect(hosted.url).toBe(MONAD_FACILITATOR_URL);
+    const hosted = buildHostedFacilitator("https://facilitator.example/x402") as unknown as { url: string };
+    expect(hosted.url).toBe("https://facilitator.example/x402");
   });
 });
 
@@ -289,10 +287,10 @@ describe("rejection logging", () => {
     expect(
       formatPaymentRejection(
         { invalidReason: "invalid_exact_evm_insufficient_balance", invalidMessage: "balance 0", payer: "0xabc" },
-        { network: MONAD_TESTNET, asset: USDC, amount: "10000", payTo: PROVIDER },
+        { network: ARC_TESTNET, asset: USDC, amount: "10000", payTo: PROVIDER },
       ),
     ).toBe(
-      `[x402] payment rejected: invalid_exact_evm_insufficient_balance — balance 0 (payer=0xabc, network=${MONAD_TESTNET}, asset=${USDC}, amount=10000, payTo=${PROVIDER})`,
+      `[x402] payment rejected: invalid_exact_evm_insufficient_balance — balance 0 (payer=0xabc, network=${ARC_TESTNET}, asset=${USDC}, amount=10000, payTo=${PROVIDER})`,
     );
     expect(formatSettlementFailure({ errorReason: "transaction_failed", transaction: "0xdead" })).toBe(
       "[x402] settlement failed: transaction_failed (payer=?, tx=0xdead)",

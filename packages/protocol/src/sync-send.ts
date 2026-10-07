@@ -1,10 +1,11 @@
 /**
  * Send a contract write and get its receipt in the same round trip, with
- * Monad's `eth_sendRawTransactionSync` (EIP-7966).
+ * `eth_sendRawTransactionSync` (EIP-7966) where the node offers it.
  *
- * Monad returns the receipt as soon as the transaction's block is proposed
- * and executed, with no `eth_getTransactionReceipt` polling, so the time from
- * sending to holding a receipt is one round trip plus one block. viem's own
+ * Arc's public RPC does not offer it today (it answers "method not
+ * supported", checked 2026-10-07), so on Arc this takes the fallback below and
+ * the receipt is polled; with sub-second finality that is still about one
+ * block. The sync path stays for nodes that add the method. viem's own
  * `sendTransactionSync` always sends a timeout parameter, which some nodes
  * (anvil 1.7) reject, so this signs locally and sends the transaction alone.
  *
@@ -13,8 +14,7 @@
  * polls for the receipt as before. Either way the hash is recorded with how
  * it was sent (`sendMode`), so a speed receipt can say which path it timed.
  *
- * A receipt from a Proposed block is not final: callers that credit value
- * should still wait for finality (see the broker's speed receipt).
+ * On Arc a receipt is final: there are no reorgs.
  */
 import { encodeFunctionData, formatTransactionReceipt, type Abi, type Account, type Address, type Hex, type TransactionReceipt } from "viem";
 import type { XorvWalletClient } from "./evm.js";

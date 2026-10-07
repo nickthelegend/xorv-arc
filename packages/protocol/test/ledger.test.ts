@@ -26,7 +26,7 @@ import {
   type Hex,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_MAINNET, MONAD_TESTNET } from "../src/chains.js";
+import { ARC_MAINNET, ARC_TESTNET } from "../src/chains.js";
 import { publicClientFor } from "../src/evm.js";
 import {
   DEFAULT_LEDGER_SCAN_BLOCKS,
@@ -337,17 +337,17 @@ describe("ratingTypedData", () => {
   };
 
   it("uses the XorvLedger domain on the right chain, with the contract's field order", () => {
-    const td = ratingTypedData({ network: MONAD_TESTNET, ledger: LEDGER.toLowerCase(), rating });
+    const td = ratingTypedData({ network: ARC_TESTNET, ledger: LEDGER.toLowerCase(), rating });
     expect(td.domain).toEqual({
       name: "XorvLedger",
       version: "1",
-      chainId: 10143,
+      chainId: 5042002,
       verifyingContract: LEDGER,
     });
     expect(td.primaryType).toBe("Rating");
     expect(td.types).toBe(RATING_TYPES);
     expect(td.message).toEqual({ ...rating, value: 92n, deadline: 1_790_000_000n });
-    expect(ratingTypedData({ network: MONAD_MAINNET, ledger: LEDGER, rating }).domain.chainId).toBe(143);
+    expect(ratingTypedData({ network: ARC_MAINNET, ledger: LEDGER, rating }).domain.chainId).toBe(5042);
     expect(RATING_TAG1).toBe("starred");
   });
 
@@ -381,29 +381,29 @@ describe("ratingTypedData", () => {
     const domainSeparator = keccak256(
       encodeAbiParameters(
         [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" }, { type: "uint256" }, { type: "address" }],
-        [domainTypehash, keccak256(stringToBytes("XorvLedger")), keccak256(stringToBytes("1")), 10143n, LEDGER],
+        [domainTypehash, keccak256(stringToBytes("XorvLedger")), keccak256(stringToBytes("1")), 5042002n, LEDGER],
       ),
     );
     const expected = keccak256(concat(["0x1901", domainSeparator, structHash]));
-    expect(hashTypedData(ratingTypedData({ network: MONAD_TESTNET, ledger: LEDGER, rating }))).toBe(expected);
+    expect(hashTypedData(ratingTypedData({ network: ARC_TESTNET, ledger: LEDGER, rating }))).toBe(expected);
   });
 
   it("round-trips a buyer signature through viem verifyTypedData", async () => {
     const buyer = privateKeyToAccount(generatePrivateKey());
-    const td = ratingTypedData({ network: MONAD_TESTNET, ledger: LEDGER, rating });
+    const td = ratingTypedData({ network: ARC_TESTNET, ledger: LEDGER, rating });
     const signature = await buyer.signTypedData(td);
     expect(await verifyTypedData({ ...td, address: buyer.address, signature })).toBe(true);
 
     // The same signature must not verify for another ledger, chain or value.
     const otherLedger = ratingTypedData({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       ledger: "0x0000000000000000000000000000000000000001",
       rating,
     });
     expect(await verifyTypedData({ ...otherLedger, address: buyer.address, signature })).toBe(false);
-    const otherChain = ratingTypedData({ network: MONAD_MAINNET, ledger: LEDGER, rating });
+    const otherChain = ratingTypedData({ network: ARC_MAINNET, ledger: LEDGER, rating });
     expect(await verifyTypedData({ ...otherChain, address: buyer.address, signature })).toBe(false);
-    const otherValue = ratingTypedData({ network: MONAD_TESTNET, ledger: LEDGER, rating: { ...rating, value: 100 } });
+    const otherValue = ratingTypedData({ network: ARC_TESTNET, ledger: LEDGER, rating: { ...rating, value: 100 } });
     expect(await verifyTypedData({ ...otherValue, address: buyer.address, signature })).toBe(false);
   });
 
@@ -531,7 +531,7 @@ function ledgerChain(latest: number, logs: StoredLog[], opts: { failGetLogs?: bo
       };
     },
   });
-  const client = publicClientFor(MONAD_TESTNET, { transport: rpc.transport });
+  const client = publicClientFor(ARC_TESTNET, { transport: rpc.transport });
   const ranges = () =>
     rpc.calls
       .filter((c) => c.method === "eth_getLogs")
@@ -544,26 +544,26 @@ function ledgerChain(latest: number, logs: StoredLog[], opts: { failGetLogs?: bo
 }
 
 describe("readLedgerEvents", () => {
-  it("scans backwards in windows of at most 100 blocks and returns newest first", async () => {
-    const chain = ledgerChain(10_000, [
-      receiptLog(9_995, 0),
-      receiptLog(9_995, 3),
-      receiptLog(9_850, 1),
-      receiptLog(9_500, 0),
+  it("scans backwards in windows of at most 10,000 blocks (Arc's getLogs cap) and returns newest first", async () => {
+    const chain = ledgerChain(1_000_000, [
+      receiptLog(999_995, 0),
+      receiptLog(999_995, 3),
+      receiptLog(985_000, 1),
+      receiptLog(955_000, 0),
     ]);
-    const events = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", limit: 3, client: chain.client });
+    const events = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", limit: 3, client: chain.client });
 
-    expect(events.map((e) => e.id)).toEqual(["9995:3", "9995:0", "9850:1"]);
-    expect(MAX_LOG_BLOCK_RANGE).toBe(100);
+    expect(events.map((e) => e.id)).toEqual(["999995:3", "999995:0", "985000:1"]);
+    expect(MAX_LOG_BLOCK_RANGE).toBe(10_000);
     const ranges = chain.ranges();
-    for (const [from, to] of ranges) expect(to - from + 1).toBeLessThanOrEqual(100);
+    for (const [from, to] of ranges) expect(to - from + 1).toBeLessThanOrEqual(10_000);
     // Contiguous, non-overlapping, descending from the head.
-    expect(ranges[0]).toEqual([9_901, 10_000]);
+    expect(ranges[0]).toEqual([990_001, 1_000_000]);
     for (let i = 1; i < ranges.length; i++) expect(ranges[i]![1]).toBe(ranges[i - 1]![0] - 1);
     // Enough events were found in the first batch of windows: it stopped early,
-    // never reaching block 9_500.
+    // never reaching block 955_000.
     expect(ranges.length).toBe(4);
-    expect(Math.min(...ranges.map((r) => r[0]))).toBeGreaterThan(9_500);
+    expect(Math.min(...ranges.map((r) => r[0]))).toBeGreaterThan(955_000);
   });
 
   it("decodes receipts into JSON-safe shapes, with timestamps from the block", async () => {
@@ -571,7 +571,7 @@ describe("readLedgerEvents", () => {
       receiptLog(19_990, 0),
       receiptLog(19_980, 0, { agentId: NO_AGENT, paymentTx: zeroHash, ok: false, amount: 0n }),
     ]);
-    const [paid, unpaid] = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
+    const [paid, unpaid] = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
 
     expect(paid).toMatchObject({
       kind: "receipts",
@@ -614,7 +614,7 @@ describe("readLedgerEvents", () => {
         0,
       ),
     ]);
-    const [registration] = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "registrations", client: chain.client });
+    const [registration] = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "registrations", client: chain.client });
     expect(registration!.data).toEqual({
       providerId,
       payTo: PAY_TO,
@@ -622,9 +622,9 @@ describe("readLedgerEvents", () => {
       label: "node-7f3a",
       capabilities: "claude-code:10000",
     });
-    const [beat] = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "heartbeats", client: chain.client });
+    const [beat] = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "heartbeats", client: chain.client });
     expect(beat!.data).toEqual({ providerId, activeJobs: 2, capacity: 3, uptimeSeconds: 900 });
-    const [rated] = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "ratings", client: chain.client });
+    const [rated] = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "ratings", client: chain.client });
     expect(rated!.data).toEqual({
       jobId: jobIdHash("job_r"),
       agentId: "12",
@@ -634,31 +634,31 @@ describe("readLedgerEvents", () => {
     });
   });
 
-  it("is bounded by maxBlocks (default 20k) — deeper history is the indexer's job", async () => {
-    expect(DEFAULT_LEDGER_SCAN_BLOCKS).toBe(20_000);
-    const chain = ledgerChain(40_000, [receiptLog(39_500, 0)]);
-    const events = await readLedgerEvents(MONAD_TESTNET, LEDGER, {
+  it("is bounded by maxBlocks (default 100k) — deeper history is the indexer's job", async () => {
+    expect(DEFAULT_LEDGER_SCAN_BLOCKS).toBe(100_000);
+    const chain = ledgerChain(4_000_000, [receiptLog(3_950_000, 0)]);
+    const events = await readLedgerEvents(ARC_TESTNET, LEDGER, {
       kind: "receipts",
-      maxBlocks: 250,
+      maxBlocks: 25_000,
       client: chain.client,
     });
     expect(events).toEqual([]);
     expect(chain.ranges()).toEqual([
-      [39_901, 40_000],
-      [39_801, 39_900],
-      [39_751, 39_800],
+      [3_990_001, 4_000_000],
+      [3_980_001, 3_990_000],
+      [3_975_001, 3_980_000],
     ]);
 
-    const wide = ledgerChain(40_000, []);
-    await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: wide.client });
+    const wide = ledgerChain(4_000_000, []);
+    await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: wide.client });
     const ranges = wide.ranges();
-    expect(ranges.length).toBe(200);
-    expect(ranges.at(-1)![0]).toBe(40_000 - 20_000 + 1);
+    expect(ranges.length).toBe(10);
+    expect(ranges.at(-1)![0]).toBe(4_000_000 - 100_000 + 1);
   });
 
   it("never scans below fromBlock (the ledger's deploy block)", async () => {
     const chain = ledgerChain(50_000, [receiptLog(49_950, 0), receiptLog(49_000, 0)]);
-    const events = await readLedgerEvents(MONAD_TESTNET, LEDGER, {
+    const events = await readLedgerEvents(ARC_TESTNET, LEDGER, {
       kind: "receipts",
       fromBlock: 49_940n,
       client: chain.client,
@@ -669,23 +669,23 @@ describe("readLedgerEvents", () => {
 
   it("handles a chain younger than one window", async () => {
     const chain = ledgerChain(42, [receiptLog(0, 0), receiptLog(42, 1)]);
-    const events = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
+    const events = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
     expect(events.map((e) => e.id)).toEqual(["42:1", "0:0"]);
     expect(chain.ranges()).toEqual([[0, 42]]);
   });
 
   it("returns nothing when fromBlock is above the head", async () => {
     const chain = ledgerChain(100, []);
-    expect(await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", fromBlock: 500, client: chain.client })).toEqual([]);
+    expect(await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", fromBlock: 500, client: chain.client })).toEqual([]);
     expect(chain.ranges()).toEqual([]);
   });
 
   it("caches block timestamps, so a refreshed feed only pays for new blocks", async () => {
     const chain = ledgerChain(60_000, [receiptLog(59_990, 0), receiptLog(59_990, 1), receiptLog(59_970, 0)]);
-    await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
+    await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
     const blockReads = () => chain.calls.filter((c) => c.method === "eth_getBlockByNumber").length;
     expect(blockReads()).toBe(2); // two distinct blocks
-    await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
+    await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
     expect(blockReads()).toBe(2);
   });
 
@@ -697,20 +697,20 @@ describe("readLedgerEvents", () => {
     const garbage = receiptLog(70_970, 0);
     garbage.data = "0x1234";
     const chain = ledgerChain(71_000, [foreign, removed, garbage, receiptLog(70_960, 0)]);
-    const events = await readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
+    const events = await readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client });
     expect(events.map((e) => e.id)).toEqual(["70960:0"]);
   });
 
   it("throws on an RPC error rather than returning a feed that looks empty", async () => {
     const chain = ledgerChain(80_000, [], { failGetLogs: true });
-    await expect(readLedgerEvents(MONAD_TESTNET, LEDGER, { kind: "receipts", client: chain.client })).rejects.toThrow(
+    await expect(readLedgerEvents(ARC_TESTNET, LEDGER, { kind: "receipts", client: chain.client })).rejects.toThrow(
       /100 range/,
     );
   });
 
   it("refuses a malformed ledger address", async () => {
     const chain = ledgerChain(1, []);
-    await expect(readLedgerEvents(MONAD_TESTNET, "0.0.9848247", { kind: "receipts", client: chain.client })).rejects.toThrow(
+    await expect(readLedgerEvents(ARC_TESTNET, "0.0.9848247", { kind: "receipts", client: chain.client })).rejects.toThrow(
       /not an EVM address/,
     );
   });

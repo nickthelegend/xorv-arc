@@ -2,7 +2,7 @@
  * @xorv/protocol/web — the browser-safe entry point.
  *
  * Everything a Next.js page needs to agree with the broker — the domain and
- * wire types, money math, Monad chain config and explorer links, address
+ * wire types, money math, Arc chain config and explorer links, address
  * helpers, the XorvLedger ABI and rating typed data, ERC-8004 file shapes, the
  * buyer-side x402 client a Privy wallet pays with, and the private-job crypto
  * (sealed results, passkey-derived keys, the history vault) — and nothing that
@@ -27,3 +27,6 @@ export * from "./erc8004.js";
 export * from "./x402-client.js";
 export * from "./sealed.js";
 export * from "./vault.js";
+export * from "./memo.js";
+export * from "./gateway.js";
+export * from "./cctp.js";

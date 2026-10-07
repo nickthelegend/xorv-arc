@@ -2,9 +2,10 @@
  * The browser-safe half of Xorv's x402 wiring: what a 402 offers, and what a
  * buyer is willing to sign.
  *
- * On Monad a payment is an EIP-3009 `transferWithAuthorization` over USDC: the
+ * On Arc a payment is an EIP-3009 `transferWithAuthorization` over USDC: the
  * buyer signs an EIP-712 message offline, the facilitator submits it and pays
- * the MON gas, and the USDC moves buyer → provider in one transfer. The buyer
+ * the gas (in USDC, Arc's gas token), and the USDC moves buyer → provider in one
+ * transfer. The buyer
  * holds nothing but USDC, and the broker never touches the money.
  *
  * Everything here runs unchanged in a Privy embedded wallet in the browser, in
@@ -34,7 +35,7 @@ function unitsString(value: string | bigint | number, what: string): string {
  *
  * `extra: { name, version }` is not optional decoration. The x402 server does
  * not fill it in for an explicit asset, the buyer's client refuses to sign
- * without it, and a wrong value ("USD Coin" instead of Monad's "USDC") makes
+ * without it, and a wrong value ("USD Coin" instead of Arc's "USDC") makes
  * every signature invalid — a bare 402 with no obvious cause.
  */
 export function usdcAssetAmount(network: string, amount: string | bigint): AssetAmount {
@@ -241,7 +242,7 @@ export function quoteMatchPolicy(expect: QuoteExpectation, network: string): Pay
  *    talked into signing for another chain.
  *  - Spend controls with an explicit per-payment cap in USDC units. They are
  *    also *required* on testnet: since x402 2.23 a client only pays assets it
- *    recognises by default, and Monad-testnet USDC is not in `@x402/evm`'s
+ *    recognises by default, and Arc USDC is not in `@x402/evm`'s
  *    default table, so without an `allowedAssets` entry every payment fails
  *    with a spend-controls error. (On mainnet USDC *is* a default asset, where
  *    the per-asset cap here overrides the library's $1 default.)

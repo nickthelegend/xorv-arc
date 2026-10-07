@@ -5,9 +5,9 @@
  * shows the same URL for the same thing, and so pointing the whole network at
  * a different explorer is one env var (`XORV_EXPLORER_URL`) rather than a grep.
  *
- * Monadscan (the default) and MonadVision share the `/tx/`, `/address/` and
- * `/token/` path shapes, so an override needs no path rewriting. EVM hashes go
- * in verbatim — there is no id-format translation to get wrong.
+ * Arc's explorers are Blockscout, whose `/tx/`, `/address/`, `/block/` and
+ * `/token/` paths any other Blockscout shares, so an override needs no path
+ * rewriting. EVM hashes go in verbatim.
  */
 
 import { getAddress, isAddress } from "viem";
@@ -43,11 +43,11 @@ export function explorerToken(network: string, token: string): string {
  * Explorer link for a provider's ERC-8004 agent identity.
  *
  * An agent is an ERC-721 token on the Identity Registry, so its page is the
- * NFT page: `/nft/<identity registry>/<agentId>`.
+ * token instance page: `/token/<identity registry>/instance/<agentId>`.
  */
 export function explorerAgent(network: string, agentId: string | number | bigint): string {
   const cfg = networkConfig(network);
-  return `${cfg.explorerUrl}/nft/${cfg.erc8004.identity}/${String(agentId)}`;
+  return `${cfg.explorerUrl}/token/${cfg.erc8004.identity}/instance/${String(agentId)}`;
 }
 
 /**

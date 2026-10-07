@@ -13,7 +13,7 @@ import type { AssetAmount, PaymentRequired, PaymentRequirements } from "@x402/co
 import { authorizationTypes } from "@x402/evm";
 import { getAddress, verifyTypedData } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_MAINNET, MONAD_TESTNET } from "../src/chains.js";
+import { ARC_MAINNET, ARC_TESTNET } from "../src/chains.js";
 import { QUOTE_TTL_SECONDS } from "../src/constants.js";
 import {
   buyerX402Client,
@@ -23,8 +23,8 @@ import {
   usdcPaymentOption,
 } from "../src/x402-client.js";
 
-const USDC_TESTNET = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
-const USDC_MAINNET = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+const USDC_TESTNET = "0x3600000000000000000000000000000000000000";
+const USDC_MAINNET = "0x3600000000000000000000000000000000000000";
 const PROVIDER = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 const BROKER = "0x00000000219ab540356cBB839Cbe05303d7705Fa";
 
@@ -46,7 +46,7 @@ function requirementFrom(option: ReturnType<typeof usdcPaymentOption>): PaymentR
 
 function requirement(overrides: Partial<PaymentRequirements> = {}): PaymentRequirements {
   return {
-    ...requirementFrom(usdcPaymentOption({ network: MONAD_TESTNET, payTo: PROVIDER, amount: "10000" })),
+    ...requirementFrom(usdcPaymentOption({ network: ARC_TESTNET, payTo: PROVIDER, amount: "10000" })),
     ...overrides,
   };
 }
@@ -57,10 +57,10 @@ function paymentRequired(accepts: PaymentRequirements[]): PaymentRequired {
 
 describe("usdcPaymentOption", () => {
   it("offers exact USDC to the provider with the token's EIP-712 domain", () => {
-    const option = usdcPaymentOption({ network: MONAD_TESTNET, payTo: PROVIDER.toLowerCase(), amount: "10000" });
+    const option = usdcPaymentOption({ network: ARC_TESTNET, payTo: PROVIDER.toLowerCase(), amount: "10000" });
     expect(option).toEqual({
       scheme: "exact",
-      network: "eip155:10143",
+      network: "eip155:5042002",
       payTo: PROVIDER,
       price: { asset: USDC_TESTNET, amount: "10000", extra: { name: "USDC", version: "2" } },
       maxTimeoutSeconds: QUOTE_TTL_SECONDS,
@@ -68,21 +68,21 @@ describe("usdcPaymentOption", () => {
   });
 
   it("pays the provider, never the broker", () => {
-    const option = usdcPaymentOption({ network: MONAD_TESTNET, payTo: PROVIDER, amount: 1_000n });
+    const option = usdcPaymentOption({ network: ARC_TESTNET, payTo: PROVIDER, amount: 1_000n });
     expect(option.payTo).toBe(PROVIDER);
     expect(option.payTo).not.toBe(BROKER);
   });
 
   it("uses mainnet USDC on mainnet and honours a custom timeout", () => {
-    const option = usdcPaymentOption({ network: MONAD_MAINNET, payTo: PROVIDER, amount: "1", maxTimeoutSeconds: 60 });
+    const option = usdcPaymentOption({ network: ARC_MAINNET, payTo: PROVIDER, amount: "1", maxTimeoutSeconds: 60 });
     expect((option.price as AssetAmount).asset).toBe(USDC_MAINNET);
-    expect(option.network).toBe("eip155:143");
+    expect(option.network).toBe("eip155:5042");
     expect(option.maxTimeoutSeconds).toBe(60);
   });
 
   it("resolves payTo and amount per request, checksumming the payee", async () => {
     const option = usdcPaymentOption({
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       payTo: async () => PROVIDER.toLowerCase(),
       amount: async () => "25000",
     });
@@ -95,21 +95,21 @@ describe("usdcPaymentOption", () => {
   });
 
   it("passes an unresolvable payee through untouched so the 402 still renders", async () => {
-    const option = usdcPaymentOption({ network: MONAD_TESTNET, payTo: () => "", amount: "1" });
+    const option = usdcPaymentOption({ network: ARC_TESTNET, payTo: () => "", amount: "1" });
     expect(await (option.payTo as (c: HTTPRequestContext) => Promise<string>)(ctx)).toBe("");
   });
 
   it("refuses malformed amounts and payees up front", () => {
-    expect(() => usdcPaymentOption({ network: MONAD_TESTNET, payTo: PROVIDER, amount: "0.01" })).toThrow(/integer/);
-    expect(() => usdcPaymentOption({ network: MONAD_TESTNET, payTo: PROVIDER, amount: "-5" })).toThrow(/integer/);
-    expect(() => usdcPaymentOption({ network: MONAD_TESTNET, payTo: "0.0.9848438", amount: "1" })).toThrow(/not an EVM address/);
+    expect(() => usdcPaymentOption({ network: ARC_TESTNET, payTo: PROVIDER, amount: "0.01" })).toThrow(/integer/);
+    expect(() => usdcPaymentOption({ network: ARC_TESTNET, payTo: PROVIDER, amount: "-5" })).toThrow(/integer/);
+    expect(() => usdcPaymentOption({ network: ARC_TESTNET, payTo: "0.0.9848438", amount: "1" })).toThrow(/not an EVM address/);
     expect(() => usdcPaymentOption({ network: "hedera:testnet", payTo: PROVIDER, amount: "1" })).toThrow(/unsupported/);
   });
 });
 
 describe("usdcAssetAmount", () => {
   it("always carries name and version — the client refuses to sign without them", () => {
-    expect(usdcAssetAmount(MONAD_MAINNET, 7n)).toEqual({
+    expect(usdcAssetAmount(ARC_MAINNET, 7n)).toEqual({
       asset: USDC_MAINNET,
       amount: "7",
       extra: { name: "USDC", version: "2" },
@@ -123,7 +123,7 @@ describe("buyerX402Client", () => {
   it("signs a valid EIP-3009 authorization for a matching 402", async () => {
     const client = buyerX402Client({
       signer: payer,
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       maxUsdcUnits: "25000000",
       expect: { payTo: PROVIDER, amount: "10000" },
     });
@@ -145,7 +145,7 @@ describe("buyerX402Client", () => {
 
     const valid = await verifyTypedData({
       address: payer.address,
-      domain: { name: "USDC", version: "2", chainId: 10143, verifyingContract: USDC_TESTNET },
+      domain: { name: "USDC", version: "2", chainId: 5042002, verifyingContract: USDC_TESTNET },
       types: authorizationTypes,
       primaryType: "TransferWithAuthorization",
       message: {
@@ -163,12 +163,12 @@ describe("buyerX402Client", () => {
 
   it("pays testnet USDC even though it is not in @x402/evm's default asset table", async () => {
     // Without an allowedAssets entry, x402 ≥ 2.23 rejects every testnet payment.
-    const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: 1_000_000 });
+    const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: 1_000_000 });
     await expect(client.createPaymentPayload(paymentRequired([requirement()]))).resolves.toBeTruthy();
   });
 
   it("enforces the per-payment cap", async () => {
-    const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "25000" });
+    const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "25000" });
     await expect(client.createPaymentPayload(paymentRequired([requirement({ amount: "25001" })]))).rejects.toThrow(
       /spendControls/,
     );
@@ -176,15 +176,15 @@ describe("buyerX402Client", () => {
   });
 
   it("lets the cap override the library's $1 default on mainnet, where USDC is a default asset", async () => {
-    const client = buyerX402Client({ signer: payer, network: MONAD_MAINNET, maxUsdcUnits: "5000000" });
-    const req = requirementFrom(usdcPaymentOption({ network: MONAD_MAINNET, payTo: PROVIDER, amount: "2000000" }));
+    const client = buyerX402Client({ signer: payer, network: ARC_MAINNET, maxUsdcUnits: "5000000" });
+    const req = requirementFrom(usdcPaymentOption({ network: ARC_MAINNET, payTo: PROVIDER, amount: "2000000" }));
     await expect(client.createPaymentPayload(paymentRequired([req]))).resolves.toBeTruthy();
   });
 
   it("refuses a 402 that doesn't match the frozen quote's payee", async () => {
     const client = buyerX402Client({
       signer: payer,
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       maxUsdcUnits: "25000000",
       expect: { payTo: PROVIDER, amount: "10000" },
     });
@@ -196,7 +196,7 @@ describe("buyerX402Client", () => {
   it("refuses a 402 whose amount drifted from the quote, even under the cap", async () => {
     const client = buyerX402Client({
       signer: payer,
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       maxUsdcUnits: "25000000",
       expect: { payTo: PROVIDER.toLowerCase(), amount: 10_000n },
     });
@@ -208,7 +208,7 @@ describe("buyerX402Client", () => {
   it("picks the matching row out of several offers", async () => {
     const client = buyerX402Client({
       signer: payer,
-      network: MONAD_TESTNET,
+      network: ARC_TESTNET,
       maxUsdcUnits: "25000000",
       expect: { payTo: PROVIDER, amount: "10000" },
     });
@@ -220,44 +220,44 @@ describe("buyerX402Client", () => {
   });
 
   it("refuses assets other than the network's USDC", async () => {
-    const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "25000000" });
+    const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "25000000" });
     await expect(
       client.createPaymentPayload(paymentRequired([requirement({ asset: "0x1111111111111111111111111111111111111111" })])),
     ).rejects.toThrow();
   });
 
   it("cannot be talked into signing for another network", async () => {
-    const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "25000000" });
-    const mainnetReq = requirementFrom(usdcPaymentOption({ network: MONAD_MAINNET, payTo: PROVIDER, amount: "10000" }));
+    const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "25000000" });
+    const mainnetReq = requirementFrom(usdcPaymentOption({ network: ARC_MAINNET, payTo: PROVIDER, amount: "10000" }));
     await expect(client.createPaymentPayload(paymentRequired([mainnetReq]))).rejects.toThrow(/No network\/scheme registered/);
   });
 
   it("refuses a requirement missing the EIP-712 domain", async () => {
-    const client = buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "25000000" });
+    const client = buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "25000000" });
     await expect(client.createPaymentPayload(paymentRequired([requirement({ extra: {} })]))).rejects.toThrow(
       /EIP-712 domain parameters/,
     );
   });
 
   it("validates its own configuration", () => {
-    expect(() => buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: 0 })).toThrow(/greater than zero/);
-    expect(() => buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: "1.5" })).toThrow(/integer/);
+    expect(() => buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: 0 })).toThrow(/greater than zero/);
+    expect(() => buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: "1.5" })).toThrow(/integer/);
     expect(() => buyerX402Client({ signer: payer, network: "hedera:testnet", maxUsdcUnits: 1 })).toThrow(/unsupported/);
     expect(() =>
-      buyerX402Client({ signer: payer, network: MONAD_TESTNET, maxUsdcUnits: 1, expect: { payTo: "0.0.1", amount: "1" } }),
+      buyerX402Client({ signer: payer, network: ARC_TESTNET, maxUsdcUnits: 1, expect: { payTo: "0.0.1", amount: "1" } }),
     ).toThrow(/not an EVM address/);
   });
 });
 
 describe("policies", () => {
   it("usdcOnlyPolicy keeps only exact USDC rows on the network", () => {
-    const policy = usdcOnlyPolicy(MONAD_TESTNET);
+    const policy = usdcOnlyPolicy(ARC_TESTNET);
     const good = requirement();
     const rows = [
       good,
       requirement({ scheme: "upto" }),
       requirement({ asset: "0x1111111111111111111111111111111111111111" }),
-      requirement({ network: "eip155:143" }),
+      requirement({ network: "eip155:5042" }),
     ];
     expect(policy(2, rows)).toEqual([good]);
     expect(policy(2, [requirement({ asset: USDC_TESTNET.toLowerCase() })])).toHaveLength(1);
@@ -265,7 +265,7 @@ describe("policies", () => {
   });
 
   it("quoteMatchPolicy compares addresses case-insensitively and amounts numerically", () => {
-    const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000" }, MONAD_TESTNET);
+    const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000" }, ARC_TESTNET);
     expect(policy(2, [requirement({ payTo: PROVIDER.toLowerCase() })])).toHaveLength(1);
     expect(policy(2, [requirement({ amount: "010000" })])).toHaveLength(1);
     expect(() => policy(2, [requirement({ amount: "abc" })])).toThrow(/does not match/);
@@ -281,7 +281,7 @@ describe("policies", () => {
       } as Partial<PaymentRequirements>);
 
     it("signs escrow only into the contract the quote named, for the quoted provider", () => {
-      const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000", escrow: ESCROW }, MONAD_TESTNET);
+      const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000", escrow: ESCROW }, ARC_TESTNET);
       const good = escrowRow();
       expect(policy(2, [good, requirement()])).toEqual([good, requirement()]);
       expect(() => policy(2, [escrowRow({ provider: BROKER })])).toThrow(/does not match/);
@@ -291,13 +291,13 @@ describe("policies", () => {
     });
 
     it("refuses escrow a quote didn't announce, and still pays exact", () => {
-      const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000" }, MONAD_TESTNET);
+      const policy = quoteMatchPolicy({ payTo: PROVIDER, amount: "10000" }, ARC_TESTNET);
       expect(policy(2, [escrowRow(), requirement()])).toEqual([requirement()]);
       expect(() => policy(2, [escrowRow()])).toThrow(/does not match/);
     });
 
     it("usdcOnlyPolicy keeps escrow USDC rows alongside exact", () => {
-      expect(usdcOnlyPolicy(MONAD_TESTNET)(2, [escrowRow(), requirement()])).toHaveLength(2);
+      expect(usdcOnlyPolicy(ARC_TESTNET)(2, [escrowRow(), requirement()])).toHaveLength(2);
     });
   });
 });

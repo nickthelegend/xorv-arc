@@ -1,15 +1,15 @@
 {
   "name": "@xorv/protocol",
   "version": "0.2.0",
-  "description": "Shared Xorv protocol: domain types, money math, Monad chain config, XorvLedger + ERC-8004 helpers, x402 (EVM exact) wiring and OpenAI-compatible LLM presets.",
+  "description": "Shared Xorv protocol: domain types, money math, Arc chain config (USDC gas, CCTP, Gateway, Memo, CCIP), Memo tagging, XorvLedger + ERC-8004 helpers, x402 (EVM exact) wiring and OpenAI-compatible LLM presets.",
   "license": "MIT",
-  "homepage": "https://github.com/nickthelegend/xorv-monad#readme",
+  "homepage": "https://github.com/nickthelegend/xorv-arc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nickthelegend/xorv-monad.git",
+    "url": "git+https://github.com/nickthelegend/xorv-arc.git",
     "directory": "packages/protocol"
   },
-  "bugs": "https://github.com/nickthelegend/xorv-monad/issues",
+  "bugs": "https://github.com/nickthelegend/xorv-arc/issues",
   "type": "module",
   "engines": {
     "node": ">=20.19.0"

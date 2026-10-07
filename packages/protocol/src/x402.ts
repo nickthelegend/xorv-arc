@@ -1,11 +1,11 @@
 /**
  * Xorv's x402 facilitator wiring (server side, Node only).
  *
- * Xorv can run its **own** facilitator in-process instead of calling out to a
- * hosted one. On Monad the facilitator is the account that submits the buyer's
- * signed EIP-3009 authorization and pays the MON gas for it, so running it
- * ourselves is what lets a job poster hold nothing but USDC and still transact
- * — without depending on a third party's uptime or signup. `x402Facilitator`
+ * Xorv runs its **own** facilitator in-process. On Arc the facilitator is the
+ * account that submits the buyer's signed EIP-3009 authorization and pays the
+ * gas for it, in USDC, so a job poster signs typed data and never sends a
+ * transaction. There is no public x402 facilitator for Arc, and running our
+ * own is also what lets it fund XorvEscrow (only the escrow's attester may). `x402Facilitator`
  * implements the same `FacilitatorClient` surface the HTTP client does, so the
  * resource server cannot tell the difference — which is the point:
  * self-hosted and hosted are a config flag, not two code paths.
@@ -26,10 +26,13 @@ import type {
 } from "@x402/core/types";
 import { toFacilitatorEvmSigner } from "@x402/evm";
 import { ExactEvmScheme as ExactEvmFacilitatorScheme } from "@x402/evm/exact/facilitator";
-import { getAddress, type Account, type PublicClient, type Transport, type WalletClient } from "viem";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { getAddress, type Account, type Address, type Hex, type PublicClient, type Transport, type WalletClient } from "viem";
 import { EscrowFacilitatorScheme } from "./escrow.js";
 import { networkConfig } from "./chains.js";
 import { walletClientFor, withGasHeadroom, withSignerLock } from "./evm.js";
+import { readEnv } from "./env.js";
+import { jobMemo, wrapWithMemo, type MemoTag } from "./memo.js";
 import { writeContractSync, type SyncWrite } from "./sync-send.js";
 
 /** Where log lines go; the broker passes its own, tests pass a spy. */
@@ -38,7 +41,7 @@ export type X402Logger = (line: string) => void;
 /**
  * How long settlement waits for the `transferWithAuthorization` receipt.
  *
- * Monad finalizes in ~600 ms, so 30 s is dozens of blocks of slack — long
+ * Arc finalizes in under a second, so 30 s is dozens of blocks of slack — long
  * enough for an RPC hiccup, short enough that a stuck settlement fails the
  * request instead of holding it for the library's 3-minute default.
  */
@@ -102,15 +105,17 @@ export function logPaymentRejections(
 /**
  * An in-process facilitator backed by our own EOA.
  *
- * The EOA needs MON (Monad also holds back a ~10 MON reserve per account for
- * in-flight gas, so keep it funded above that) and no USDC at all.
+ * The EOA needs a little USDC for gas (Arc's gas token) and holds none of the
+ * buyers' money: payments go buyer → provider, or buyer → escrow.
  *
  * Every write goes through `withSignerLock` and carries an explicit gas limit
- * of estimate + headroom: Monad bills the limit, so viem's unpadded estimate
- * is the floor and a fixed constant would overpay on every settlement. The
- * lock is shared per address with every other writer in the process (the
- * ledger writer, the rating relay), so a facilitator that shares the
- * operator's key cannot race it for a nonce.
+ * of estimate + headroom. The lock is shared per address with every other
+ * writer in the process (the ledger writer, the rating relay), so a
+ * facilitator that shares the operator's key cannot race it for a nonce.
+ *
+ * Every money movement is tagged with Arc's Memo extension (see `memo.ts`):
+ * escrow writes carry their job id, and a direct `transferWithAuthorization`
+ * carries the job id the broker set with `withSettlementMemo`.
  */
 export function buildLocalFacilitator(opts: {
   network: string;
@@ -127,11 +132,14 @@ export function buildLocalFacilitator(opts: {
   escrow?: string | null;
   /** Called around each escrow write, so background RPC readers can back off. */
   onEscrowWrite?: (phase: "start" | "end") => void;
+  /** Arc's Memo contract; defaults to the network's, `null` turns tagging off. */
+  memo?: Address | null;
 }): FacilitatorClient {
   const log = opts.log ?? console.error;
   const cfg = networkConfig(opts.network);
   const account = opts.account;
   const wallet = walletClientFor(cfg.caip2, account, { rpcUrl: opts.rpcUrl, transport: opts.transport });
+  const memo = opts.memo === undefined ? memoContractFor(cfg.caip2) : opts.memo;
 
   const signer = toFacilitatorEvmSigner(
     {
@@ -141,6 +149,14 @@ export function buildLocalFacilitator(opts: {
       verifyTypedData: (args) => wallet.verifyTypedData(args as never),
       writeContract: (args) =>
         withSignerLock(account.address, async () => {
+          const tag = settlementMemo.getStore();
+          if (memo && tag) {
+            // The x402 transferWithAuthorization, routed through Arc's Memo with the job's id.
+            const wrapped = wrapWithMemo(memo, { address: args.address, abi: args.abi as never, functionName: args.functionName, args: args.args ?? [], gas: 0n }, tag);
+            const req = { address: wrapped.address, abi: wrapped.abi, functionName: wrapped.functionName, args: wrapped.args, account };
+            const gas = withGasHeadroom(await wallet.estimateContractGas(req as never));
+            return wallet.writeContract({ ...req, gas } as never);
+          }
           const request = { ...args, args: args.args ?? [], account };
           const gas =
             args.gas ?? withGasHeadroom(await wallet.estimateContractGas(request as never));
@@ -164,7 +180,7 @@ export function buildLocalFacilitator(opts: {
     facilitator.register(
       cfg.caip2 as Network,
       new EscrowFacilitatorScheme(
-        { public: wallet as unknown as PublicClient, wallet: escrowWriter(wallet, account) },
+        { public: wallet as unknown as PublicClient, wallet: escrowWriter(wallet, account, memo) },
         { escrow: getAddress(opts.escrow), onWrite: opts.onEscrowWrite },
       ),
     );
@@ -203,20 +219,62 @@ export function buildLocalFacilitator(opts: {
 }
 
 /**
+ * The memo a settlement should carry, set by the broker around the x402
+ * `settle` call (`withSettlementMemo`). An AsyncLocalStorage, so concurrent
+ * settlements each tag their own job.
+ */
+const settlementMemo = new AsyncLocalStorage<MemoTag>();
+
+/** Run `fn` with every facilitator write inside it tagged with `tag` (Arc Memo). */
+export function withSettlementMemo<T>(tag: MemoTag | null, fn: () => Promise<T>): Promise<T> {
+  return tag ? settlementMemo.run(tag, fn) : fn();
+}
+
+/**
+ * Arc's Memo contract for this network, or null when tagging is off
+ * (`XORV_MEMO=off`, e.g. on a plain dev chain that has no Memo predeploy).
+ */
+export function memoContractFor(network: string): Address | null {
+  const flag = readEnv("XORV_MEMO")?.toLowerCase();
+  if (flag === "off" || flag === "0" || flag === "false") return null;
+  return networkConfig(network).circle.memo;
+}
+
+/** The escrow job id a write is about: `fund(Funding)` carries it in the struct, the rest take it first. */
+function escrowJobOf(functionName: string, args: readonly unknown[]): Hex | null {
+  const first = args[0];
+  if (functionName === "fund" || functionName === "fundDirect") {
+    const id = (first as { jobId?: Hex } | undefined)?.jobId ?? (typeof first === "string" ? first : undefined);
+    return (id as Hex | undefined) ?? null;
+  }
+  return typeof first === "string" && first.startsWith("0x") && first.length === 66 ? (first as Hex) : null;
+}
+
+/**
  * The wallet the escrow scheme writes through: the same per-signer lock and
  * gas headroom as the exact scheme above, so an escrow funding and any other
  * write from this key (a ledger receipt, a release) can't race on a nonce.
+ * With `memo` set, every escrow write goes through Arc's Memo contract tagged
+ * with its job id (`xorv:fund`, `xorv:release`, …); the escrow still sees this
+ * EOA as msg.sender, so attester checks are unchanged.
  */
-export function escrowWriter(wallet: ReturnType<typeof walletClientFor>, account: Account): WalletClient {
+export function escrowWriter(wallet: ReturnType<typeof walletClientFor>, account: Account, memo: Address | null = null): WalletClient {
   return {
     account,
     chain: wallet.chain,
-    // Receipt-in-response on Monad (eth_sendRawTransactionSync), with a plain send as the fallback.
     writeContract: (args: Record<string, unknown>) =>
       withSignerLock(account.address, async () => {
-        const request = { ...args, account };
-        const gas = (args.gas as bigint | undefined) ?? withGasHeadroom(await wallet.estimateContractGas(request as never));
-        return writeContractSync(wallet, account, { ...(args as unknown as SyncWrite), gas });
+        const write = args as unknown as SyncWrite;
+        const jobId = memo ? escrowJobOf(write.functionName, write.args ?? []) : null;
+        const target: SyncWrite =
+          memo && jobId ? (wrapWithMemo(memo, { ...write, gas: 0n }, jobMemo(jobId, write.functionName)) as SyncWrite) : write;
+        const request = { address: target.address, abi: target.abi, functionName: target.functionName, args: target.args, account };
+        const gas =
+          memo && jobId
+            ? withGasHeadroom(await wallet.estimateContractGas(request as never))
+            : ((args.gas as bigint | undefined) ?? withGasHeadroom(await wallet.estimateContractGas(request as never)));
+        // Sends with eth_sendRawTransactionSync where a node offers it; Arc's RPC doesn't, so it falls back.
+        return writeContractSync(wallet, account, { ...target, gas });
       }),
   } as unknown as WalletClient;
 }
@@ -240,7 +298,8 @@ export interface FacilitatorChoice {
  * Pick a facilitator from config (`XORV_FACILITATOR`).
  *
  *  - `self` (the default) runs one in-process and needs a funded `account`;
- *  - `hosted` is the facilitator Monad's docs use (NetworkConfig.facilitatorUrl);
+ *  - `hosted` is the network's public facilitator (NetworkConfig.facilitatorUrl),
+ *    which Arc does not have today, so it is refused there;
  *  - an `http(s)://` URL is any other hosted facilitator.
  *
  * `self` without an account throws with the fix in the message rather than
@@ -257,6 +316,8 @@ export function buildFacilitator(opts: {
   /** XorvEscrow address; self-hosted only (the account must be its attester). */
   escrow?: string | null;
   onEscrowWrite?: (phase: "start" | "end") => void;
+  /** Arc's Memo contract; defaults to the network's (see `memoContractFor`). */
+  memo?: Address | null;
 }): FacilitatorChoice {
   const mode = (opts.mode ?? "").trim() || "self";
   const cfg = networkConfig(opts.network);
@@ -264,8 +325,8 @@ export function buildFacilitator(opts: {
   if (mode === "self") {
     if (!opts.account) {
       throw new Error(
-        "the self-hosted x402 facilitator needs a funded key (XORV_FACILITATOR_KEY, or XORV_OPERATOR_KEY) " +
-          `to pay settlement gas — or set XORV_FACILITATOR=hosted to use ${cfg.facilitatorUrl}`,
+        "the self-hosted x402 facilitator needs a key holding a little USDC for gas " +
+          "(XORV_FACILITATOR_KEY, or XORV_OPERATOR_KEY) — or set XORV_FACILITATOR to a hosted facilitator's URL",
       );
     }
     return {
@@ -277,6 +338,7 @@ export function buildFacilitator(opts: {
         log: opts.log,
         escrow: opts.escrow,
         onEscrowWrite: opts.onEscrowWrite,
+        memo: opts.memo,
       }),
       mode: "self",
       description: "self-hosted (in-process)",
@@ -286,6 +348,9 @@ export function buildFacilitator(opts: {
   }
 
   const url = mode === "hosted" ? cfg.facilitatorUrl : mode;
+  if (url === null) {
+    throw new Error(`there is no public x402 facilitator for ${cfg.name}: use XORV_FACILITATOR=self (the default) or a facilitator URL`);
+  }
   if (!/^https?:\/\//i.test(url)) {
     throw new Error(`XORV_FACILITATOR must be "self", "hosted" or an http(s) URL, got "${mode}"`);
   }

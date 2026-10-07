@@ -18,7 +18,7 @@
  * on-chain, carrying an x402 `proofOfPayment` — so "this rating came from
  * someone who actually paid" is checkable, not claimed.
  *
- * Deployed version on Monad is 2.0.0 (`int128 value` + `uint8 valueDecimals`,
+ * Deployed version on Arc is 2.0.0 (`int128 value` + `uint8 valueDecimals`,
  * no `feedbackAuth`). Libraries written against the older `uint8 score` ABI
  * will not match these contracts.
  */
@@ -289,7 +289,7 @@ export function agentRegistryId(network: string): string {
 }
 
 /**
- * Agent ids are sequential from 0 (Monad mainnet is around 10k), so they fit a
+ * Agent ids are sequential from 0 (Arc testnet is past 50k), so they fit a
  * JSON number — which is what the spec's examples use. Refuse the absurd case
  * rather than emit a silently rounded id.
  */
