@@ -10,8 +10,8 @@ export const APP_URL = (process.env.NEXT_PUBLIC_XORV_APP_URL?.trim() || "http://
 );
 export const LOOM_URL = "https://loompad.tech";
 export const X402_URL = "https://x402.org";
-export const ARC_URL = "https://arc.network";
-export const ARC_DOCS_URL = "https://docs.arc.network";
+export const ARC_URL = "https://www.arc.io";
+export const ARC_DOCS_URL = "https://docs.arc.io";
 /** Circle's faucet: testnet USDC, which on Arc is also the gas token. */
 export const FAUCET_URL = "https://faucet.circle.com";
 export const GATEWAY_URL = "https://developers.circle.com/gateway";
