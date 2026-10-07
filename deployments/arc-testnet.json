@@ -1,1 +1,7 @@
-{"network":"testnet","chainId":5042002,"status":"not deployed"}
+{
+  "network": "testnet",
+  "chainId": 5042002,
+  "status": "not deployed",
+  "blocker": "the shared deployer 0x0648aDF1967692A0c991d7715b0b588452321FBd holds 0 USDC on Arc testnet; `scripts/deploy.sh testnet` (2026-10-08) simulated fine and stopped at broadcast: insufficient funds (estimated 11,995,143 gas, at most 0.72 USDC at the 60 gwei max fee; 9,221,076 gas / 0.20 USDC actually used on an Arc testnet fork)",
+  "broker": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F"
+}
