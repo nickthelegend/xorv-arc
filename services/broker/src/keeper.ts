@@ -181,7 +181,9 @@ export class RefundKeeper {
         this.open.set(job.jobId.toLowerCase(), job);
         if (this.opts.ccipReceiver && job.buyer.toLowerCase() === this.opts.ccipReceiver.toLowerCase()) {
           this.crossChain.set(job.jobId.toLowerCase(), job);
-          const intent = await this.intent(job.jobId, from, to).catch(() => null);
+          // IntentReceived is in the funding tx (or an earlier one, when the dollars arrived late):
+          // look a few thousand blocks back from it, inside Arc's 10,000-block getLogs cap.
+          const intent = await this.intent(job.jobId, job.blockNumber > 5_000n ? job.blockNumber - 5_000n : 0n, job.blockNumber).catch(() => null);
           (this.opts.onCrossChainFunded ?? this.crossChainHandler)?.(job, intent);
         }
       }
@@ -203,7 +205,7 @@ export class RefundKeeper {
     let messageId: Hex | null = null;
     if (fromBlock !== undefined && toBlock !== undefined) {
       const logs = await this.client
-        .getLogs({ address: receiver, event: INTENT_RECEIVED, args: { jobId }, fromBlock: fromBlock > 20_000n ? fromBlock - 20_000n : 0n, toBlock })
+        .getLogs({ address: receiver, event: INTENT_RECEIVED, args: { jobId }, fromBlock, toBlock })
         .catch(() => []);
       messageId = ((logs.at(-1)?.args as { messageId?: Hex } | undefined)?.messageId ?? null) as Hex | null;
     }
