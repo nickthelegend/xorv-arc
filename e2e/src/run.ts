@@ -902,8 +902,9 @@ async function main(): Promise<void> {
       report.equal(`earnings: ${which} amount is the settled USDC`, row?.amount, job.payment?.amount);
       report.equal(`earnings: ${which} carries its settlement tx`, row?.transactionId, job.payment?.txHash);
     }
-    // USDC has 6 decimals, so micro-dollars and token units coincide.
-    report.equal("earnings total is the provider's on-chain USDC balance", BigInt(ledger.total), await usdcBalance(fork.client, USDC, parties.provider.address));
+    // USDC has 6 decimals, so micro-dollars and token units coincide. The provider started with a
+    // little USDC for gas (Arc's gas token), so its earnings are what arrived since it went live.
+    report.equal("earnings total is what the provider received on chain", BigInt(ledger.total), (await usdcBalance(fork.client, USDC, parties.provider.address)) - providerStart);
   });
 
   await report.step("the private answer never touched the broker's disk", async () => {

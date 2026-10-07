@@ -175,6 +175,8 @@ export async function startMockLlm(opts: { keys: Record<MockPreset, string> }): 
         toolCalls = [
           call("select_provider", {
             providerId: pick?.providerId ?? "none",
+            // Name the adapter too: one provider can offer several, and without it the cheapest wins.
+            ...(pick?.adapter ? { adapter: pick.adapter } : {}),
             reason: `${pick?.adapter ?? "this provider"} answers a self-contained question in one pass`,
             difficulty: "easy",
           }),
