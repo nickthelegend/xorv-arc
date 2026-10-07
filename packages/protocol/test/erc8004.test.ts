@@ -45,14 +45,14 @@ describe("buildAgentRegistration", () => {
       network: ARC_TESTNET,
       agentId: "42",
       name: "xorv-node-7f3a (Claude Code)",
-      description: "Rents idle Claude Code capacity; pay per job in USDC via x402 on Monad.",
+      description: "Rents idle Claude Code capacity; pay per job in USDC via x402 on Arc.",
       image: "https://app.xorv.xyz/nodes/7f3a.png",
       services,
     });
     expect(file).toEqual({
       type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
       name: "xorv-node-7f3a (Claude Code)",
-      description: "Rents idle Claude Code capacity; pay per job in USDC via x402 on Monad.",
+      description: "Rents idle Claude Code capacity; pay per job in USDC via x402 on Arc.",
       image: "https://app.xorv.xyz/nodes/7f3a.png",
       services: [
         { name: "web", endpoint: "https://app.xorv.xyz/providers/prv_1" },

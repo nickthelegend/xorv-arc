@@ -14,7 +14,7 @@ import {
 } from "../src/escrow.js";
 
 const ESCROW = "0x5FbDB2315678afecb367f032d93F642f64180aa3" as Address;
-const AUSD = "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC" as Address;
+const USDC = "0x3600000000000000000000000000000000000000" as Address;
 const PROVIDER = "0xff212ecb82E3b06c0a2A7a9Ce343e0a1868c489B" as Address;
 const buyer = privateKeyToAccount(
   "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
@@ -26,13 +26,13 @@ function requirements(over: Partial<PaymentRequirements> = {}): PaymentRequireme
   return {
     scheme: ESCROW_SCHEME,
     network: "eip155:5042002",
-    asset: AUSD,
+    asset: USDC,
     amount: "250000",
     payTo: ESCROW,
     maxTimeoutSeconds: 300,
     extra: {
-      name: "Agora Dollar",
-      version: "1",
+      name: "USDC",
+      version: "2",
       escrow: ESCROW,
       jobId: escrowJobId("q_123"),
       deadline: DEADLINE,
@@ -159,17 +159,17 @@ describe("EscrowFacilitatorScheme.verify", () => {
     expect(v).toEqual({ isValid: true, payer: buyer.address });
   });
 
-  it("with a Cleanverse gate, accepts CVI-verified parties and names whichever is not", async () => {
+  it("with an identity gate set, accepts verified parties and names whichever is not", async () => {
     const p = await signedPayload();
     const both = [buyer.address.toLowerCase(), PROVIDER.toLowerCase()];
     expect(await facilitator({ verified: both }).verify(p, requirements())).toEqual({ isValid: true, payer: buyer.address });
 
     const noBuyer = await facilitator({ verified: [PROVIDER.toLowerCase()] }).verify(p, requirements());
     expect(noBuyer).toMatchObject({ isValid: false, invalidReason: "identity_not_verified" });
-    expect(noBuyer.invalidMessage).toContain(`buyer ${buyer.address} holds no active Cleanverse A-Pass`);
+    expect(noBuyer.invalidMessage).toContain(`buyer ${buyer.address} is not verified by this escrow's identity gate`);
 
     const noProvider = await facilitator({ verified: [buyer.address.toLowerCase()] }).verify(p, requirements());
-    expect(noProvider.invalidMessage).toMatch(/^provider 0x[0-9a-fA-F]{40} holds no active Cleanverse A-Pass/);
+    expect(noProvider.invalidMessage).toMatch(/^provider 0x[0-9a-fA-F]{40} is not verified by this escrow's identity gate/);
   });
 
   it("rejects a signature from someone else", async () => {

@@ -16,7 +16,7 @@
  * to the recipient it names (no destination caller is set).
  *
  * This module is pure (no I/O): building and checking intents. The broker
- * owns the HTTP calls and the mint (`services/broker/src/gateway.ts`).
+ * owns the HTTP calls and the mint (`services/broker/src/arc.ts`).
  * Adapted from polaris-arc's Gateway server.
  */
 

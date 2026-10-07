@@ -60,7 +60,8 @@ export const NATIVE_DECIMALS = 18;
 
 /**
  * Arc's mempool refuses transactions whose maxFeePerGas is under 20 gwei
- * (docs.arc.io, EVM differences). Writers floor their fee at this.
+ * (docs.arc.io, EVM differences). viem's fee estimate already clears it (the
+ * base fee sits at the floor); kept for anything that sets fees by hand.
  */
 export const ARC_MIN_FEE_PER_GAS_WEI = 20_000_000_000n;
 

@@ -58,7 +58,7 @@ describe("formatUsd", () => {
 });
 
 describe("USDC conversion", () => {
-  it("uses Monad USDC's 6 decimals", () => {
+  it("uses Arc USDC's 6 decimals (ERC-20 view)", () => {
     expect(USDC_DECIMALS).toBe(6);
   });
 

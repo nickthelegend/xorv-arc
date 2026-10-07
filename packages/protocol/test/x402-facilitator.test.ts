@@ -1,10 +1,10 @@
 /**
  * The in-process facilitator is what moves the money, so it is exercised end
- * to end against a scripted Monad RPC: a real buyer payload, real EIP-3009
+ * to end against a scripted Arc RPC: a real buyer payload, real EIP-3009
  * signature checks, a real signed `transferWithAuthorization` transaction —
  * with the network replaced by a fake that records every call. That is how we
- * can assert the things that matter on Monad specifically: the gas limit is
- * estimate + headroom (Monad bills the limit), and rejections are logged with
+ * can assert the things that matter: the gas limit is estimate + headroom
+ * (one agreed margin, so a shifted estimate can't run short), and rejections are logged with
  * a reason instead of disappearing into a bare 402.
  */
 
@@ -76,7 +76,7 @@ async function buyerPayload(reqs: PaymentRequirements) {
   return { payer, payload: (await client.createPaymentPayload(paymentRequired)) as PaymentPayload };
 }
 
-/** A Monad testnet node with a USDC contract, an EOA payer, and a mempool of one. */
+/** An Arc testnet node with a USDC contract, an EOA payer, and a mempool of one. */
 function monadNode() {
   const sent: Hex[] = [];
   const rpc = fakeRpc({
@@ -150,7 +150,7 @@ function monadNode() {
 }
 
 describe("buildLocalFacilitator", () => {
-  it("advertises exact on Monad testnet, signed by its own EOA", async () => {
+  it("advertises exact on Arc testnet, signed by its own EOA", async () => {
     const node = monadNode();
     const account = accountFromKey(generatePrivateKey());
     const facilitator = buildLocalFacilitator({ network: ARC_TESTNET, account, transport: node.transport, log: () => {} });
@@ -213,7 +213,7 @@ describe("buildLocalFacilitator", () => {
     const tx = parseTransaction(node.sent[0]!);
     expect(tx.chainId).toBe(5042002);
     expect(getAddress(tx.to!)).toBe(USDC);
-    // Monad bills the gas limit: exactly estimate × 1.15, never a padded constant.
+    // Exactly estimate × 1.15, never a padded constant.
     expect(tx.gas).toBe(withGasHeadroom(ESTIMATE));
     expect(tx.nonce).toBe(5);
     const { functionName, args } = decodeFunctionData({ abi: eip3009ABI, data: tx.data! });

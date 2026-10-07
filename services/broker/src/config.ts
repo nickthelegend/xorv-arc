@@ -7,9 +7,10 @@
  * names the fix, not three seconds into someone's first paid job.
  *
  * Nothing here is *required*. A broker with no keys at all still boots: it
- * matches and dispatches jobs, takes payments through the hosted facilitator,
- * and serves the ledger read-only. Keys add capabilities (a self-hosted
- * facilitator, ledger writes, rating relays); they are not the price of
+ * matches providers and serves the ledger read-only, with payments off (Arc
+ * has no public x402 facilitator, so taking payments needs the self-hosted
+ * one's key). Keys add capabilities (settlement, ledger writes, rating
+ * relays, Gateway mints, the refund keeper); they are not the price of
  * starting the process — which is what lets the test suite and a first-time
  * demo run with no secrets.
  */

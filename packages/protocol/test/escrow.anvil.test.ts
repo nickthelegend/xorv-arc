@@ -63,8 +63,8 @@ const PORT = await new Promise<number>((resolve, reject) => {
 });
 const chain = defineChain({
   id: 5042002,
-  name: "anvil-as-monad-testnet",
-  nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+  name: "anvil-as-arc-testnet",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: { default: { http: [`http://127.0.0.1:${PORT}`] } },
 });
 
@@ -115,8 +115,8 @@ describe.skipIf(!hasAnvil || !hasBuild)("escrow scheme on anvil", () => {
       payTo: escrow,
       maxTimeoutSeconds: 300,
       extra: {
-        name: "Agora Dollar",
-        version: "1",
+        name: "USDC",
+        version: "2",
         escrow,
         jobId: escrowJobId(quoteId),
         deadline: Number(block.timestamp) + 1800,
@@ -150,12 +150,13 @@ describe.skipIf(!hasAnvil || !hasBuild)("escrow scheme on anvil", () => {
         await new Promise((r) => setTimeout(r, 100));
       }
     }
-    token = await deploy("MockERC3009", ["Agora Dollar", "1"]);
+    token = await deploy("MockERC3009", ["USDC", "2"]);
     escrow = await deploy("XorvEscrow", [
       operator.address,
       operator.address,
       "0x0000000000000000000000000000000000000000",
       [token],
+      100_000_000n, // maxJobAmount: 100 USDC
     ]);
     const mint = await wallet.writeContract({
       address: token,

@@ -8,10 +8,13 @@
  * `Memo(sender, target, callDataHash, memoId, memo, memoIndex)`.
  *
  * Xorv routes its own money movements through it: the facilitator's escrow
- * `fund`, the attester's `release` / `refund` / `cancel` / `reassign`, and the
- * x402 `transferWithAuthorization` of a direct payment. `memoId` is the job's
- * bytes32 id (the same id XorvEscrow and XorvLedger key the job by), and
- * `memoData` is a short UTF-8 tag such as `xorv:release:<broker job id>`. Anyone
+ * `fund`, the attester's `release` / `refund` / `cancel` / `reassign`, the
+ * keeper's deadline refunds, and the x402 `transferWithAuthorization` of a
+ * direct payment. `memoId` is the escrow job id, `keccak256("xorv:job:" +
+ * quoteId)` (`escrowJobId`), for both schemes, and `memoData` is a short UTF-8
+ * tag: `xorv:<escrow function>` for escrow writes, `xorv:pay:<quote id>` for a
+ * direct payment. Calls a contract makes (the CCIP receiver's `fundDirect`)
+ * can't go through Memo, which only accepts an EOA caller. Anyone
  * reconciling Arc's USDC flows can look a transfer up by job without Xorv's
  * database, by filtering `Memo` events on `memoId`.
  *
@@ -90,9 +93,9 @@ export function jobMemo(jobId: Hex, action: string, label?: string): MemoTag {
   return { memoId: jobId, text };
 }
 
-/** The bytes32 memo id for a broker job id string (same derivation as XorvLedger's jobId). */
-export function memoIdForJob(brokerJobId: string): Hex {
-  return keccak256(stringToHex(brokerJobId));
+/** The bytes32 memo id the broker uses for a quote: the escrow job id, `keccak256("xorv:job:" + quoteId)`. */
+export function memoIdForQuote(quoteId: string): Hex {
+  return keccak256(stringToHex(`xorv:job:${quoteId}`));
 }
 
 /** A contract write, as the writers in this repo describe it. */

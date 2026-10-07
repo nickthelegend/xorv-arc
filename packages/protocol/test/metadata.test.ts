@@ -2,7 +2,7 @@
  * @xorv/protocol is published alongside the CLI, MCP server and MetaMask
  * plugin that depend on it, so its npm page must name this repository (the
  * root package.json's), not the Hedera prototype (nickthelegend/xorv) that
- * Xorv was ported from and that has none of the Monad work. The package has
+ * Xorv was ported from and that has none of this work. The package has
  * no README of its own, so its homepage is the repository's.
  */
 

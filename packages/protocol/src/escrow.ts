@@ -312,12 +312,9 @@ const ERC20_READ_ABI = [
   },
 ] as const;
 
-/** IIdentityGate, plus CleanverseGate's views for describing it. */
+/** IIdentityGate: the escrow's optional allowlist (off by default on Arc). */
 export const IDENTITY_GATE_ABI = [
   { name: "isVerified", type: "function", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "bool" }] },
-  { name: "apass", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { name: "validator", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { name: "pool", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const;
 
 /** The escrow's identity gate, or null when anyone may transact. */
@@ -464,10 +461,10 @@ export class EscrowFacilitatorScheme implements SchemeNetworkFacilitator {
       const parties = [getAddress(auth.from), ...(extra.provider ? [extra.provider] : [])];
       const [buyerOk, providerOk = true] = await identityVerified(pub, gate, parties);
       if (!buyerOk) {
-        return invalid("identity_not_verified", `buyer ${auth.from} holds no active Cleanverse A-Pass; this escrow requires CVI-verified parties`, payer);
+        return invalid("identity_not_verified", `buyer ${auth.from} is not verified by this escrow's identity gate`, payer);
       }
       if (!providerOk) {
-        return invalid("identity_not_verified", `provider ${extra.provider} holds no active Cleanverse A-Pass; this escrow requires CVI-verified parties`, payer);
+        return invalid("identity_not_verified", `provider ${extra.provider} is not verified by this escrow's identity gate`, payer);
       }
     }
     return { isValid: true, payer };

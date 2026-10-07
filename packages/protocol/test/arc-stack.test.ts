@@ -18,7 +18,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { recoverTypedDataAddress } from "viem";
 import { ARC_MAINNET, ARC_TESTNET, remoteChain } from "../src/chains.js";
-import { MEMO_ABI, jobMemo, memoEventsIn, memoIdForJob, wrapWithMemo } from "../src/memo.js";
+import { MEMO_ABI, jobMemo, memoEventsIn, memoIdForQuote, wrapWithMemo } from "../src/memo.js";
 import {
   BURN_INTENT_DOMAIN,
   BURN_INTENT_TYPES,
@@ -59,8 +59,8 @@ describe("Arc Memo", () => {
     expect(jobMemo(JOB, "fund", "x".repeat(500)).text.length).toBeLessThanOrEqual(96);
   });
 
-  it("derives the memo id of a broker job like XorvLedger does", () => {
-    expect(memoIdForJob("job_abc")).toBe(keccak256(stringToHex("job_abc")));
+  it("uses the escrow job id as the memo id for a quote", () => {
+    expect(memoIdForQuote("qte_1")).toBe(JOB);
   });
 
   it("decodes Memo events from a receipt and skips everything else", () => {
