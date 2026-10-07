@@ -117,7 +117,7 @@ export function ratingParts(
 /**
  * ERC-8004 `tag2`: the adapter that ran the job, so reputation can be read per
  * adapter ("how good is this node's Claude Code?"). Kept short — every byte of
- * a tag is stored by the Reputation Registry, and Monad charges for state.
+ * a tag is stored by the Reputation Registry, and storage costs gas.
  */
 export function ratingTag(job: StoredJob): string {
   return (job.capabilityAdapter ?? job.request.adapter ?? "unknown").slice(0, 31);

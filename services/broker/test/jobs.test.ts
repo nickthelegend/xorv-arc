@@ -157,14 +157,14 @@ describe("job lifecycle", () => {
   it("carries the settlement it was bought with from the moment it exists", () => {
     const payment = {
       asset: "usdc" as const,
-      assetAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+      assetAddress: "0x3600000000000000000000000000000000000000",
       amount: "1000",
-      network: "eip155:10143",
+      network: "eip155:5042002",
       txHash: `0x${"ab".repeat(32)}`,
       payer: "0x2222222222222222222222222222222222222222",
       payTo: PAYEE,
       settledAt: Date.now(),
-      explorerUrl: "https://testnet.monadscan.com/tx/0xab",
+      explorerUrl: "https://explorer.testnet.arc.io/tx/0xab",
     };
     const job = store.createJob(store.createQuote(quoteInput()), { payment, cancelTokenHash: "h" });
     expect(store.get(job.id)!.payment).toEqual(payment);

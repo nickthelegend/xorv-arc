@@ -112,14 +112,14 @@ function job(over: Partial<StoredJob> = {}): StoredJob {
     priceUsdMicros: 1_000,
     payment: {
       asset: "usdc",
-      assetAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+      assetAddress: "0x3600000000000000000000000000000000000000",
       amount: "1000",
-      network: "eip155:10143",
+      network: "eip155:5042002",
       txHash: `0x${"5e".repeat(32)}`,
       payer: "0x2222222222222222222222222222222222222222",
       payTo: "0xaaaa00000000000000000000000000000000000a",
       settledAt: 2,
-      explorerUrl: "https://testnet.monadscan.com/tx/0x",
+      explorerUrl: "https://explorer.testnet.arc.io/tx/0x",
     },
     result: "Blocks every half second / parallel lanes of state / finality waits not",
     resultHash: textHash("Blocks every half second / parallel lanes of state / finality waits not"),
@@ -353,7 +353,7 @@ describe("the Kimi verifier", () => {
 
 const VERIFIER = privateKeyToAccount(generatePrivateKey());
 const ENV = {
-  network: "eip155:10143",
+  network: "eip155:5042002",
   publicUrl: "https://broker.test",
   jobsEndpoint: "https://broker.test/api/quotes",
   ledger: "0x00000000000000000000000000000000000000AA",
@@ -375,9 +375,9 @@ describe("verification feedback (ERC-8004)", () => {
     expect(parts.feedbackURI).toBe("https://broker.test/verifications/job_test.json");
     expect(parts.feedbackHash).toBe(keccak256(stringToBytes(parts.bytes)));
     expect(parts.file).toMatchObject({
-      agentRegistry: "eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      agentRegistry: "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e",
       agentId: 7,
-      clientAddress: `eip155:10143:${VERIFIER.address}`,
+      clientAddress: `eip155:5042002:${VERIFIER.address}`,
       createdAt: "2026-10-01T12:00:00.000Z",
       value: 87,
       valueDecimals: 0,
@@ -388,7 +388,7 @@ describe("verification feedback (ERC-8004)", () => {
       proofOfPayment: {
         fromAddress: "0x2222222222222222222222222222222222222222",
         toAddress: getAddress("0xaaaa00000000000000000000000000000000000a"),
-        chainId: "10143",
+        chainId: "5042002",
         txHash: `0x${"5e".repeat(32)}`,
         amount: "1000",
         currency: "USDC",
@@ -419,7 +419,7 @@ describe("verification feedback (ERC-8004)", () => {
   it("counts writes and failures without hiding the error", async () => {
     let fail = false;
     const writer = new ReputationWriter({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       account: VERIFIER,
       submit: async () => {
         if (fail) throw new Error("insufficient funds for gas");
@@ -444,7 +444,7 @@ describe("verification feedback (ERC-8004)", () => {
         requests.push(method);
         switch (method) {
           case "eth_chainId":
-            return "0x279f"; // 10143
+            return "0x4cef52"; // 5042002
           case "eth_estimateGas":
             return `0x${ESTIMATE.toString(16)}`;
           case "eth_getTransactionCount":
@@ -483,10 +483,10 @@ describe("verification feedback (ERC-8004)", () => {
       },
     });
     // Sanity: the stub speaks enough JSON-RPC for viem.
-    expect(await createPublicClient({ transport }).getChainId()).toBe(10143);
+    expect(await createPublicClient({ transport }).getChainId()).toBe(5042002);
 
     const account = privateKeyToAccount(generatePrivateKey());
-    const writer = new ReputationWriter({ network: "eip155:10143", account, transport, log: quiet });
+    const writer = new ReputationWriter({ network: "eip155:5042002", account, transport, log: quiet });
     const feedbackHash = `0x${"cd".repeat(32)}` as Hex;
     const result = await writer.giveFeedback({
       agentId: "7",
@@ -522,7 +522,7 @@ describe("verification feedback (ERC-8004)", () => {
 // ---------------------------------------------------------------------------
 
 describe("createAiHooks", () => {
-  const base = { network: "eip155:10143", verifierAccount: null } as const;
+  const base = { network: "eip155:5042002", verifierAccount: null } as const;
 
   it("turns every role off without keys, and says which variable to set", () => {
     const log = vi.fn();
@@ -548,7 +548,7 @@ describe("createAiHooks", () => {
   it("turns roles on with their keys, and reports them without the keys", () => {
     const verifierAccount = privateKeyToAccount(generatePrivateKey());
     const hooks = createAiHooks({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       verifierAccount,
       ai: { router: "auto", screener: "hunyuan", verifier: "kimi", screenerFail: "closed" },
       env: { DASHSCOPE_API_KEY: "sk-a-000000000000", TOKENHUB_API_KEY: "sk-b-000000000000", MOONSHOT_API_KEY: "sk-c-000000000000" },

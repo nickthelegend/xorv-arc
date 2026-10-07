@@ -10,7 +10,6 @@
 
 import { MemoryPersistence, type Persistence } from "./store.js";
 import type { RoutingRecord, ScreeningRecord, VerificationRecord } from "./ai/types.js";
-import type { RelatedCheck } from "./trust/service.js";
 import {
   JOB_TIMEOUT_MS,
   QUOTE_TTL_SECONDS,
@@ -70,6 +69,8 @@ export interface Quote {
    * from expiring mid-settlement: money that moved must always find its quote.
    */
   paying?: boolean;
+  /** Asked for with `payVia: "ccip"`: funded from another chain through XorvCcipReceiver. Held until its escrow deadline. */
+  crossChain?: boolean;
   /**
    * A settlement for this quote was broadcast but not confirmed before the
    * facilitator stopped waiting. It may still land, so the quote stays locked
@@ -108,8 +109,6 @@ export interface StoredJob extends Job {
   screening?: ScreeningRecord | null;
   /** The verifier's (Kimi) score, with the bookkeeping that rebuilds its ERC-8004 feedback file. */
   verification?: VerificationRecord | null;
-  /** The Nansen related-wallet check run before relaying the buyer's rating (src/trust/). */
-  trustCheck?: RelatedCheck | null;
   /**
    * XorvLedger holds this job's receipt. Normally `receiptTxHash` says so;
    * this also covers a receipt found already recorded (a retry reverted as
@@ -212,6 +211,12 @@ export class JobStore {
   }
 
   /** A live quote; expired ones stop resolving — unless a payment for it is mid-settlement. */
+  /** The first live quote matching `predicate` (cross-chain fundings are matched by escrow job id). */
+  findQuote(predicate: (quote: Quote) => boolean): Quote | undefined {
+    for (const quote of this.quotes.values()) if (predicate(quote)) return quote;
+    return undefined;
+  }
+
   getQuote(id: string): Quote | undefined {
     const quote = this.quotes.get(id);
     if (!quote) return undefined;

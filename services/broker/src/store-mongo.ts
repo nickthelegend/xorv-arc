@@ -45,7 +45,7 @@ import {
 } from "./store.js";
 
 /** Used when no database name is configured; distinct from the Hedera-era "xorv". */
-const DEFAULT_DB = "xorv_monad";
+const DEFAULT_DB = "xorv_arc";
 const JOB_WINDOW = 500;
 const STATS_WINDOW = 1_000;
 const VAULT_WINDOW = 10_000;

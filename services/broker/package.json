@@ -2,7 +2,7 @@
   "name": "@xorv/broker",
   "version": "0.2.0",
   "private": true,
-  "description": "Xorv broker — provider registry, job matching, x402 settlement on Monad and the XorvLedger audit trail.",
+  "description": "Xorv broker — provider registry, job matching, x402 settlement in USDC on Arc, XorvEscrow settlement (Memo-tagged), the refund keeper, Circle Gateway minting, CCIP-funded jobs and the XorvLedger audit trail.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -15,7 +15,6 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "setup": "tsx src/scripts/setup.ts",
-    "nansen:probe": "tsx src/scripts/nansen-probe.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "usdc": "tsx src/scripts/usdc.ts"

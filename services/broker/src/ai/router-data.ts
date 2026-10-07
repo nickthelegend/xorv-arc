@@ -1,8 +1,8 @@
 /**
- * The real data behind the router's tools (router-tools.ts): Monad RPC for
+ * The real data behind the router's tools (router-tools.ts): Arc RPC for
  * ERC-8004, the broker's ledger reader for XorvLedger receipts (indexer
- * first, RPC fallback), the Envio indexer for provider aggregates, and the
- * Nansen trust cache.
+ * first, RPC fallback), the Envio indexer for provider aggregates, and
+ * XorvReputation for the escrow's settlement record.
  *
  * Every read is cached briefly (30 s by default). A quote with a real choice
  * runs a handful of reads, and a burst of quotes should cost the RPC and the
@@ -20,9 +20,8 @@ import {
 } from "@xorv/protocol";
 import { queryIndexer, toNumber, type IndexerOptions } from "../indexer.js";
 import type { LedgerReader } from "../ledger-reader.js";
-import type { PublicTrustSignal } from "../trust/index.js";
 import { VERIFIED_TAG1 } from "./feedback.js";
-import type { CandidateRef, Erc8004Read, IndexerStatsRead, ReceiptsRead, RouterData } from "./router-tools.js";
+import type { CandidateRef, Erc8004Read, EscrowOutcomesRead, IndexerStatsRead, ReceiptsRead, RouterData } from "./router-tools.js";
 
 export const ROUTER_DATA_CACHE_MS = 30_000;
 /** How many of the ledger's latest receipts and ratings `recent_receipts` searches. */
@@ -38,7 +37,8 @@ export interface RouterDataOptions {
   verifierAddress?: () => string | null;
   reader: LedgerReader | null;
   indexer: IndexerOptions | null;
-  trust?: { readonly enabled: boolean; publicSignal(address: string): PublicTrustSignal | null };
+  /** XorvReputation: a payout wallet's escrow settlement record. */
+  escrowOutcomes?: (address: string) => Promise<EscrowOutcomesRead>;
   /** Identity Registry `getAgentWallet`. */
   agentWallet?: (agentId: string) => Promise<string | null>;
   /** Reputation Registry `getSummary`; defaults to the protocol read over the network's RPC. */
@@ -236,10 +236,7 @@ export function createRouterData(opts: RouterDataOptions): RouterData {
     });
   };
 
-  if (opts.trust) {
-    const trust = opts.trust;
-    data.trust = (address: string) => ({ enabled: trust.enabled, signal: trust.publicSignal(address) });
-  }
+  if (opts.escrowOutcomes) data.escrowOutcomes = opts.escrowOutcomes;
 
   return data;
 }

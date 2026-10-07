@@ -66,7 +66,7 @@ export {
   type IndexerStatsRead,
   type ReceiptsRead,
   type RouterData,
-  type TrustRead,
+  type EscrowOutcomesRead,
 } from "./router-tools.js";
 export { ROUTER_DATA_CACHE_MS, ROUTER_RECEIPT_SCAN, createRouterData, type RouterDataOptions } from "./router-data.js";
 export {

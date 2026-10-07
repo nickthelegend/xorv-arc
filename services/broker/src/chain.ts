@@ -1,5 +1,5 @@
 /**
- * The broker's on-chain half: writes to XorvLedger on Monad.
+ * The broker's on-chain half: writes to XorvLedger on Arc.
  *
  * Four kinds of write, all from the operator EOA:
  *
@@ -13,11 +13,11 @@
  * and never throws into — or waits on — the request that triggered it. A job
  * poster must get their answer whether or not the audit trail kept up.
  *
- * ## Money on Monad, and why writes are shaped the way they are
+ * ## Gas on Arc, and why writes are shaped the way they are
  *
- * Monad bills the gas *limit*, not gas used. So every write carries an
- * explicit limit of `estimateGas` + 15% (protocol `withGasHeadroom`): a padded
- * constant would overpay on every transaction, and viem's bare estimate can
+ * Gas on Arc is paid in USDC, at a base fee around 20 gwei (a few hundredths
+ * of a cent per write). Every write carries an explicit limit of
+ * `estimateGas` + 15% (protocol `withGasHeadroom`): viem's bare estimate can
  * run short if state moves between estimate and inclusion.
  *
  * Receipts are batched because the fixed cost of a transaction (21k base gas,
@@ -66,7 +66,7 @@ import {
 const RECEIPT_TIMEOUT_MS = 30_000;
 /**
  * How far back a receipt that reverted as a duplicate is looked for, in
- * blocks (≈10 minutes of Monad). Duplicates come from this broker retrying
+ * blocks (a few minutes of Arc). Duplicates come from this broker retrying
  * its own receipt, so the original is recent; past this the receipt is still
  * known to be recorded (`jobs(jobId)` says so), just without its tx hash.
  */
@@ -97,7 +97,7 @@ export interface PublishResult {
  * A write that was broadcast but whose inclusion could not be confirmed (the
  * wait timed out, or the RPC failed mid-wait). It may still land, so its hash
  * is kept: re-sending blindly would revert as a duplicate, at the full gas
- * limit Monad bills, and sink any honest receipts batched with it.
+ * gas, and sink any honest receipts batched with it.
  */
 export class UnconfirmedWrite extends Error {
   constructor(
@@ -458,7 +458,7 @@ export class LedgerWriter implements ChainLike {
         return { buyer, agentId };
       },
       findRecorded: async (jobId) => {
-        // Public Monad RPCs cap eth_getLogs at 100 blocks, so walk back in
+        // Arc's public RPC caps eth_getLogs at 10,000 blocks, so walk back in
         // windows, a few at a time, newest first.
         const latest = await wallet.getBlockNumber();
         const floor = [latest - BigInt(DUPLICATE_SCAN_BLOCKS) + 1n, this.fromBlock ?? 0n, 0n].reduce((a, b) =>

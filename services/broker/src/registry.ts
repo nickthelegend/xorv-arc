@@ -5,7 +5,7 @@
  * record: it is only real while heartbeats keep arriving, so there is nothing
  * here worth surviving a restart. The durable half of the story — who
  * registered, who was alive, what each job paid — goes on-chain to XorvLedger
- * on Monad, where it is public and append-only rather than trapped in our
+ * on Arc, where it is public and append-only rather than trapped in our
  * database.
  */
 
@@ -48,27 +48,14 @@ export interface MatchOptions {
 /** A registration whose address is already normalized and whose agent id is verified (or null). */
 export type VerifiedRegistration = RegisterRequest & { agentId: string | null };
 
-/** A wallet's trust score, 0–100, or null for "no opinion" (see src/trust/). */
-export type TrustScorer = (address: string) => number | null;
-
-/**
- * How far a Nansen trust score can move a provider's reliability rank: at
- * most ±0.1 on the 0–1 success scale, at a score of 100 or 0. Enough to
- * order two equally priced, equally proven nodes; never enough to beat a
- * cheaper node, or to outrank a real track record (a node that finished
- * every job still beats an unproven one with a perfect wallet).
- */
-export const TRUST_TIEBREAK_WEIGHT = 0.1;
-
 /** A provider's reputation, 0–100 (buyer ratings and verifier scores), or null for no evidence. */
 export type ReputationScorer = (provider: ProviderRecord) => number | null;
 
 /**
  * How far reputation can move a provider's rank: at most ±0.2 on the 0–1
  * success scale, at a (shrunk) reputation of 100 or 0. It only ever orders
- * equally priced nodes — price sorts first — and it is worth more than the
- * wallet-trust nudge because it is what buyers and the verifier said about
- * delivered work. The broker feeds it from the Envio indexer when one is
+ * equally priced nodes — price sorts first — because it is what buyers and
+ * the verifier said about delivered work. The broker feeds it from the Envio indexer when one is
  * configured and from its own job records otherwise (ai/reputation-book.ts).
  */
 export const REPUTATION_TIEBREAK_WEIGHT = 0.2;
@@ -146,7 +133,6 @@ export class Registry {
    * should not see it reset because we deployed.
    */
   private restoredStats: Map<string, PersistedProviderStats>;
-  private trustScore: TrustScorer | null = null;
   private reputationScore: ReputationScorer | null = null;
   /** Whether a provider can be handed a job right now (its control channel is open); null = anyone live. */
   private eligible: ((id: string) => boolean) | null = null;
@@ -156,11 +142,6 @@ export class Registry {
   constructor(persistence: Persistence = new MemoryPersistence()) {
     this.persistence = persistence;
     this.restoredStats = persistence.loadStats();
-  }
-
-  /** Let the matcher weigh payout-wallet trust (Nansen) when it breaks ties. */
-  setTrustScorer(scorer: TrustScorer | null): void {
-    this.trustScore = scorer;
   }
 
   /** Let the matcher weigh indexed reputation (buyer ratings, verifier scores) when it breaks price ties. */
@@ -205,14 +186,13 @@ export class Registry {
 
   /**
    * The rank ties are broken on: reliability, nudged by reputation (buyer
-   * ratings and verifier scores) and by wallet trust. A provider a scorer
-   * knows nothing about is neutral, not penalised.
+   * ratings and verifier scores). A provider the scorer knows nothing about
+   * is neutral, not penalised.
    */
   private rankScore(provider: ProviderRecord): number {
     return (
       successScore(provider) +
-      nudge(this.reputationScore?.(provider), REPUTATION_TIEBREAK_WEIGHT) +
-      nudge(this.trustScore?.(provider.address), TRUST_TIEBREAK_WEIGHT)
+      nudge(this.reputationScore?.(provider), REPUTATION_TIEBREAK_WEIGHT)
     );
   }
 
@@ -371,8 +351,7 @@ export class Registry {
    * is acceptable — competing on price is the point of a capacity market. Ties
    * break toward the node with the better track record — nudged by its
    * reputation (`REPUTATION_TIEBREAK_WEIGHT`: indexed buyer ratings and
-   * verifier scores) and its payout wallet's Nansen trust score when one is
-   * known (`TRUST_TIEBREAK_WEIGHT`) — then the emptier one, so a reliable,
+   * verifier scores) — then the emptier one, so a reliable,
    * well-rated provider is rewarded and load still spreads.
    *
    * `exclude` is for reassignment: a job never goes back to a provider that

@@ -108,14 +108,14 @@ describe("jobs survive a restart", () => {
     first.patch(job.id, {
       payment: {
         asset: "usdc",
-        assetAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+        assetAddress: "0x3600000000000000000000000000000000000000",
         amount: "1000",
-        network: "eip155:10143",
+        network: "eip155:5042002",
         txHash: TX,
         payer: PAYER,
         payTo: PAYEE,
         settledAt: Date.now(),
-        explorerUrl: `https://testnet.monadscan.com/tx/${TX}`,
+        explorerUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
       },
       receiptTxHash: `0x${"cd".repeat(32)}`,
     });

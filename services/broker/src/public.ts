@@ -24,7 +24,6 @@ import {
 } from "@xorv/protocol";
 import type { StoredJob } from "./jobs.js";
 import type { RoutingRecord, ScreeningRecord } from "./ai/types.js";
-import { publicRelatedCheck, type PublicRelatedCheck, type PublicTrustSignal } from "./trust/index.js";
 import type { ProviderRecord } from "./registry.js";
 import { toBigIntString, toNumber, type IndexerLeaderboardRow } from "./indexer.js";
 
@@ -48,7 +47,7 @@ export function stripSecrets<T extends { token?: string }>(record: T): Omit<T, "
 export function publicJob(
   job: StoredJob,
   opts: { events?: boolean } = {},
-): PublicJob & { trustCheck: PublicRelatedCheck | null } {
+): PublicJob {
   const sealed = Boolean(job.request.encryptTo);
   return {
     id: job.id,
@@ -80,8 +79,6 @@ export function publicJob(
       : null,
     eventCount: job.events.length,
     events: opts.events ? job.events : undefined,
-    // The Nansen related-wallet check run before relaying the rating, if one ran.
-    trustCheck: job.trustCheck ? publicRelatedCheck(job.trustCheck) : null,
   };
 }
 
@@ -112,17 +109,8 @@ function sealedScreening(screening: StoredJob["screening"]): ScreeningRecord | n
   return { ...screening, reason: screening.unavailable ? screening.reason : PRIVATE_AI_REASON };
 }
 
-/**
- * A provider as the world sees it, with its payout wallet's Nansen trust
- * signal (public view: no smart-money data, no related-wallet addresses,
- * attribution attached) when the broker has one.
- */
-export function publicProvider(
-  network: string,
-  p: ProviderRecord,
-  connected: boolean,
-  trust: PublicTrustSignal | null = null,
-): PublicProvider & { trust: PublicTrustSignal | null } {
+/** A provider as the world sees it (no bearer token, explorer links attached). */
+export function publicProvider(network: string, p: ProviderRecord, connected: boolean): PublicProvider {
   return {
     id: p.id,
     label: p.label,
@@ -142,7 +130,6 @@ export function publicProvider(
     region: p.region ?? null,
     stats: p.stats,
     registryTxHash: p.registryTxHash ?? null,
-    trust,
   };
 }
 
@@ -150,7 +137,7 @@ export function publicProvider(
  * A ledger receipt in the shape `/api/receipts` has always served.
  *
  * The landing page's ledger section (and the app's network page) predate the
- * Monad port and read `sequence` plus `payload.data.{jobId, payer,
+ * EVM port and read `sequence` plus `payload.data.{jobId, payer,
  * providerAccountId, amount, asset, transactionId}`. Those keys are kept, now
  * carrying EVM values, next to the new ones (`buyer`, `payTo`, `paymentTx`,
  * `explorerUrl`, `paymentUrl`), so an old consumer keeps rendering while a new
@@ -218,8 +205,6 @@ export interface LeaderboardEntry {
   avgRating: number | null;
   /** ERC-8004 reputation, when the indexer has it. */
   reputation: { feedbackCount: number; feedbackAvg: number | null; verifiedScore: number | null } | null;
-  /** The payout wallet's Nansen trust signal (public view), when the broker has one. */
-  trust?: PublicTrustSignal | null;
 }
 
 export function leaderboardFromIndexer(

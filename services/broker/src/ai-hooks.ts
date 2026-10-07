@@ -2,7 +2,7 @@
  * Where the AI roles plug into the job loop.
  *
  * Three sponsor models take a turn on every job — Hunyuan screens the prompt
- * before any provider sees it, Qwen reads Monad with its tools and picks the
+ * before any provider sees it, Qwen reads Arc with its tools and picks the
  * provider when the buyer chose "Auto", Kimi scores the result and writes it to ERC-8004 as reputation
  * feedback. The implementations live in src/ai/ (switched on per role with
  * XORV_SCREENER / XORV_ROUTER / XORV_VERIFIER and the provider's key); the

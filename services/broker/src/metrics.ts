@@ -78,7 +78,7 @@ export class Metrics {
     );
 
     const writes = deps.chain.counts();
-    help("xorv_ledger_writes_total", "Events written to XorvLedger on Monad, by feed.", "counter");
+    help("xorv_ledger_writes_total", "Events written to XorvLedger on Arc, by feed.", "counter");
     for (const [kind, count] of Object.entries(writes)) {
       lines.push(`xorv_ledger_writes_total{kind="${kind}"} ${count}`);
     }

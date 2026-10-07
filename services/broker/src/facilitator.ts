@@ -2,18 +2,16 @@
  * Which x402 facilitator settles this broker's payments.
  *
  * The facilitator is whoever submits a buyer's signed EIP-3009 authorization
- * and pays the MON gas for it. The default is the public facilitator Monad's
- * docs use (x402-facilitator.molandak.org): it pays settlement gas itself, so
- * the broker needs no MON for payments and a fresh checkout takes real
- * payments before its operator has funded anything. Self-hosting
- * (`XORV_FACILITATOR=self` with a funded key) is the opt-in for an operator who
- * wants settlement independent of anyone else's uptime.
+ * and pays the gas for it — in USDC, Arc's gas token. There is no public x402
+ * facilitator for Arc, so the default is the broker's own in-process one
+ * (`XORV_FACILITATOR=self`, the key in XORV_FACILITATOR_KEY or
+ * XORV_OPERATOR_KEY). It is also the only facilitator that can fund
+ * XorvEscrow: its key is the escrow's attester. A hosted facilitator URL is
+ * still accepted for a network that has one.
  *
- * The one thing this refuses to do is change an *explicit* choice silently.
- * `XORV_FACILITATOR=self` with no key to self-host with does not quietly
- * become "hosted" — which party moves settlement gas, and sees every payment,
- * is a decision. The paid route answers 503 with the fix instead. When nothing
- * was configured, the broker uses the hosted facilitator and says so at boot.
+ * The one thing this refuses to do is change a choice silently. With no key
+ * to self-host with, payments are disabled and the paid route answers 503
+ * with the fix, rather than settling through someone else.
  */
 
 import type { FacilitatorClient } from "@x402/core/server";
@@ -52,9 +50,8 @@ export function resolveFacilitator(
 
   const cfg = networkConfig(config.network);
   const explicit = config.facilitatorMode;
-  // Hosted unless self-hosting was asked for: a key alone is not a request to
-  // spend its MON on every buyer's settlement.
-  const mode = explicit ?? "hosted";
+  // Self-hosted unless told otherwise: Arc has no public facilitator.
+  const mode = explicit ?? "self";
 
   if (mode === "self" && !config.facilitatorAccount) {
     return {
@@ -64,8 +61,20 @@ export function resolveFacilitator(
       address: null,
       url: null,
       unavailableReason:
-        "payments are disabled: XORV_FACILITATOR=self needs XORV_FACILITATOR_KEY (or XORV_OPERATOR_KEY) " +
-        `funded with MON — or set XORV_FACILITATOR=hosted to use ${cfg.facilitatorUrl}`,
+        "payments are disabled: the self-hosted facilitator needs XORV_FACILITATOR_KEY (or XORV_OPERATOR_KEY) " +
+        `holding a little USDC for gas on ${cfg.name}`,
+      notice: null,
+    };
+  }
+
+  if (mode === "hosted" && cfg.facilitatorUrl === null) {
+    return {
+      facilitator: null,
+      mode: "hosted",
+      description: "hosted (unavailable)",
+      address: null,
+      url: null,
+      unavailableReason: `payments are disabled: there is no public x402 facilitator for ${cfg.name}; use XORV_FACILITATOR=self`,
       notice: null,
     };
   }
@@ -85,10 +94,6 @@ export function resolveFacilitator(
     address: choice.address,
     url: choice.url,
     unavailableReason: null,
-    notice:
-      explicit === null && choice.mode === "hosted"
-        ? `settling through the hosted facilitator (${choice.url}), which pays settlement gas. ` +
-          "Set XORV_FACILITATOR=self and a funded XORV_FACILITATOR_KEY to self-host settlement."
-        : null,
+    notice: null,
   };
 }

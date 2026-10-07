@@ -65,7 +65,7 @@ const jobs = new JobStore(persistence);
 const vaults = new VaultStore(persistence);
 
 let hub: Hub | null = null;
-const { app, hubHandlers, sweep, settlement, trust } = createApp({
+const { app, hubHandlers, sweep, settlement, keeper } = createApp({
   config,
   chain,
   registry,
@@ -111,17 +111,8 @@ const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   );
   line("mongodb", mongoStatus);
   describeAiRoles(ai).forEach((role, i) => line(i === 0 ? "ai roles" : "", role));
-  const nansen = trust.status();
-  line(
-    "nansen",
-    nansen.mode === "off"
-      ? "not configured (XORV_NANSEN_MODE=live with NANSEN_API_KEY or XORV_NANSEN_PAYER_KEY for provider trust + the wash-rating guard)"
-      : nansen.mode === "fixture"
-        ? "fixture data — deterministic, no network, no payments"
-        : nansen.auth === "api-key"
-          ? "live, NANSEN_API_KEY"
-          : `live, x402 on Monad mainnet from ${nansen.payer?.address} (≤ $${nansen.perCallCapUsdc}/call, $${nansen.budgetUsdc}/day)`,
-  );
+  line("escrow", config.escrowAddress ? `${config.escrowAddress} (refund keeper ${keeper.enabled ? "on" : "off"})` : "not configured — providers are paid directly");
+  line("arc memo", net.circle.memo + " — every escrow move and x402 transfer is tagged with its job id");
   console.log("");
 });
 

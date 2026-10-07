@@ -186,7 +186,7 @@ describe("requestLog", () => {
 
 describe("Metrics", () => {
   const chain: ChainLike = {
-    network: "eip155:10143",
+    network: "eip155:5042002",
     ledgerAddress: null,
     writerAddress: null,
     mode: () => "off",

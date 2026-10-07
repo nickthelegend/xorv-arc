@@ -22,10 +22,9 @@ import {
   accountFromKey,
   networkConfig,
   normalizeAddress,
-  type MonadNetwork,
+  type ArcNetwork,
 } from "@xorv/protocol";
 import type { Address, PrivateKeyAccount } from "viem";
-import type { NansenConfig } from "./trust/index.js";
 
 // The repo keeps one .env at the root; the broker is two directories down
 // (the same relative path works from both src/ and dist/).
@@ -52,8 +51,8 @@ export interface AiRoleConfig {
 }
 
 export interface BrokerConfig {
-  /** CAIP-2 id; `eip155:10143` (testnet) unless told otherwise. */
-  network: MonadNetwork;
+  /** CAIP-2 id; `eip155:5042002` (testnet) unless told otherwise. */
+  network: ArcNetwork;
   /**
    * The broker's own EOA: ledger writes, rating relays and (unless
    * XORV_VERIFIER_KEY is set) verifier feedback. Null means read-only —
@@ -61,8 +60,8 @@ export interface BrokerConfig {
    */
   operator: PrivateKeyAccount | null;
   /**
-   * The EOA that submits buyers' EIP-3009 authorizations and pays their MON
-   * gas when the facilitator is self-hosted. Defaults to the operator; a
+   * The EOA that submits buyers' EIP-3009 authorizations and pays their gas
+   * (USDC on Arc) when the facilitator is self-hosted. Defaults to the operator; a
    * separate key is recommended so settlement and audit writes never queue
    * behind each other.
    */
@@ -76,7 +75,8 @@ export interface BrokerConfig {
   verifierAccount?: PrivateKeyAccount | null;
   /**
    * `self`, `hosted`, or a facilitator URL. Null when `XORV_FACILITATOR` is
-   * unset, which means hosted — see `resolveFacilitator` in facilitator.ts.
+   * unset, which means self-hosted (Arc has no public facilitator) — see
+   * `resolveFacilitator` in facilitator.ts.
    */
   facilitatorMode: string | null;
   /** XorvLedger address; null runs the broker with no ledger at all. */
@@ -117,12 +117,18 @@ export interface BrokerConfig {
   mongoUri: string | null;
   mongoDb: string;
   ai: AiRoleConfig;
-  /**
-   * Nansen trust signals (src/trust/): provider wallet scores, the
-   * wash-rating guard and a matching tie-breaker, paid per call over x402 on
-   * Monad mainnet. Absent means off.
-   */
-  nansen?: NansenConfig;
+  /** XorvReputation: escrow settlements → ERC-8004. Null skips the escrow_outcomes reads. */
+  reputationAddress?: Address | null;
+  /** XorvCcipReceiver on Arc: jobs posted from Base/Ethereum over Chainlink CCIP. Null turns the watcher off. */
+  ccipReceiverAddress?: Address | null;
+  /** Signs the keeper's deadline refunds and CCIP book-keeping: XORV_KEEPER_KEY, else the operator. Never the attester. */
+  keeperAccount?: PrivateKeyAccount | null;
+  /** XorvCcipSender addresses on source chains, by chain id (XORV_CCIP_SENDERS="84532:0x…,11155111:0x…"). */
+  ccipSenders?: Record<string, string>;
+  /** Escrow deadline for a quote funded over CCIP (minutes of CCIP + CCTP transit). */
+  ccipDeadlineSeconds?: number;
+  /** Run the refund keeper: refund every escrowed job past its deadline (anyone may refund after the deadline; the broker does it so nobody has to). */
+  keeper?: boolean;
 }
 
 function optional(name: string): string | null {
@@ -164,16 +170,6 @@ function failMode(name: string): "open" | "closed" {
   throw new Error(`${name} must be "open" or "closed", got "${raw}"`);
 }
 
-/** A positive integer amount of USDC units (6 dp), e.g. 50000 for $0.05. */
-function usdcUnits(name: string, fallback: bigint): bigint {
-  const raw = optional(name);
-  if (raw === null) return fallback;
-  if (!/^\d+$/.test(raw) || BigInt(raw) === 0n) {
-    throw new Error(`${name} must be a positive whole number of USDC units (6 decimals, so 50000 = $0.05), got "${raw}"`);
-  }
-  return BigInt(raw);
-}
-
 function onOff(name: string, fallback: boolean): boolean {
   const raw = optional(name)?.toLowerCase();
   if (raw === undefined) return fallback;
@@ -182,59 +178,25 @@ function onOff(name: string, fallback: boolean): boolean {
   throw new Error(`${name} must be "on" or "off", got "${raw}"`);
 }
 
-/** Nansen's Monad `payTo`, as observed in every 402 on 2026-09-26 (`XORV_NANSEN_PIN_PAYTO=observed`). */
-const NANSEN_OBSERVED_PAY_TO = "0x93053f1e7A5eFEDa532Fe69CbbE43cBEc3A0F13f";
-
-/**
- * The Nansen integration's settings.
- *
- * `live` needs a way to pay: XORV_NANSEN_PAYER_KEY (a Monad *mainnet* key with
- * a few USDC — Nansen only settles x402 on mainnet, whatever network the
- * broker runs on) or NANSEN_API_KEY. Asking for live without either fails
- * here rather than degrading silently at the first lookup.
- */
-export function loadNansenConfig(): NansenConfig {
-  const mode = (optional("XORV_NANSEN_MODE") ?? "off").toLowerCase();
-  if (mode === "fixture") {
-    // Fixture data lives in the tests, never in a running broker: without a key
-    // the product says Nansen is not configured instead of showing made-up signals.
-    throw new Error('XORV_NANSEN_MODE=fixture is for tests only; use "off" or "live"');
-  }
-  if (mode !== "off" && mode !== "live") {
-    throw new Error(`XORV_NANSEN_MODE must be "off" or "live", got "${mode}"`);
-  }
-  const payer = key("XORV_NANSEN_PAYER_KEY");
-  const apiKey = optional("NANSEN_API_KEY");
-  if (mode === "live" && !payer && !apiKey) {
-    throw new Error(
-      "XORV_NANSEN_MODE=live needs XORV_NANSEN_PAYER_KEY (a Monad MAINNET key holding a few USDC) or NANSEN_API_KEY",
-    );
-  }
-  const pinRaw = optional("XORV_NANSEN_PIN_PAYTO");
-  let pinPayTo: string | null = null;
-  if (pinRaw) {
+/** "84532:0xabc…,11155111:0xdef…" → { "84532": "0xAbc…", … }. */
+export function parseSenders(raw: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw) return out;
+  for (const part of raw.split(",").map((p) => p.trim()).filter(Boolean)) {
+    const [chainId, address] = part.split(":").map((p) => p.trim());
+    if (!chainId || !/^\d+$/.test(chainId) || !address) throw new Error(`XORV_CCIP_SENDERS: expected chainId:address, got "${part}"`);
     try {
-      pinPayTo = pinRaw.toLowerCase() === "observed" ? NANSEN_OBSERVED_PAY_TO : normalizeAddress(pinRaw);
+      out[chainId] = normalizeAddress(address);
     } catch (err) {
-      throw new Error(`XORV_NANSEN_PIN_PAYTO: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(`XORV_CCIP_SENDERS: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  return {
-    mode,
-    payer,
-    apiKey,
-    perCallCapUnits: usdcUnits("XORV_NANSEN_PER_CALL_CAP", 50_000n),
-    dailyCapUnits: usdcUnits("XORV_NANSEN_DAILY_CAP", 1_000_000n),
-    pinPayTo,
-    smartMoney: onOff("XORV_NANSEN_SMART_MONEY", true),
-    ratingGuard: onOff("XORV_NANSEN_RATING_GUARD", true),
-    refreshMs: Math.max(5, nonNegativeInt("XORV_NANSEN_REFRESH_MINUTES", 360)) * 60_000,
-  };
+  return out;
 }
 
 export function loadConfig(): BrokerConfig {
-  const network = (optional("XORV_NETWORK") ?? DEFAULT_NETWORK) as MonadNetwork;
-  // Throws on anything but Monad testnet/mainnet (a stale `hedera:testnet`
+  const network = (optional("XORV_NETWORK") ?? DEFAULT_NETWORK) as ArcNetwork;
+  // Throws on anything but Arc testnet/mainnet (a stale `eip155:10143`
   // included) and on a malformed XORV_STABLECOIN — both better found now.
   networkConfig(network);
 
@@ -260,6 +222,17 @@ export function loadConfig(): BrokerConfig {
       throw new Error(`XORV_ESCROW_ADDRESS: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  const address = (name: string): Address | null => {
+    const raw = optional(name);
+    if (!raw) return null;
+    try {
+      return normalizeAddress(raw);
+    } catch (err) {
+      throw new Error(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  const reputationAddress = address("XORV_REPUTATION_ADDRESS");
+  const ccipReceiverAddress = address("XORV_CCIP_RECEIVER_ADDRESS");
   const escrowDeadlineSeconds = nonNegativeInt("XORV_ESCROW_DEADLINE_S", 1_800);
   if (escrowDeadlineSeconds < 120) {
     // The contract refuses deadlines under a minute; under two leaves no room for a job.
@@ -286,6 +259,12 @@ export function loadConfig(): BrokerConfig {
     ledgerAddress,
     escrowAddress,
     escrowDeadlineSeconds,
+    reputationAddress,
+    ccipReceiverAddress,
+    keeper: onOff("XORV_KEEPER", true),
+    keeperAccount: key("XORV_KEEPER_KEY") ?? operator,
+    ccipSenders: parseSenders(optional("XORV_CCIP_SENDERS")),
+    ccipDeadlineSeconds: Math.max(600, nonNegativeInt("XORV_CCIP_DEADLINE_S", 7_200)),
     ledgerFromBlock: fromBlockRaw === null ? null : BigInt(fromBlockRaw),
     heartbeatPublishEvery: nonNegativeInt("XORV_HEARTBEAT_PUBLISH_EVERY", 20),
     receiptBatchMs: nonNegativeInt("XORV_RECEIPT_BATCH_MS", 4_000),
@@ -300,17 +279,16 @@ export function loadConfig(): BrokerConfig {
       .filter(Boolean),
     feeBps: Number(process.env.XORV_FEE_BPS ?? 0),
     // A fresh file name, so a Hedera-era xorv.db (tinybar stats, 0.0.x
-    // accounts) is never silently loaded into a Monad broker.
-    dbFile: optional("XORV_DB") ?? path.resolve(here, "../../../data/xorv-monad.db"),
+    // accounts) is never silently loaded into an Arc broker.
+    dbFile: optional("XORV_DB") ?? path.resolve(here, "../../../data/xorv-arc.db"),
     mongoUri: optional("XORV_MONGO_URI"),
     // Same reasoning as dbFile: a new default database name.
-    mongoDb: optional("XORV_MONGO_DB") ?? "xorv_monad",
+    mongoDb: optional("XORV_MONGO_DB") ?? "xorv_arc",
     ai: {
       router: role("XORV_ROUTER", "qwen"),
       screener: role("XORV_SCREENER", "hunyuan"),
       verifier: role("XORV_VERIFIER", "kimi"),
       screenerFail: failMode("XORV_SCREENER_FAIL"),
     },
-    nansen: loadNansenConfig(),
   };
 }

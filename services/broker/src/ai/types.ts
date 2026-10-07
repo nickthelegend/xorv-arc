@@ -64,7 +64,7 @@ export const ROUTER_TOOLS = [
   "erc8004_reputation",
   "recent_receipts",
   "indexer_provider_stats",
-  "nansen_trust",
+  "escrow_outcomes",
   "select_provider",
 ] as const;
 export type RouterToolName = (typeof ROUTER_TOOLS)[number];
@@ -93,7 +93,7 @@ export interface RoutingStep {
   /** False when the tool couldn't answer (timeout, source down, unknown id). */
   ok: boolean;
   /** Where the data came from. */
-  source?: "registry" | "chain" | "indexer" | "rpc" | "memory" | "nansen" | "none";
+  source?: "registry" | "chain" | "indexer" | "rpc" | "memory" | "none";
   links?: TraceLink[];
 }
 
@@ -145,7 +145,7 @@ export interface VerificationRecord extends JobVerification {
  * One live capability as the router sees it: the provider that offers it,
  * what it costs, and the track record the broker already holds. The router
  * picks a provider (and with it the adapter); the richer evidence — on-chain
- * reputation, receipts, indexer aggregates, Nansen trust — it fetches with
+ * reputation, receipts, indexer aggregates, escrow outcomes — it fetches with
  * its tools.
  */
 export interface RouteCandidate {

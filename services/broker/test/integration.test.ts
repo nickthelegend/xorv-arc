@@ -15,7 +15,6 @@
  * one does. Ratings are signed with real viem signatures too.
  */
 
-import { createNansenFixtures } from "./nansen-fixtures.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serve } from "@hono/node-server";
 import type { Server } from "node:http";
@@ -49,24 +48,23 @@ import type { AiHooks } from "../src/ai-hooks.js";
 import { createAiHooks, type FeedbackSink, type GiveFeedbackInput } from "../src/ai/index.js";
 import { Hub } from "../src/hub.js";
 import { MemoryEscrow } from "../src/escrow.js";
-import type { GateInfo, IdentitySource } from "../src/identity.js";
+import type { CcipIntent, FundedJob, RefundKeeper } from "../src/keeper.js";
 import { JobStore } from "../src/jobs.js";
 import { Registry } from "../src/registry.js";
-import { NANSEN_OFF, createNansenTrust, type NansenTrust } from "../src/trust/index.js";
 
 /** Response bodies are asserted on, not typed: the tests are what pin their shape. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 
-const NETWORK = "eip155:10143";
-const USDC = "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+const NETWORK = "eip155:5042002";
+const USDC = "0x3600000000000000000000000000000000000000";
 const LEDGER = getAddress("0x00000000000000000000000000000000000000aa");
 /** Distinct payout addresses, written lowercase the way a wallet often hands them over. */
 const PAYEE_A = "0xaaaa00000000000000000000000000000000000a";
 const PAYEE_B = "0xbbbb00000000000000000000000000000000000b";
 
 // ---------------------------------------------------------------------------
-// Stubs — only the things that would touch Monad
+// Stubs — only the things that would touch Arc
 // ---------------------------------------------------------------------------
 
 class StubChain implements ChainLike {
@@ -110,7 +108,7 @@ class StubChain implements ChainLike {
   private result(): PublishResult {
     this.tx += 1;
     const txHash = `0x${this.tx.toString(16).padStart(64, "0")}`;
-    return { contract: LEDGER, txHash, explorerUrl: `https://testnet.monadscan.com/tx/${txHash}`, blockNumber: "1" };
+    return { contract: LEDGER, txHash, explorerUrl: `https://explorer.testnet.arc.io/tx/${txHash}`, blockNumber: "1" };
   }
   async registerProvider(provider: { id: string; address: string; agentId: string | null }) {
     this.registrations.push({ id: provider.id, address: provider.address, agentId: provider.agentId });
@@ -187,7 +185,7 @@ function stubFacilitator(control: FacilitatorControl): FacilitatorClient {
     const receive = requirements.scheme === "escrow";
     const ok = await verifyTypedData({
       address: authorization.from,
-      domain: { name: extra.name, version: extra.version, chainId: 10143, verifyingContract: requirements.asset as Hex },
+      domain: { name: extra.name, version: extra.version, chainId: 5042002, verifyingContract: requirements.asset as Hex },
       types: receive
         ? { ReceiveWithAuthorization: TRANSFER_WITH_AUTHORIZATION.TransferWithAuthorization }
         : TRANSFER_WITH_AUTHORIZATION,
@@ -315,11 +313,11 @@ async function boot(
     config?: Partial<BrokerConfig>;
     injectFacilitator?: boolean;
     ai?: AiHooks;
-    trust?: NansenTrust;
     buyer?: PrivateKeyAccount;
     /** Pay into this in-memory XorvEscrow instead of straight to the provider. */
     escrow?: MemoryEscrow;
-    identity?: IdentitySource;
+    /** A refund keeper / CCIP watcher double. */
+    keeper?: RefundKeeper | null;
   } = {},
 ): Promise<Harness> {
   // Every confirmed transaction "landed" in block 4242 for 84,213 gas at 50 gwei, paid by the facilitator.
@@ -349,12 +347,12 @@ async function boot(
     agentAuthorizes: async (agentId, spender) => authorized.has(`${agentId}:${spender.toLowerCase()}`),
     settlementStatus: async () => settle.status,
     txFacts: async () => ({ blockNumber: 4242, blockHash: "0xb10c", gasUsed: "84213", gasPaidWei: "4210650000000000", gasPayer: FACILITATOR_ADDRESS }),
-    // The finalized head reaches the block 600 ms after the receipt (two Monad slots).
+    // The finalized head reaches the block 600 ms after the receipt.
     finalizedAt: async () => Date.now() + 600,
     ai: opts.ai,
-    trust: opts.trust,
     escrow: opts.escrow ?? null,
-    identity: opts.identity ?? null,
+    keeper: opts.keeper ?? null,
+    gateway: null,
     // The router's erc8004_reputation tool: buyer ratings via the ledger, verifier scores via its EOA.
     reputationSummary: async (_agentId, _clients, tag1) =>
       tag1 === "starred"
@@ -571,7 +569,7 @@ describe("registration", () => {
     const listed = await (await fetch(`${h.base}/api/providers`)).json();
     expect(listed.providers).toHaveLength(1);
     expect(listed.providers[0].connected).toBe(true);
-    expect(listed.providers[0].addressUrl).toContain("testnet.monadscan.com/address/");
+    expect(listed.providers[0].addressUrl).toContain("explorer.testnet.arc.io/address/");
     provider.close();
   });
 
@@ -839,7 +837,7 @@ describe("the paid path", () => {
     expect(done.payment.payer).toBe(h.buyer.address);
     expect(done.payment.asset).toBe("usdc");
     expect(done.payment.assetAddress).toBe(USDC);
-    expect(done.payment.explorerUrl).toBe(`https://testnet.monadscan.com/tx/${settle.transaction}`);
+    expect(done.payment.explorerUrl).toBe(`https://explorer.testnet.arc.io/tx/${settle.transaction}`);
     expect(done.events.length).toBeGreaterThan(0);
 
     // The receipt was queued once the job was terminal and paid, carrying the
@@ -1498,7 +1496,7 @@ describe("ratings", () => {
       primaryType: string;
       message: Record<string, string>;
     };
-    expect(td.domain).toEqual({ name: "XorvLedger", version: "1", chainId: 10143, verifyingContract: LEDGER });
+    expect(td.domain).toEqual({ name: "XorvLedger", version: "1", chainId: 5042002, verifyingContract: LEDGER });
     expect(td.primaryType).toBe("Rating");
     expect(td.message).toMatchObject({
       jobId: jobIdHash(jobId),
@@ -1550,16 +1548,16 @@ describe("ratings", () => {
     expect(textHash(bytes)).toBe(h.chain.ratings[0]!.rating.feedbackHash);
     const file = JSON.parse(bytes);
     expect(file).toMatchObject({
-      agentRegistry: "eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      agentRegistry: "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e",
       agentId: 7,
-      clientAddress: `eip155:10143:${LEDGER}`,
+      clientAddress: `eip155:5042002:${LEDGER}`,
       value: 77,
       tag1: "starred",
       tag2: "echo",
       proofOfPayment: {
         fromAddress: h.buyer.address,
         toAddress: provider.address,
-        chainId: "10143",
+        chainId: "5042002",
         amount: "1000",
         currency: "USDC",
         protocol: "x402",
@@ -1631,7 +1629,7 @@ describe("ratings", () => {
   it("says why no rating can land when the provider made XorvLedger an operator of its agent", async () => {
     // The Reputation Registry refuses feedback from an agent's own operators,
     // so an agent owner who approves the ledger freezes its score: every
-    // rating reverted with an opaque error after a paid Nansen check.
+    // rating reverted with an opaque error.
     const { provider, jobId } = await ratedJobSetup();
     const { body } = await typedDataFor(jobId, 10);
     // The approval lands after the buyer fetched the typed data: the relay
@@ -1701,9 +1699,9 @@ describe("public surface", () => {
     const net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
     expect(net).toMatchObject({
       network: NETWORK,
-      chainId: 10143,
+      chainId: 5042002,
       label: "testnet",
-      explorerUrl: "https://testnet.monadscan.com",
+      explorerUrl: "https://explorer.testnet.arc.io",
       usdc: { address: USDC, symbol: "USDC", decimals: 6 },
       facilitator: { mode: "self", available: true },
       ledger: { address: LEDGER, mode: "write" },
@@ -1733,7 +1731,7 @@ describe("public surface", () => {
       x402Support: true,
       active: true,
       supportedTrust: ["reputation"],
-      registrations: [{ agentId: 7, agentRegistry: "eip155:10143:0x8004A818BFB912233c491871b3d84c89A494BD9e" }],
+      registrations: [{ agentId: 7, agentRegistry: "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e" }],
     });
     expect(file.services).toEqual([
       { name: "web", endpoint: `https://app.test/providers/${provider.providerId}` },
@@ -1795,7 +1793,7 @@ describe("public surface", () => {
     expect(ledger.events[0]).toMatchObject({
       id: "900:1",
       brokerJobId: paid.jobId,
-      explorerUrl: `https://testnet.monadscan.com/tx/${tx}`,
+      explorerUrl: `https://explorer.testnet.arc.io/tx/${tx}`,
     });
     expect((await fetch(`${h.base}/api/ledger?kind=registrations`)).status).toBe(200);
     expect((await fetch(`${h.base}/api/ledger?kind=bogus`)).status).toBe(400);
@@ -1892,7 +1890,7 @@ class StubFeedback implements FeedbackSink {
     if (this.fail) throw new Error("insufficient funds for gas");
     this.writes.push(input);
     const txHash = `0x${"fb".repeat(31)}${this.writes.length.toString(16).padStart(2, "0")}`;
-    return { contract: this.reputationRegistry, txHash, explorerUrl: `https://testnet.monadscan.com/tx/${txHash}`, blockNumber: "1" };
+    return { contract: this.reputationRegistry, txHash, explorerUrl: `https://explorer.testnet.arc.io/tx/${txHash}`, blockNumber: "1" };
   }
   counts() {
     return { published: this.writes.length, failed: 0, lastError: null };
@@ -2057,9 +2055,9 @@ describe("AI roles", () => {
     ]);
     expect(q.routing.steps[0].summary).toBe("listed 2 live options from 2 providers under $0.0500 (echo, kimi)");
     expect(q.routing.steps[1].summary).toMatch(
-      /^read agent #7's ERC-8004 reputation on Monad \(avg 92 from 5 buyer ratings; Kimi verifier 88 over 3 scores; agent wallet is the payout address\)$/,
+      /^read agent #7's ERC-8004 reputation on Arc \(avg 92 from 5 buyer ratings; Kimi verifier 88 over 3 scores; agent wallet is the payout address\)$/,
     );
-    expect(q.routing.steps[1].links[0].url).toMatch(/\/nft\/0x8004[0-9a-fA-F]+\/7$/);
+    expect(q.routing.steps[1].links[0].url).toMatch(/\/token\/0x8004[0-9a-fA-F]+\/instance\/7$/);
     expect(q.routing.steps[2].summary).toMatch(/no receipts on XorvLedger yet/);
     // The router saw both live options, with their prices, under the ceiling, as a tool result.
     const listed = JSON.parse(s.calls.route[1].messages.find((m: Json) => m.role === "tool").content);
@@ -2115,7 +2113,7 @@ describe("AI roles", () => {
     const file = JSON.parse(bytes) as Json;
     expect(file).toMatchObject({
       agentId: 7,
-      clientAddress: `eip155:10143:${s.feedback.address}`,
+      clientAddress: `eip155:5042002:${s.feedback.address}`,
       value: 88,
       tag1: "xorv-verified",
       tag2: "kimi",
@@ -2254,283 +2252,7 @@ describe("AI roles", () => {
   });
 });
 
-describe("Nansen trust", () => {
-  // Fixture data is injected here; a running broker can't select it (loadNansenConfig refuses "fixture").
-  const fixtureTrust = (cluster: string[] = []) =>
-    createNansenTrust({ ...NANSEN_OFF, mode: "fixture", smartMoney: true }, { fixtures: createNansenFixtures({ cluster }) });
-
-  /** A job paid by `h.buyer` on a provider with a verified agent, receipt landed. */
-  async function paidJob() {
-    h.agentWallets.set("7", PAYEE_A);
-    const provider = await connectProvider(h, { agentId: "7" });
-    const { body: q } = await quote(h, "rate me");
-    const { body: paid } = await pay(h, q.quoteId);
-    await provider.completeNextJob("rated answer");
-    await waitFor(async () => {
-      const j = await getJob(h, paid.jobId);
-      return j.receiptTxHash ? j : undefined;
-    });
-    return { provider, jobId: paid.jobId as string };
-  }
-
-  async function rate(jobId: string, value: number) {
-    const td = (await (await fetch(`${h.base}/api/jobs/${jobId}/rating?value=${value}`)).json()) as Json;
-    const typed = td.typedData as { domain: Record<string, unknown>; types: Record<string, unknown>; message: Parameters<typeof ratingMessage>[0] };
-    const signature = await h.buyer.signTypedData({
-      domain: typed.domain,
-      types: typed.types,
-      primaryType: "Rating",
-      message: ratingMessage(typed.message),
-    } as never);
-    const res = await fetch(`${h.base}/api/jobs/${jobId}/rate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value, deadline: td.deadline, signature }),
-    });
-    return { res, body: (await res.json()) as Json };
-  }
-
-  it("reports Nansen's state on /api/network, off by default", async () => {
-    const net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-    expect(net.nansen).toMatchObject({
-      mode: "off",
-      auth: "none",
-      network: "eip155:143",
-      payer: null,
-      callsToday: 0,
-      paidCallsToday: 0,
-      spentTodayUsdc: "0.00",
-      budgetUsdc: "1.00",
-      perCallCapUsdc: "0.05",
-      lastPaidTx: null,
-      ratingGuard: false,
-      attribution: "Powered by Nansen",
-      attributionUrl: "https://nansen.ai",
-    });
-  });
-
-  it("stops offering a rating once the receipt landed without the agent, before any Nansen lookup", async () => {
-    // The agent's wallet moved between the quote and the receipt, so the
-    // writer re-recorded it under NO_AGENT. The job kept its agent id, so the
-    // buyer was handed typed data, a paid Nansen check ran, and the ledger
-    // then refused the rating with NoAgent — on every retry.
-    await h.stop();
-    const trust = fixtureTrust();
-    const checkRelated = vi.spyOn(trust, "checkRelated");
-    h = await boot({ trust });
-    h.agentWallets.set("7", PAYEE_A);
-    const provider = await connectProvider(h, { agentId: "7" });
-    const { body: q } = await quote(h, "rate me");
-    // The receipt can't land yet (an RPC outage), so the rating is offered.
-    h.chain.failReceipts = 1_000;
-    const { body: paid } = await pay(h, q.quoteId);
-    await provider.completeNextJob("rated answer");
-    await waitForStatus(h, paid.jobId, "completed");
-    const td = (await (await fetch(`${h.base}/api/jobs/${paid.jobId}/rating?value=90`)).json()) as Json;
-    expect(td.agentId).toBe("7");
-
-    // Now it lands, without the agent.
-    h.chain.failReceipts = 0;
-    h.chain.recordWithoutAgent = true;
-    const typed = td.typedData as { domain: Record<string, unknown>; types: Record<string, unknown>; message: Parameters<typeof ratingMessage>[0] };
-    const signature = await h.buyer.signTypedData({
-      domain: typed.domain,
-      types: typed.types,
-      primaryType: "Rating",
-      message: ratingMessage(typed.message),
-    } as never);
-    const res = await fetch(`${h.base}/api/jobs/${paid.jobId}/rate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: 90, deadline: td.deadline, signature }),
-    });
-    expect(res.status).toBe(409);
-    expect(h.jobs.get(paid.jobId)!.receiptWithoutAgent).toBe(true);
-    expect(checkRelated).not.toHaveBeenCalled();
-    expect(h.chain.ratings).toHaveLength(0);
-    // And it is no longer offered.
-    expect((await fetch(`${h.base}/api/jobs/${paid.jobId}/rating?value=90`)).status).toBe(409);
-    provider.close();
-  }, 20_000);
-
-  it("buys no Nansen data for a registration that never opens its control channel", async () => {
-    // Registration is free and unauthenticated; each fresh payout address
-    // used to cost three paid lookups on the spot.
-    await h.stop();
-    h = await boot({ trust: fixtureTrust() });
-    const res = await fetch(`${h.base}/api/providers/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        label: "throwaway",
-        address: PAYEE_B,
-        endpoint: "http://localhost:1",
-        capabilities: [{ id: "echo", adapter: "echo", displayName: "Echo", model: null, priceUsdMicros: 1_000, maxConcurrency: 1 }],
-        version: "0.2.0",
-        region: null,
-        nodeId: "node-throwaway",
-      }),
-    });
-    expect(res.status).toBe(200);
-    h.sweep();
-    await new Promise((r) => setTimeout(r, 50));
-    let net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-    expect(net.nansen.callsToday).toBe(0);
-    // Opening the control channel is what buys the signal.
-    const provider = await connectProvider(h, { address: PAYEE_A });
-    await waitFor(async () => {
-      net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-      return net.nansen.walletsScored === 1 ? true : undefined;
-    });
-    provider.close();
-  });
-
-  it("defers a rating, 503, when the wash-rating check can't run because the Nansen budget is spent", async () => {
-    await h.stop();
-    const trust = fixtureTrust();
-    vi.spyOn(trust, "checkRelated").mockImplementation(async (buyer, provider) => ({
-      checkedAt: Date.now(),
-      related: false,
-      reasons: [],
-      buyer,
-      provider,
-      mode: "fixture",
-      degraded: true,
-      budgetSpent: true,
-      errors: ["buyer firstFunder: payment refused: the daily Nansen budget (1.00 USDC) is spent"],
-    }));
-    h = await boot({ trust });
-    const { provider, jobId } = await paidJob();
-    const { res, body } = await rate(jobId, 100);
-    expect(res.status).toBe(503);
-    expect(body.code).toBe("trust_budget_spent");
-    expect(h.chain.ratings).toHaveLength(0);
-    provider.close();
-  });
-
-  it("scores a provider's payout wallet on registration and serves the public view everywhere", async () => {
-    await h.stop();
-    h = await boot({ trust: fixtureTrust() });
-    const provider = await connectProvider(h);
-
-    const listed = await waitFor(async () => {
-      const { providers } = (await (await fetch(`${h.base}/api/providers`)).json()) as Json;
-      return providers[0]?.trust ? providers[0] : undefined;
-    });
-    expect(listed.trust).toMatchObject({
-      address: provider.address,
-      source: "nansen",
-      mode: "fixture",
-      degraded: false,
-      paidTx: [],
-      paidUsdc: "0.00",
-      attribution: "Powered by Nansen",
-      attributionUrl: "https://nansen.ai",
-    });
-    expect(listed.trust.score).toBeGreaterThanOrEqual(0);
-    expect(listed.trust.score).toBeLessThanOrEqual(100);
-    const wire = JSON.stringify(listed);
-    expect(wire).not.toContain("smartMoney");
-    expect(wire).not.toContain("relatedWallets");
-
-    const one = (await (await fetch(`${h.base}/api/providers/${provider.providerId}`)).json()) as Json;
-    expect(one.provider).toMatchObject({ id: provider.providerId, trust: { score: listed.trust.score } });
-    expect(one.provider.token).toBeUndefined();
-    expect((await fetch(`${h.base}/api/providers/prv_nobody`)).status).toBe(404);
-
-    const board = (await (await fetch(`${h.base}/api/leaderboard`)).json()) as Json;
-    expect(board.providers[0].trust).toMatchObject({ score: listed.trust.score, attribution: "Powered by Nansen" });
-
-    const net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-    expect(net.nansen).toMatchObject({ mode: "fixture", auth: "fixture", ratingGuard: true, spentTodayUsdc: "0.00" });
-    expect(net.nansen.callsToday).toBeGreaterThanOrEqual(3);
-    expect(net.nansen.walletsScored).toBe(1);
-    provider.close();
-  });
-
-  it("refuses a rating between related wallets with 403 and records the check on the job", async () => {
-    const buyer = privateKeyToAccount(generatePrivateKey());
-    await h.stop();
-    // The fixture gives these two wallets one unlabelled first funder: a sybil ring.
-    h = await boot({ trust: fixtureTrust([buyer.address, PAYEE_A]), buyer });
-    const { provider, jobId } = await paidJob();
-
-    const { res, body } = await rate(jobId, 100);
-    expect(res.status).toBe(403);
-    expect(body.code).toBe("related_wallets");
-    expect(String(body.error)).toMatch(/related \(Nansen\)/);
-    expect(body.trustCheck).toMatchObject({ related: true, mode: "fixture", attribution: "Powered by Nansen" });
-    expect(body.trustCheck.reasons.map((r: Json) => r.kind)).toContain("shared-funder");
-    expect(JSON.stringify(body.trustCheck)).not.toContain("errors");
-
-    // Nothing reached ERC-8004, and the refusal is on the record.
-    expect(h.chain.ratings).toHaveLength(0);
-    const job = await getJob(h, jobId);
-    expect(job.rating).toBeNull();
-    expect(job.trustCheck).toMatchObject({ related: true });
-    const metrics = await (await fetch(`${h.base}/metrics`)).text();
-    expect(metrics).toContain('xorv_rating_refusals_total{reason="related_wallets"} 1');
-    const net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-    expect(net.nansen).toMatchObject({ ratingChecks: 1, ratingsRefused: 1 });
-    provider.close();
-  }, 20_000);
-
-  it("relays a rating between unrelated wallets and records the passed check", async () => {
-    await h.stop();
-    h = await boot({ trust: fixtureTrust() });
-    const { provider, jobId } = await paidJob();
-    const { res, body } = await rate(jobId, 80);
-    expect(body.error).toBeUndefined();
-    expect(res.status).toBe(200);
-    expect(h.chain.ratings).toHaveLength(1);
-    const job = await getJob(h, jobId);
-    expect(job.rating).toMatchObject({ value: 80 });
-    expect(job.trustCheck).toMatchObject({ related: false, degraded: false, reasons: [], attribution: "Powered by Nansen" });
-    provider.close();
-  }, 20_000);
-
-  it("never blocks registration or an honest rating on a Nansen outage", async () => {
-    const down = (async () => {
-      throw new Error("nansen unreachable");
-    }) as typeof fetch;
-    await h.stop();
-    h = await boot({ trust: createNansenTrust({ ...NANSEN_OFF, mode: "live", apiKey: "test" }, { fetch: down }) });
-    const started = Date.now();
-    const { provider, jobId } = await paidJob();
-    expect(Date.now() - started).toBeLessThan(10_000);
-
-    const { res } = await rate(jobId, 60);
-    expect(res.status).toBe(200);
-    const job = await getJob(h, jobId);
-    expect(job.trustCheck).toMatchObject({ related: false, degraded: true });
-
-    // A failed lookup is a neutral, degraded signal — never a penalty.
-    const { providers } = (await (await fetch(`${h.base}/api/providers`)).json()) as Json;
-    expect(providers[0].trust).toMatchObject({ score: 50, degraded: true, band: "unknown" });
-    provider.close();
-  }, 20_000);
-});
-
-
 describe("XorvEscrow: the money waits until the job delivers", () => {
-  const GATE: GateInfo = {
-    address: "0x00000000000000000000000000000000000Ca7e5",
-    kind: "cleanverse",
-    apass: "0xbA82D189540CaC9DC6FF46B6837CaC1BFdEC58B9",
-    validator: "0xaC7e5179C2C7f03f209136886c172eb34F161792",
-    pool: null,
-  };
-  /** Cleanverse's A-Pass as far as the broker sees it. */
-  class MemoryAPass implements IdentitySource {
-    readonly valid = new Set<string>();
-    async gate() {
-      return GATE;
-    }
-    async verified(addresses: string[]) {
-      return addresses.map((a) => this.valid.has(a.toLowerCase()));
-    }
-  }
-
   it("quotes escrow first, with the terms frozen on the quote", async () => {
     const escrow = new MemoryEscrow();
     h = await boot({ escrow });
@@ -2580,7 +2302,7 @@ describe("XorvEscrow: the money waits until the job delivers", () => {
       // Two timers: executed (receipt) and final (the finalized head holds the block).
       expect(timing.finalMs as number).toBeGreaterThanOrEqual((timing.confirmMs as number) + 600);
       // Where it was measured, and how it was sent (the in-memory escrow polls nothing, so "async").
-      expect(timing).toMatchObject({ chain: "monad", sendMode: "async" });
+      expect(timing).toMatchObject({ chain: "arc", sendMode: "async" });
       expect(timing).not.toHaveProperty("blockHash");
     }
     const stats = ((await (await fetch(`${h.base}/api/network`)).json()) as Json).stats as Json;
@@ -2701,7 +2423,7 @@ describe("XorvEscrow: the money waits until the job delivers", () => {
     provider.close();
   });
 
-  it("records a refund someone else made (a CRE keeper after the deadline) instead of retrying", async () => {
+  it("records a refund someone else made (the refund keeper after the deadline) instead of retrying", async () => {
     const escrow = new MemoryEscrow();
     h = await boot({ escrow });
     const provider = await connectProvider(h);
@@ -2740,21 +2462,171 @@ describe("XorvEscrow: the money waits until the job delivers", () => {
     provider.close();
   });
 
-  it("with a Cleanverse gate, never quotes a provider without an active A-Pass", async () => {
-    const apass = new MemoryAPass();
-    apass.valid.add(PAYEE_B.toLowerCase());
-    h = await boot({ escrow: new MemoryEscrow(), identity: apass });
-    const unverified = await connectProvider(h, { label: "cheap", nodeId: "n-cheap", price: 1_000 });
-    const verified = await connectProvider(h, { label: "verified", nodeId: "n-ok", price: 5_000, address: PAYEE_B });
-    await waitFor(async () => {
-      const { providers } = (await (await fetch(`${h.base}/api/providers`)).json()) as { providers: Json[] };
-      return providers.length === 2 && providers.every((p) => p.identity !== null) ? true : undefined;
+});
+
+
+/** The refund keeper's surface the broker uses, without a chain: tests hand it JobFunded events. */
+class FakeKeeper {
+  enabled = true;
+  watching = 0;
+  crossChainHandler: ((job: FundedJob, intent: CcipIntent | null) => void) | null = null;
+  readonly forwarded: { jobId: string; outcome: string }[] = [];
+  async tick(): Promise<void> {}
+  async forwardCrossChain(jobId: Hex, outcome: "refunded" | "released"): Promise<Hex | null> {
+    this.forwarded.push({ jobId, outcome });
+    return `0x${"fd".repeat(32)}` as Hex;
+  }
+}
+
+describe("Arc: Chainlink CCIP jobs, the Arc stack on /api/network", () => {
+  const RECEIVER = getAddress("0x00000000000000000000000000000000000cc1b0");
+  const REQUESTER = getAddress("0x00000000000000000000000000000000000ba5e0");
+  const SENDER = getAddress("0x00000000000000000000000000000000005e4de4");
+
+  async function ccipQuote(target: Harness) {
+    const res = await fetch(`${target.base}/api/quotes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "summarise the CCIP docs", maxPriceUsdMicros: 50_000, payVia: "ccip" }),
     });
-    const { body } = await quote(h);
-    expect((body.provider as Json).address).toBe(verified.address);
+    return { status: res.status, body: (await res.json()) as Json };
+  }
+
+  function fundOverCcip(escrow: MemoryEscrow, keeper: FakeKeeper, q: Json, messageId: Hex = `0x${"ab".repeat(32)}` as Hex) {
+    const ccip = q.ccip as Json;
+    escrow.fund(ccip.jobId as string, ccip.provider as string, ccip.deadline as number);
+    keeper.crossChainHandler?.(
+      {
+        jobId: ccip.jobId as Hex,
+        buyer: RECEIVER,
+        provider: getAddress(ccip.provider as string),
+        amount: BigInt(ccip.price as string),
+        deadline: ccip.deadline as number,
+        txHash: `0x${"f0".repeat(32)}` as Hex,
+        blockNumber: 77n,
+      },
+      {
+        beneficiary: REQUESTER,
+        deadline: ccip.deadline as number,
+        status: "funded",
+        sourceSender: SENDER,
+        sourceChainSelector: 10344971235874465080n,
+        provider: getAddress(ccip.provider as string),
+        price: BigInt(ccip.price as string),
+        messageId,
+      },
+    );
+  }
+
+  it("describes the Arc stack it runs on", async () => {
+    const keeper = new FakeKeeper();
+    h = await boot({
+      escrow: new MemoryEscrow(),
+      keeper: keeper as unknown as RefundKeeper,
+      config: { ccipReceiverAddress: RECEIVER, reputationAddress: getAddress("0x00000000000000000000000000000000000ae904") },
+    });
     const net = (await (await fetch(`${h.base}/api/network`)).json()) as Json;
-    expect((net.escrow as Json).identityGate).toEqual(GATE);
-    unverified.close();
-    verified.close();
+    const arc = net.arc as Json;
+    expect(arc).toMatchObject({
+      gasToken: "USDC",
+      memo: { address: "0x5294E9927c3306DcBaDb03fe70b92e01cCede505", enabled: true },
+      reputation: { address: "0x00000000000000000000000000000000000Ae904" },
+      ccip: { chainSelector: "3034092155422581607", receiver: { address: RECEIVER } },
+      cctp: { domain: 26 },
+      keeper: { enabled: true },
+    });
+    expect((arc.cctp as Json).destinations).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Base Sepolia", domain: 6 })]));
+  });
+
+  it("refuses a CCIP quote on a broker without a receiver", async () => {
+    h = await boot({ escrow: new MemoryEscrow() });
+    await connectProvider(h);
+    const { status, body } = await ccipQuote(h);
+    expect(status).toBe(400);
+    expect(String(body.error)).toMatch(/cross-chain/);
+  });
+
+  it("quotes a job a buyer agent on Base funds over CCIP, then runs it once the escrow shows it funded", async () => {
+    const escrow = new MemoryEscrow();
+    const keeper = new FakeKeeper();
+    h = await boot({ escrow, keeper: keeper as unknown as RefundKeeper, config: { ccipReceiverAddress: RECEIVER, ccipSenders: { "84532": SENDER } } });
+    const provider = await connectProvider(h);
+    const { status, body: q } = await ccipQuote(h);
+    expect(status).toBe(200);
+    expect(q.ccip).toMatchObject({
+      receiver: RECEIVER,
+      arcChainSelector: "3034092155422581607",
+      jobId: (q.escrow as Json).jobId,
+      provider: provider.address,
+      price: q.usdcAmount,
+      senders: { "84532": SENDER },
+    });
+    // Longer than the x402 escrow deadline: CCIP waits for the source chain's finality.
+    expect((q.ccip as Json).deadline as number).toBeGreaterThan(Math.floor(Date.now() / 1000) + 3_600);
+
+    // Held for the cross-chain payment: it can't also be bought over x402.
+    const { res } = await pay(h, q.quoteId as string);
+    expect(res.status).toBe(409);
+
+    fundOverCcip(escrow, keeper, q);
+    const jobId = await waitFor(async () => {
+      const { jobs: list } = (await (await fetch(`${h.base}/api/jobs`)).json()) as { jobs: Json[] };
+      return list[0]?.id as string | undefined;
+    });
+    const job = await getJob(h, jobId);
+    expect(job.payment).toMatchObject({
+      scheme: "escrow",
+      payer: REQUESTER,
+      payTo: provider.address,
+      crossChain: {
+        via: "ccip",
+        receiver: RECEIVER,
+        sourceChain: "Base Sepolia",
+        requester: REQUESTER,
+        ccipExplorerUrl: `https://ccip.chain.link/msg/0x${"ab".repeat(32)}`,
+      },
+    });
+    await provider.completeNextJob("done over CCIP");
+    await waitFor(() => (escrow.calls.some((c) => c.op === "release") ? true : undefined));
+    await waitFor(() => (keeper.forwarded.length ? true : undefined));
+    expect(keeper.forwarded[0]).toMatchObject({ outcome: "released" });
+    provider.close();
+  });
+
+  it("forwards a failed cross-chain job's refund to the requester", async () => {
+    const escrow = new MemoryEscrow();
+    const keeper = new FakeKeeper();
+    h = await boot({ escrow, keeper: keeper as unknown as RefundKeeper, config: { ccipReceiverAddress: RECEIVER } });
+    const provider = await connectProvider(h);
+    const { body: q } = await ccipQuote(h);
+    fundOverCcip(escrow, keeper, q);
+    const jobId = await waitFor(async () => {
+      const { jobs: list } = (await (await fetch(`${h.base}/api/jobs`)).json()) as { jobs: Json[] };
+      return list[0]?.id as string | undefined;
+    });
+    await provider.failNextJob("adapter crashed");
+    await waitFor(() => (escrow.calls.some((c) => c.op === "refund") ? true : undefined));
+    await waitFor(() => (keeper.forwarded.some((f) => f.outcome === "refunded") ? true : undefined));
+    const job = await waitFor(async () => {
+      const j = await getJob(h, jobId);
+      return (j.payment as Json).crossChain && ((j.payment as Json).crossChain as Json).refundForwardTx ? j : undefined;
+    });
+    expect(((job.payment as Json).crossChain as Json).refundForwardTx).toBe(`0x${"fd".repeat(32)}`);
+    provider.close();
+  });
+
+  it("ignores a cross-chain funding that matches no quote (the keeper refunds it after the deadline)", async () => {
+    const escrow = new MemoryEscrow();
+    const keeper = new FakeKeeper();
+    h = await boot({ escrow, keeper: keeper as unknown as RefundKeeper, config: { ccipReceiverAddress: RECEIVER } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    keeper.crossChainHandler?.(
+      { jobId: `0x${"12".repeat(32)}` as Hex, buyer: RECEIVER, provider: getAddress(PAYEE_A), amount: 1n, deadline: 1, txHash: `0x${"34".repeat(32)}` as Hex, blockNumber: 1n },
+      null,
+    );
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("matches no open CCIP quote"))).toBe(true);
+    const { jobs: list } = (await (await fetch(`${h.base}/api/jobs`)).json()) as { jobs: Json[] };
+    expect(list).toHaveLength(0);
+    warn.mockRestore();
   });
 });

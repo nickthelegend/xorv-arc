@@ -26,8 +26,8 @@
  *    verdict and its timestamp) — the file served next year must still hash
  *    to what went on-chain today.
  *
- * Gas: ~280k per first feedback from a client, billed on the *limit* on
- * Monad, so the write carries `estimateGas` + 15% and nothing more. It goes
+ * Gas: ~280k per first feedback from a client (a fraction of a cent of USDC
+ * on Arc); the write carries `estimateGas` + 15% and nothing more. It goes
  * through the protocol's per-address signer lock, the same queue the ledger
  * writer and the facilitator use, so a verifier sharing the operator key
  * never races them for a nonce. Best-effort throughout: a failed write is
@@ -226,7 +226,7 @@ export class ReputationWriter implements FeedbackSink {
   /**
    * Estimate, sign and send under the signer lock; wait for inclusion outside
    * it — the same shape as the ledger writer's broadcast, for the same
-   * reasons (nonces are assigned at send time; Monad bills the gas limit).
+   * reasons (nonces are assigned at send time).
    */
   private async broadcast(args: ReturnType<typeof giveFeedbackArgs>): Promise<PublishResult> {
     const wallet = this.wallet;

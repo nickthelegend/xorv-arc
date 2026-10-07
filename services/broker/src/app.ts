@@ -13,7 +13,7 @@
  *
  * The route uses x402's `upfront` payment flow: the facilitator *settles* the
  * authorization before the handler runs, and the handler only ever sees a
- * payment that has already landed on Monad. The default flow settles after
+ * payment that has already landed on Arc. The default flow settles after
  * the handler returns — which, for a job that is dispatched from the handler,
  * meant a provider could start working on a payment that then failed to settle
  * (the buyer spent the USDC in between, or signed two quotes against one
@@ -53,8 +53,12 @@ import {
   escrowPaymentOption,
   buildAgentRegistration,
   explorerAddress,
+  explorerAgent,
   explorerToken,
   explorerTx,
+  ccipMessageUrl,
+  withSettlementMemo,
+  jobMemo,
   formatUsd,
   getAgentWallet,
   IDENTITY_ABI,
@@ -110,7 +114,6 @@ import { bodyLimit, rateLimit, requestLog } from "./guards.js";
 import { Metrics } from "./metrics.js";
 import { resolveFacilitator } from "./facilitator.js";
 import { chainEscrow, type EscrowOps } from "./escrow.js";
-import { IdentityBook, chainIdentity, type IdentitySource } from "./identity.js";
 import { createLedgerReader, type LedgerReader } from "./ledger-reader.js";
 import { hookDeadline, withHookTimeout, type AiHooks, type JobVerifier } from "./ai-hooks.js";
 import { VERIFIED_TAG1, verificationFeedback, type FeedbackSink } from "./ai/feedback.js";
@@ -119,7 +122,8 @@ import type { RouteCandidate, RoutingRecord, ScreeningRecord, VerificationRecord
 import { ReputationBook } from "./ai/reputation-book.js";
 import { createRouterData } from "./ai/router-data.js";
 import { VaultStore } from "./vaults.js";
-import { createNansenTrust, publicRelatedCheck, refusalMessage, type NansenTrust } from "./trust/index.js";
+import { ArcHttpError, arcStackInfo, createGateway, escrowOutcomesReader, type Gateway } from "./arc.js";
+import { RefundKeeper, type CcipIntent, type FundedJob } from "./keeper.js";
 import {
   RATING_TTL_SECONDS,
   feedbackFor,
@@ -212,26 +216,19 @@ export interface AppDeps {
   reputationSummary?: (agentId: string, clients: string[], tag1: string) => Promise<ReputationSummary>;
   /** Private-job history vaults; defaults to an in-memory store. */
   vaults?: VaultStore;
-  /**
-   * Nansen trust signals (src/trust/). Defaults to one built from
-   * `config.nansen` — off unless XORV_NANSEN_MODE says otherwise. Tests pass
-   * a fixture-backed one.
-   */
-  trust?: NansenTrust;
   /** XorvEscrow operations. Defaults to the chain when XORV_ESCROW_ADDRESS is set; `null` pays providers directly. */
   escrow?: EscrowOps | null;
-  /** The escrow's Cleanverse identity gate. Defaults to reading it off the escrow; `null` turns it off. */
-  identity?: IdentitySource | null;
+  /** The refund keeper and cross-chain watcher; defaults to one over the escrow when XORV_KEEPER is on. `null` = off. */
+  keeper?: RefundKeeper | null;
+  /** Circle Gateway; defaults to the network's, minting from the operator key. `null` = off. */
+  gateway?: Gateway | null;
 }
 
 export function createApp(deps: AppDeps) {
   const { config, chain, registry, jobs } = deps;
   const vaults = deps.vaults ?? new VaultStore();
-  const trust =
-    deps.trust ?? createNansenTrust(config.nansen, { log: (line) => console.log(`[broker] ${line}`) });
-  // The matcher breaks price ties on reliability nudged by wallet trust…
-  registry.setTrustScorer((address) => trust.matchScore(address));
-  // …and by reputation: buyer ratings and verifier scores from the Envio
+  // The matcher breaks price ties on reliability nudged by reputation: buyer
+  // ratings and verifier scores from the Envio
   // indexer when one is configured, from this broker's own jobs otherwise.
   const reputation = new ReputationBook({
     indexer: config.indexerUrl ? { url: config.indexerUrl } : null,
@@ -256,8 +253,8 @@ export function createApp(deps: AppDeps) {
    * "completed" one: its result and errors are ignored until the cancel lands.
    */
   const cancelling = new Set<string>();
-  /** Whether this broker's chain is a Monad network or a local one (a fork), for every timing it reports. */
-  const chainKind: "monad" | "local" = isLocalRpc(networkConfig(config.network).rpcUrl) ? "local" : "monad";
+  /** Whether this broker's chain is an Arc network or a local one (a fork), for every timing it reports. */
+  const chainKind: "arc" | "local" = isLocalRpc(networkConfig(config.network).rpcUrl) ? "local" : "arc";
   /** When each quote's settlement was submitted, for its speed receipt. */
   const settleStarted = new Map<string, number>();
   /**
@@ -286,11 +283,14 @@ export function createApp(deps: AppDeps) {
 
   const lookupAgentWallet =
     deps.agentWallet ?? ((agentId: string) => getAgentWallet(config.network, agentId));
+  /** XorvReputation reads: a provider's escrow settlement record and the ERC-8004 agent it writes to. */
+  const escrowOutcomes = escrowOutcomesReader(config.network, config.reputationAddress ?? null);
 
   /**
-   * What the router's tools read: ERC-8004 on Monad, XorvLedger receipts
-   * (indexer first, RPC fallback), Envio provider aggregates and the public
-   * Nansen trust view. Built once; its reads are cached for a few seconds.
+   * What the router's tools read: ERC-8004 on Arc (buyer ratings, verifier
+   * scores and the escrow's settlement outcomes), XorvLedger receipts
+   * (indexer first, RPC fallback) and Envio provider aggregates. Built once;
+   * its reads are cached for a few seconds.
    */
   const routerData = createRouterData({
     network: config.network,
@@ -298,8 +298,8 @@ export function createApp(deps: AppDeps) {
     verifierAddress: () => deps.ai?.verifier?.feedback?.address ?? null,
     reader,
     indexer: config.indexerUrl ? { url: config.indexerUrl } : null,
-    trust,
     agentWallet: lookupAgentWallet,
+    escrowOutcomes: escrowOutcomes,
     reputationSummary: deps.reputationSummary,
   });
 
@@ -321,8 +321,7 @@ export function createApp(deps: AppDeps) {
    * Reputation Registry refuses feedback from any such address as
    * self-feedback, so a provider can freeze its score by approving the
    * ledger: every rating would revert. Checked before a rating is offered or
-   * relayed so the buyer is told why, instead of paying for a Nansen check
-   * and getting an opaque revert. A failed lookup is not proof of anything,
+   * relayed so the buyer is told why, instead of an opaque revert. A failed lookup is not proof of anything,
    * and answers false (the chain still has the last word).
    */
   async function agentAuthorizes(agentId: string, spender: string, opts: { fresh?: boolean } = {}): Promise<boolean> {
@@ -391,17 +390,31 @@ export function createApp(deps: AppDeps) {
     );
   }
   const escrowDeadlineSeconds = config.escrowDeadlineSeconds ?? 1_800;
+  const ccipReceiver = escrow && config.ccipReceiverAddress ? config.ccipReceiverAddress : null;
 
-  /** Cleanverse CVI standing, when the escrow has an identity gate. */
-  const identitySource: IdentitySource | null =
-    deps.identity !== undefined ? deps.identity : escrow ? chainIdentity(config.network, escrow.address) : null;
-  const identity = identitySource
-    ? new IdentityBook(identitySource, { log: (m) => console.warn(`[broker] ${m}`) })
-    : null;
-  if (identity) void identity.load().then(() => identity.refresh(registry.live().map((p) => p.address)));
-  /** Providers the gate is known to refuse: never quoted, never handed a job. */
-  const unverifiedProviders = (): string[] =>
-    identity ? registry.live().filter((p) => identity.blocked(p.address)).map((p) => p.id) : [];
+  /**
+   * The refund keeper (CRE's job on Monad; Arc mainnet has no CRE) and the
+   * watcher that turns a CCIP-funded escrow into a running job.
+   */
+  const keeper: RefundKeeper | null =
+    deps.keeper !== undefined
+      ? deps.keeper
+      : escrow && config.keeper !== false
+        ? new RefundKeeper({
+            network: config.network,
+            escrow: escrow.address as Hex,
+            attester: (config.facilitatorAccount?.address as Hex | undefined) ?? null,
+            account: config.keeperAccount ?? null,
+            ccipReceiver: ccipReceiver as Hex | null,
+            fromBlock: config.ledgerFromBlock,
+          })
+        : null;
+  if (keeper) keeper.crossChainHandler = (job, intent) => openCrossChainJob(job, intent);
+
+  /** Circle Gateway: fund once on any chain, spend on Arc. */
+  const gateway: Gateway | null =
+    deps.gateway !== undefined ? deps.gateway : createGateway({ network: config.network, relayer: config.operator });
+
 
   const x402Server = settlement.facilitator
     ? new x402ResourceServer(settlement.facilitator).register(config.network as Network, new ExactEvmScheme())
@@ -631,7 +644,7 @@ export function createApp(deps: AppDeps) {
   // thing to abuse. The paid route needs no limit of its own: it costs money.
   app.use("/api/quotes", rateLimit({ limit: 30, windowMs: 60_000 }));
   app.use("/api/providers/register", rateLimit({ limit: 10, windowMs: 60_000 }));
-  // Each rating relay costs the operator ~0.03 MON of gas.
+  // Each rating relay costs the operator a fraction of a cent of USDC gas.
   app.use("/api/jobs/:id/rate", rateLimit({ limit: 10, windowMs: 60_000 }));
   // Anyone can mint a vault key, so vault writes are storage anyone can ask
   // for; reads are free.
@@ -714,15 +727,22 @@ export function createApp(deps: AppDeps) {
         validation: net.erc8004.validation,
       } as NetworkInfo["erc8004"],
       indexer: config.indexerUrl ? { url: config.indexerUrl } : null,
-      // XorvEscrow, when jobs are paid into escrow; its Cleanverse gate, when it has one.
+      // XorvEscrow, when jobs are paid into escrow.
       escrow: escrow
         ? {
             address: escrow.address,
             url: explorerAddress(config.network, escrow.address),
             deadlineSeconds: escrowDeadlineSeconds,
-            identityGate: identity?.gate() ?? null,
           }
         : null,
+      // The Arc stack: USDC gas, Memo, ERC-8004 via XorvReputation, Gateway, CCTP, CCIP, the keeper.
+      arc: arcStackInfo({
+        network: config.network,
+        reputationAddress: config.reputationAddress ?? null,
+        ccipReceiverAddress: ccipReceiver,
+        keeper: { enabled: keeper?.enabled ?? false, address: keeper?.enabled ? (config.keeperAccount?.address ?? null) : null },
+        gatewayEnabled: gateway?.available ?? false,
+      }),
       published: chain.counts(),
       pendingReceipts: chain.pendingReceipts(),
       lastPublishError: chain.lastPublishError(),
@@ -735,8 +755,6 @@ export function createApp(deps: AppDeps) {
         verifier: deps.ai?.verifier?.info ?? null,
       },
       aiRoles: deps.ai?.report?.() ?? null,
-      // What the broker bought from Nansen today, over x402 on Monad mainnet.
-      nansen: trust.status(),
       feeBps: config.feeBps,
       epoch: deps.getHub()?.epoch ?? bootedAt,
       stats: {
@@ -763,11 +781,7 @@ export function createApp(deps: AppDeps) {
     return c.json({
       providers: registry
         .list()
-        .map((p) => ({
-          ...publicProvider(config.network, p, hub?.isConnected(p.id) ?? false, trust.publicSignal(p.address)),
-          // Cleanverse CVI standing, when the escrow has an identity gate; null otherwise.
-          identity: identity?.get(p.address) ?? null,
-        })),
+        .map((p) => publicProvider(config.network, p, hub?.isConnected(p.id) ?? false)),
     });
   });
 
@@ -777,11 +791,79 @@ export function createApp(deps: AppDeps) {
     if (!provider) return c.json({ error: "unknown provider" }, 404);
     const connected = deps.getHub()?.isConnected(provider.id) ?? false;
     return c.json({
-      provider: {
-        ...publicProvider(config.network, provider, connected, trust.publicSignal(provider.address)),
-        identity: identity?.get(provider.address) ?? null,
-      },
+      provider: publicProvider(config.network, provider, connected),
     });
+  });
+
+  /** A provider's escrow settlement record (XorvReputation on Arc) and the ERC-8004 agent it feeds. */
+  app.get("/api/providers/:id/escrow", async (c) => {
+    const provider = registry.find(c.req.param("id"));
+    if (!provider) return c.json({ error: "unknown provider" }, 404);
+    if (!escrowOutcomes) return c.json({ configured: false });
+    try {
+      const read = await escrowOutcomes(provider.address);
+      return c.json({
+        ...read,
+        ...(read.configured
+          ? {
+              reputationUrl: explorerAddress(config.network, read.reputation),
+              agentUrl: read.agentId ? explorerAgent(config.network, read.agentId) : null,
+              erc8004Reputation: net.erc8004.reputation,
+            }
+          : {}),
+      });
+    } catch (err) {
+      return c.json({ configured: true, error: err instanceof Error ? err.message.split("\n")[0] : String(err) }, 502);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Circle Gateway: one USDC balance on many chains, minted to the buyer on Arc
+  // -------------------------------------------------------------------------
+
+  const gatewayLimit = rateLimit({ limit: 20, windowMs: 60_000 });
+  app.use("/api/gateway/*", gatewayLimit);
+  const arcError = (c: Context, err: unknown) => {
+    if (err instanceof ArcHttpError) return c.json({ error: err.message, code: err.code }, err.status);
+    throw err;
+  };
+
+  app.get("/api/gateway", async (c) => {
+    if (!gateway) return c.json({ available: false, error: "Circle Gateway is off on this broker" });
+    const base = {
+      available: gateway.available,
+      wallet: gateway.info.wallet,
+      minter: gateway.info.minter,
+      apiUrl: gateway.info.apiUrl,
+      sources: gateway.info.sources,
+    };
+    const depositor = c.req.query("depositor");
+    if (!depositor) return c.json(base);
+    try {
+      return c.json({ ...base, ...(await gateway.balances(depositor)) });
+    } catch (err) {
+      return arcError(c, err);
+    }
+  });
+
+  app.post("/api/gateway/intent", async (c) => {
+    if (!gateway) return c.json({ error: "Circle Gateway is off on this broker" }, 503);
+    try {
+      return c.json(gateway.intent(((await readJson(c)) ?? {}) as Record<string, unknown>));
+    } catch (err) {
+      return arcError(c, err);
+    }
+  });
+
+  app.post("/api/gateway/mint", async (c) => {
+    if (!gateway) return c.json({ error: "Circle Gateway is off on this broker" }, 503);
+    try {
+      const result = await gateway.mint(((await readJson(c)) ?? {}) as Record<string, unknown>);
+      metrics.inc("xorv_gateway_mints_total");
+      return c.json(result);
+    } catch (err) {
+      return arcError(c, err);
+    }
   });
 
   /**
@@ -812,7 +894,8 @@ export function createApp(deps: AppDeps) {
         name: `${provider.label} · Xorv provider`,
         description:
           `Xorv provider node selling ${adapters.join(", ") || "AI agent"} capacity. ` +
-          `Pay per job in USDC over x402 on Monad; every paid job is receipted on XorvLedger.`,
+          `Pay per job in USDC over x402 on Arc (escrowed until delivery); every paid job is receipted on XorvLedger ` +
+          `and every escrow settlement is written to this agent's ERC-8004 reputation.`,
         services: [
           {
             name: "web",
@@ -854,7 +937,6 @@ export function createApp(deps: AppDeps) {
     let outcome: RegisterOutcome;
     try {
       outcome = registry.registerNode({ ...parsed.registration, agentId }, { token: presented });
-      if (identity) void identity.refresh([parsed.registration.address]);
     } catch (err) {
       if (err instanceof RegistrationRefused) {
         console.warn(`[broker] registration "${parsed.registration.label}" refused: node id has a live session`);
@@ -866,9 +948,6 @@ export function createApp(deps: AppDeps) {
     // A fresh token was minted, so whoever held the old one — and any socket
     // it opened — no longer speaks for this node.
     if (!outcome.authenticated) deps.getHub()?.disconnect(provider.id, "this node re-registered with a new token");
-    // The payout wallet's Nansen signal is bought once the node opens its
-    // control channel (hubHandlers.onConnect), not here: a registration is
-    // free and unauthenticated, and every fresh address costs real USDC.
     const registryResult = await publishRegistration(provider);
 
     return c.json({
@@ -1024,8 +1103,6 @@ export function createApp(deps: AppDeps) {
     const candidates = registry.candidates({
       adapter: request.adapter ?? null,
       maxPriceUsdMicros: maxPrice,
-      // The escrow's identity gate would refuse to fund a job for these.
-      exclude: unverifiedProviders(),
     });
     if (candidates.length === 0) {
       const live = registry.live().length;
@@ -1043,7 +1120,7 @@ export function createApp(deps: AppDeps) {
 
     // 3. The router, when the buyer left the adapter open and there is a real
     //    choice to make: Qwen reads the candidates' on-chain reputation,
-    //    receipts, indexer stats and wallet trust with its tools and picks a
+    //    receipts and indexer stats with its tools and picks a
     //    provider. The pick is checked against the live candidates (all under
     //    the ceiling) here too; without one the matcher chooses — cheapest,
     //    then reputation and reliability.
@@ -1110,13 +1187,25 @@ export function createApp(deps: AppDeps) {
       routing,
       screening,
     });
+    const viaCcip = (body as { payVia?: unknown }).payVia === "ccip";
+    if (viaCcip && !ccipReceiver) {
+      return c.json({ error: "this broker takes no cross-chain jobs (no XorvCcipReceiver configured)" }, 400);
+    }
     if (escrow) {
       // Frozen with the price: the buyer's signature binds to this job id and deadline.
+      // A job funded from another chain gets longer: CCIP waits for the source chain's finality.
       quote.escrow = {
         address: escrow.address,
         jobId: escrowJobId(quote.id),
-        deadline: Math.floor(Date.now() / 1000) + escrowDeadlineSeconds,
+        deadline: Math.floor(Date.now() / 1000) + (viaCcip ? (config.ccipDeadlineSeconds ?? 7_200) : escrowDeadlineSeconds),
       };
+    }
+    if (viaCcip && quote.escrow) {
+      // Held for the cross-chain payment: nobody can pay it over x402 meanwhile, and it lives until the deadline.
+      quote.paying = true;
+      quote.crossChain = true;
+      quote.expiresAt = quote.escrow.deadline * 1000;
+      metrics.inc("xorv_ccip_quotes_total");
     }
 
     const response: QuoteResponse = {
@@ -1174,6 +1263,21 @@ export function createApp(deps: AppDeps) {
       escrow: quote.escrow
         ? { ...quote.escrow, explorerUrl: explorerAddress(config.network, quote.escrow.address) }
         : null,
+      ccip:
+        quote.crossChain && quote.escrow && ccipReceiver
+          ? {
+              receiver: ccipReceiver,
+              arcChainSelector: net.ccip.chainSelector,
+              jobId: quote.escrow.jobId,
+              provider: quote.providerAddress,
+              price: quote.usdcAmount,
+              deadline: quote.escrow.deadline,
+              sources: net.remotes
+                .filter((r) => r.ccipSelector)
+                .map((r) => ({ name: r.name, chainId: r.chainId, selector: r.ccipSelector as string, usdc: r.usdc, cctpDomain: r.cctpDomain })),
+              senders: config.ccipSenders ?? {},
+            }
+          : null,
       routing,
       screening,
     };
@@ -1327,7 +1431,8 @@ export function createApp(deps: AppDeps) {
     }
     quote.paying = true;
     try {
-      await next();
+      // Every settlement write for this quote carries its job id through Arc's Memo.
+      await withSettlementMemo(jobMemo(escrowJobId(quote.id), "pay", quote.id), () => next());
     } finally {
       // Settlement failed (or never happened): the quote is still for sale.
       // Unless it was broadcast and is still confirming: then it stays locked.
@@ -1377,6 +1482,58 @@ export function createApp(deps: AppDeps) {
       jobUrl: `${config.publicUrl}/api/jobs/${job.id}`,
     });
   });
+
+  /**
+   * A job funded from another chain: XorvCcipReceiver (the escrow's buyer of
+   * record) funded the escrow for a quote asked for with `payVia: "ccip"`.
+   * The dollars came over CCTP, the instruction over Chainlink CCIP; from
+   * here it runs like any escrowed job, and settles the same way.
+   */
+  function openCrossChainJob(funded: FundedJob, intent: CcipIntent | null): void {
+    const quote = jobs.findQuote((q) => Boolean(q.crossChain && q.escrow && sameHash(q.escrow.jobId, funded.jobId)));
+    if (!quote || quote.jobId || !quote.escrow || !ccipReceiver) {
+      console.warn(`[broker] cross-chain funding for ${funded.jobId} matches no open CCIP quote — the keeper refunds it after its deadline`);
+      return;
+    }
+    if (funded.amount < BigInt(quote.usdcAmount) || !sameAddress(funded.provider, quote.providerAddress)) {
+      console.warn(`[broker] cross-chain funding for ${funded.jobId} doesn't match quote ${quote.id} — not running it`);
+      return;
+    }
+    const remote = intent ? net.remotes.find((r) => r.ccipSelector === intent.sourceChainSelector.toString()) : undefined;
+    const requester = intent?.beneficiary ?? funded.buyer;
+    const record: PaymentRecord = {
+      asset: "usdc",
+      assetAddress: net.usdc.address,
+      amount: funded.amount.toString(),
+      network: config.network,
+      txHash: funded.txHash,
+      payer: requester,
+      payTo: quote.providerAddress,
+      settledAt: Date.now(),
+      explorerUrl: explorerTx(config.network, funded.txHash),
+      scheme: "escrow",
+      escrow: {
+        address: escrow!.address,
+        jobId: funded.jobId,
+        deadline: funded.deadline,
+        state: "funded",
+        provider: funded.provider,
+        explorerUrl: explorerAddress(config.network, escrow!.address),
+      },
+      crossChain: {
+        via: "ccip",
+        receiver: ccipReceiver,
+        sourceChain: remote?.name ?? null,
+        sourceChainSelector: intent ? intent.sourceChainSelector.toString() : null,
+        requester,
+        messageId: intent?.messageId ?? null,
+        ccipExplorerUrl: intent?.messageId ? ccipMessageUrl(intent.messageId) : null,
+      },
+    };
+    const job = openJob(quote, record, null);
+    metrics.inc("xorv_ccip_jobs_total");
+    console.log(`[broker] job ${job.id} funded over CCIP from ${remote?.name ?? "another chain"} by ${requester}`);
+  }
 
   /** Turn a paid quote into a job and hand it to its provider. */
   function openJob(quote: Quote, payment: PaymentRecord | null, cancelTokenHash: string | null): StoredJob {
@@ -1724,7 +1881,7 @@ export function createApp(deps: AppDeps) {
     if (!isTerminal(job.status)) return { error: "rate the job once it has finished", status: 409 };
     if (job.rating) return { error: "this job has already been rated", status: 409 };
     // A job its own provider paid for (payer == payTo) says nothing about the
-    // provider. No lookup needed, so this holds whatever the Nansen guard says.
+    // provider.
     if (sameAddress(job.payment.payer, job.payment.payTo)) {
       return { error: "this job was paid for by the provider's own payout address, so it can't be rated", status: 409 };
     }
@@ -1815,8 +1972,7 @@ export function createApp(deps: AppDeps) {
     try {
       // XorvLedger only accepts a rating for a job it has a receipt for. The
       // receipt comes first: it can land without the agent (the agent's
-      // wallet moved since the quote), and then there is nothing to rate, so
-      // no Nansen lookup is spent on it.
+      // wallet moved since the quote), and then there is nothing to rate.
       if (!receiptLanded(job)) await ensureReceipt(job);
       const landed = jobs.get(job.id);
       if (!landed || !receiptLanded(landed)) {
@@ -1824,43 +1980,10 @@ export function createApp(deps: AppDeps) {
       }
       const recorded = ratingTarget(landed);
       if ("error" in recorded) return c.json({ error: recorded.error }, recorded.status);
-      // A fresh read: this is about to spend a Nansen lookup and gas.
+      // A fresh read: this is about to spend gas.
       if (await agentAuthorizes(recorded.agentId, recorded.env.ledger, { fresh: true })) {
         metrics.inc("xorv_rating_refusals_total", { reason: "ledger_authorized" });
         return c.json(ledgerAuthorizedRefusal(recorded.agentId), 409);
-      }
-      // The wash-rating guard. Only reached with a valid payer signature, so
-      // nobody but the buyer can make the broker spend on a lookup. A provider
-      // rating itself from a second wallet — one it funded, or one funded by
-      // the same (non-exchange) wallet, or one Nansen links to it — is refused
-      // before anything reaches ERC-8004. A lookup that fails or times out is
-      // recorded as degraded and does not block an honest buyer.
-      if (trust.ratingGuard && job.payment) {
-        const check = await trust.checkRelated(target.payer, job.payment.payTo);
-        jobs.patch(job.id, { trustCheck: check });
-        // An outage never blocks an honest buyer, but a spent budget is
-        // something a caller can bring about; relaying unchecked then would
-        // switch the guard off. Defer instead.
-        if (check.budgetSpent && !check.related) {
-          metrics.inc("xorv_rating_refusals_total", { reason: "trust_budget_spent" });
-          return c.json(
-            {
-              error:
-                "the wash-rating check can't run right now: today's Nansen budget is spent. " +
-                "Retry after 00:00 UTC (fetch fresh typed data from GET …/rating then)",
-              code: "trust_budget_spent",
-            },
-            503,
-          );
-        }
-        if (check.related) {
-          metrics.inc("xorv_rating_refusals_total", { reason: "related_wallets" });
-          console.warn(`[broker] rating for ${job.id} refused: ${check.reasons.map((r) => r.kind).join(", ")}`);
-          return c.json(
-            { error: refusalMessage(check), code: "related_wallets", trustCheck: publicRelatedCheck(check) },
-            403,
-          );
-        }
       }
       const result = await chain.rateJob(ratingMessage(parts.rating), signature as Hex);
       jobs.patch(job.id, {
@@ -2044,7 +2167,7 @@ export function createApp(deps: AppDeps) {
       if (rows) {
         return c.json({
           source: "indexer",
-          providers: leaderboardFromIndexer(config.network, rows, registry.list()).map(withTrust),
+          providers: leaderboardFromIndexer(config.network, rows, registry.list()),
         });
       }
     } catch (err) {
@@ -2053,14 +2176,9 @@ export function createApp(deps: AppDeps) {
     return c.json({
       source: "memory",
       ...(indexerError ? { indexerError } : {}),
-      providers: leaderboardFromMemory(config.network, registry.list(), jobs.list({ limit: 5_000 }), limit).map(withTrust),
+      providers: leaderboardFromMemory(config.network, registry.list(), jobs.list({ limit: 5_000 }), limit),
     });
   });
-
-  /** A leaderboard row with its payout wallet's public Nansen signal, when known. */
-  function withTrust<T extends { address: string }>(row: T): T & { trust: ReturnType<NansenTrust["publicSignal"]> } {
-    return { ...row, trust: trust.publicSignal(row.address) };
-  }
 
   // -------------------------------------------------------------------------
   // Registration helpers
@@ -2108,7 +2226,7 @@ export function createApp(deps: AppDeps) {
    * Announce a registration on XorvLedger without holding the node up.
    *
    * The write starts immediately and finishes in the background; the response
-   * waits for it only briefly (a Monad round-trip is about a second), so a
+   * waits for it only briefly (an Arc round-trip is well under a second), so a
    * slow or dead RPC costs a node a couple of seconds at most, never its
    * registration. An unchanged re-registration (a reconnect) writes nothing.
    */
@@ -2201,7 +2319,7 @@ export function createApp(deps: AppDeps) {
     const match = registry.match({
       adapter: job.request.adapter ?? job.routing?.adapter ?? null,
       maxPriceUsdMicros: job.request.maxPriceUsdMicros,
-      exclude: [...tried, ...unverifiedProviders()],
+      exclude: tried,
     });
     if (!match) return false;
 
@@ -2554,7 +2672,7 @@ export function createApp(deps: AppDeps) {
    * A transaction's speed receipt, with two honest timers: executed (submission
    * to receipt) and final (submission until the `finalized` head holds its
    * block). Both on this broker's clock, both labelled with the chain they were
-   * measured on: a local fork's timings are never Monad's.
+   * measured on: a local fork's timings are never Arc's.
    */
   async function chainTiming(txHash: string, startedAt: number | null, receiptAt: number): Promise<ChainTiming | null> {
     try {
@@ -2606,6 +2724,14 @@ export function createApp(deps: AppDeps) {
     return null;
   }
 
+  async function forwardCrossChainRefund(jobId: string, escrowJobId: Hex): Promise<void> {
+    const tx = await keeper?.forwardCrossChain(escrowJobId, "refunded");
+    const job = jobs.get(jobId);
+    if (tx && job?.payment?.crossChain) {
+      jobs.patch(jobId, { payment: { ...job.payment, crossChain: { ...job.payment.crossChain, refundForwardTx: tx } } });
+    }
+  }
+
   /** Point a funded escrow at the provider now running the job. */
   async function repointEscrow(jobId: string, provider: string): Promise<boolean> {
     const held = jobs.get(jobId)?.payment?.escrow;
@@ -2626,7 +2752,7 @@ export function createApp(deps: AppDeps) {
    * Runs from the job-store subscription, so every way a job ends (result,
    * failure, timeout) lands here; a cancel refunds in its own route. A write
    * that fails is retried by the sweep. One that reverts because someone else
-   * already settled the job (the buyer's own release, a Chainlink CRE keeper's
+   * already settled the job (the buyer's own release, the refund keeper's
    * refund after the deadline) is recorded as theirs.
    */
   async function settleEscrow(jobId: string): Promise<void> {
@@ -2642,11 +2768,14 @@ export function createApp(deps: AppDeps) {
         const tx = await escrow.release(held.jobId as Hex, job.resultHash);
         patchEscrow(jobId, { state: "released", releaseTx: tx, resultHash: job.resultHash, settledAt: Date.now(), lastError: undefined });
         timeEscrowSettlement(jobId, tx, started, Date.now());
+        if (job.payment?.crossChain) void keeper?.forwardCrossChain(held.jobId as Hex, "released");
       } else {
         const started = Date.now();
         const tx = await escrow.refund(held.jobId as Hex);
         patchEscrow(jobId, { state: "refunded", refundTx: tx, settledAt: Date.now(), lastError: undefined });
         timeEscrowSettlement(jobId, tx, started, Date.now());
+        // Refunded to the receiver (the buyer of record): forward it to the requester on Arc.
+        if (job.payment?.crossChain) void forwardCrossChainRefund(jobId, held.jobId as Hex);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message.split("\n")[0] : String(err);
@@ -2694,8 +2823,8 @@ export function createApp(deps: AppDeps) {
     app,
     /** How payments settle — for the boot banner. */
     settlement,
-    /** Nansen trust signals — for the boot banner. */
-    trust,
+    /** The refund keeper — for the boot banner. */
+    keeper: { enabled: keeper?.enabled ?? false, watching: () => keeper?.watching ?? 0 },
     hubHandlers: {
       onEvent: (providerId: string, jobId: string, event: JobEvent) => {
         const job = jobs.get(jobId);
@@ -2718,9 +2847,6 @@ export function createApp(deps: AppDeps) {
       onConnect: (providerId: string) => {
         const provider = registry.get(providerId);
         console.log(`[broker] node connected: ${provider?.label ?? providerId}`);
-        // Look up the payout wallet on Nansen in the background, now that the
-        // node can actually take jobs. The signal shows up once it lands.
-        if (provider) trust.watch(provider.address);
       },
       onDisconnect: (providerId: string) => {
         const provider = registry.get(providerId);
@@ -2738,15 +2864,6 @@ export function createApp(deps: AppDeps) {
       for (const id of registry.reap()) {
         console.log(`[broker] reaped idle provider ${id}`);
       }
-      // Keep live providers' Nansen signals fresh (a no-op until one is stale).
-      // Only providers holding a control channel: a registration that never
-      // connected is not worth paying Nansen for.
-      trust.refreshStale(
-        registry
-          .live()
-          .filter((p) => deps.getHub()?.isConnected(p.id))
-          .map((p) => p.address),
-      );
       // Receipts whose write failed (or that were restored from disk before
       // their batch landed) get another go, a bounded number of times.
       if (chain.mode() === "write") {
@@ -2760,8 +2877,8 @@ export function createApp(deps: AppDeps) {
           if (isTerminal(job.status) && job.payment?.escrow?.state === "funded") void settleEscrow(job.id);
         }
       }
-      // A freeze or revocation by Cleanverse takes a provider out of matching within a sweep or two.
-      if (identity) void identity.load().then(() => identity.refresh(registry.live().map((p) => p.address)));
+      // The refund keeper: follow JobFunded, refund what is past its deadline, open CCIP-funded jobs.
+      if (keeper) void keeper.tick();
       // Settlements broadcast but not confirmed when the facilitator gave up.
       void settlePending();
       // Quotes nobody paid for, past their TTL.
@@ -2793,7 +2910,7 @@ export function validateRegistration(body: RegisterRequest | null): ParsedRegist
   if (typeof body.label !== "string" || !body.label.trim()) return { error: "label is required" };
   const rawAddress = typeof body.address === "string" ? body.address : "";
   if (!rawAddress) {
-    return { error: "address is required — the 0x address this node is paid at (Monad, USDC)" };
+    return { error: "address is required — the 0x address this node is paid at (Arc, USDC)" };
   }
   let address: string;
   try {

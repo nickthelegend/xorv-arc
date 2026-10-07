@@ -38,9 +38,9 @@ import {
 import type { ToolContext as ToolContextForTest } from "../src/ai/router-tools.js";
 import { Registry } from "../src/registry.js";
 import type { LedgerReader } from "../src/ledger-reader.js";
-import type { PublicTrustSignal } from "../src/trust/index.js";
+import type { EscrowOutcomesRead } from "../src/ai/router-tools.js";
 
-const NETWORK = "eip155:10143";
+const NETWORK = "eip155:5042002";
 const KEYS = { XORV_QWEN_API_KEY: "sk-qwen-test-000000000000" };
 const SECRET = "marmalade-4412";
 
@@ -178,29 +178,17 @@ function router(fetch: typeof globalThis.fetch, opts: { budgetMs?: number; maxTu
   });
 }
 
-function trustSignal(over: Partial<PublicTrustSignal> = {}): PublicTrustSignal {
+function outcomes(over: Partial<Extract<EscrowOutcomesRead, { configured: true }>> = {}): EscrowOutcomesRead {
   return {
-    address: ADDR.kimi,
-    score: 78,
-    band: "high",
-    firstSeen: "2025-01-01T00:00:00Z",
-    walletAgeDays: 400,
-    txCount: 120,
-    txCountCapped: false,
-    firstFunder: null,
-    relatedWalletCount: 1,
-    labels: ["Active Trader"],
-    riskFlags: [],
-    paidTx: [],
-    paidUsdc: "0.01",
-    source: "nansen",
-    mode: "fixture",
-    degraded: false,
-    fetchedAt: "2026-09-27T00:00:00Z",
-    attribution: "Data by Nansen",
-    attributionUrl: "https://www.nansen.ai",
+    configured: true,
+    reputation: "0x00000000000000000000000000000000000ae904",
+    completed: 9,
+    failed: 1,
+    earnedUnits: "45000",
+    scoreBps: 8333,
+    agentId: "7",
     ...over,
-  } as PublicTrustSignal;
+  };
 }
 
 function erc8004Read(over: Partial<Erc8004Read> = {}): Erc8004Read {
@@ -221,7 +209,7 @@ function erc8004Read(over: Partial<Erc8004Read> = {}): Erc8004Read {
 
 /** Every source stubbed with plausible data for the kimi node. */
 function stubData(): RouterData & { counts: Record<string, number> } {
-  const counts: Record<string, number> = { erc8004: 0, receipts: 0, indexer: 0, trust: 0 };
+  const counts: Record<string, number> = { erc8004: 0, receipts: 0, indexer: 0, escrow: 0 };
   return {
     network: NETWORK,
     counts,
@@ -262,9 +250,9 @@ function stubData(): RouterData & { counts: Record<string, number> } {
         agent: { feedbackCount: 7, buyerRatingCount: 4, buyerRatingAvg: 88, verifiedCount: 3, verifiedScore: 90 },
       };
     },
-    trust: () => {
-      counts.trust! += 1;
-      return { enabled: true, signal: trustSignal() };
+    escrowOutcomes: async () => {
+      counts.escrow! += 1;
+      return outcomes();
     },
   };
 }
@@ -277,7 +265,7 @@ const HAPPY_PATH: Turn[] = [
       { name: "erc8004_reputation", args: { agentId: "7" } },
       { name: "recent_receipts", args: { providerId: "prv_kimi" } },
       { name: "indexer_provider_stats", args: { providerId: "prv_kimi" } },
-      { name: "nansen_trust", args: { providerId: "prv_kimi" } },
+      { name: "escrow_outcomes", args: { providerId: "prv_kimi" } },
     ],
   },
   {
@@ -317,7 +305,7 @@ describe("the Qwen router's tool loop", () => {
       thinking: true,
     });
     expect(routing.fallback).toBeUndefined();
-    expect(data.counts).toEqual({ erc8004: 1, receipts: 1, indexer: 1, trust: 1 });
+    expect(data.counts).toEqual({ erc8004: 1, receipts: 1, indexer: 1, escrow: 1 });
 
     const steps = routing.steps!;
     expect(steps.map((s) => s.tool)).toEqual([
@@ -325,20 +313,20 @@ describe("the Qwen router's tool loop", () => {
       "erc8004_reputation",
       "recent_receipts",
       "indexer_provider_stats",
-      "nansen_trust",
+      "escrow_outcomes",
       "select_provider",
     ]);
     expect(steps.every((s) => s.ok)).toBe(true);
     expect(steps[0]!.summary).toBe("listed 3 live options from 3 providers under $0.0500 (echo, qwen, kimi)");
     expect(steps[1]).toMatchObject({ args: { agentId: "7" }, source: "chain" });
     expect(steps[1]!.summary).toBe(
-      "read agent #7's ERC-8004 reputation on Monad (avg 92 from 5 buyer ratings; Kimi verifier 88 over 3 scores; agent wallet is the payout address)",
+      "read agent #7's ERC-8004 reputation on Arc (avg 92 from 5 buyer ratings; Kimi verifier 88 over 3 scores; agent wallet is the payout address)",
     );
     expect(steps[1]!.links![0]).toEqual({ label: "agent #7", url: explorerAgent(NETWORK, "7") });
     expect(steps[2]!.summary).toBe("checked 7 receipts on XorvLedger via Envio: 6 delivered, 1 failed; 2 buyer ratings, avg 90; earned $0.0300");
     expect(steps[2]!.links![0]).toEqual({ label: "latest receipt", url: explorerTx(NETWORK, `0x${"ab".repeat(32)}`) });
     expect(steps[3]!.summary).toBe("Envio indexer: 12 jobs, 92% delivered, avg rating 88 (4), verified 90, earned $0.1200");
-    expect(steps[4]!.summary).toBe("Nansen trust 78 (high) for payout wallet 0xbbbb…000b");
+    expect(steps[4]!.summary).toBe("escrow: 9 released, 1 refunded at fault, earned $0.0450, written to agent #7");
     expect(steps[5]).toMatchObject({ args: { providerId: "prv_kimi", adapter: "kimi" } });
     expect(steps[5]!.summary).toBe("picked kimi node — kimi at $0.0050, agent #7");
     for (const step of steps) expect(step.ms).toBeGreaterThanOrEqual(0);
@@ -359,7 +347,7 @@ describe("the Qwen router's tool loop", () => {
       "erc8004_reputation",
       "recent_receipts",
       "indexer_provider_stats",
-      "nansen_trust",
+      "escrow_outcomes",
       "select_provider",
     ]);
     expect(first.messages[0]!.content).toMatch(/job router for Xorv/);
@@ -375,9 +363,8 @@ describe("the Qwen router's tool loop", () => {
     const third = qwen.calls[2]!;
     expect(third.messages.filter((m) => m.role === "tool")).toHaveLength(5);
     expect(JSON.stringify(third.messages)).not.toContain("Comparing the candidates");
-    const trust = JSON.parse(String(third.messages.at(-1)!.content)) as Record<string, unknown>;
-    expect(trust).toMatchObject({ score: 78, band: "high" });
-    expect(Object.keys(trust)).not.toContain("smartMoney");
+    const escrowRead = JSON.parse(String(third.messages.at(-1)!.content)) as Record<string, unknown>;
+    expect(escrowRead).toMatchObject({ released: 9, refundedAtFault: 1, successScore: 83, erc8004Agent: "7" });
   });
 
   it("turns thinking off on request, still with tools", async () => {
@@ -478,15 +465,15 @@ describe("the Qwen router's tool loop", () => {
 
   it("caps the lookups: calls past the cap are answered without running, then only select_provider is offered", async () => {
     const data = stubData();
-    const many: Call[] = Array.from({ length: 8 }, () => ({ name: "nansen_trust", args: { providerId: "prv_kimi" } }));
+    const many: Call[] = Array.from({ length: 8 }, () => ({ name: "escrow_outcomes", args: { providerId: "prv_kimi" } }));
     const qwen = scriptedQwen([
       { calls: many },
-      { calls: [{ name: "select_provider", args: { providerId: "prv_kimi", reason: "trusted wallet" } }] },
+      { calls: [{ name: "select_provider", args: { providerId: "prv_kimi", reason: "proven in escrow" } }] },
     ]);
     const routing = await router(qwen.fetch).route(REQUEST, CANDIDATES, data);
-    expect(data.counts.trust).toBe(6);
+    expect(data.counts.escrow).toBe(6);
     expect(routing).toMatchObject({ providerId: "prv_kimi", toolCalls: 6, turns: 2 });
-    expect(routing.steps!.filter((s) => s.tool === "nansen_trust")).toHaveLength(6);
+    expect(routing.steps!.filter((s) => s.tool === "escrow_outcomes")).toHaveLength(6);
     const answers = qwen.calls[1]!.messages.filter((m) => m.role === "tool");
     expect(answers).toHaveLength(8);
     expect(String(answers[7]!.content)).toMatch(/lookup budget spent/);
@@ -546,7 +533,7 @@ describe("the router's tools", () => {
         erc8004Read({ buyerRatings: { count: 0, average: null }, verifierScores: null, verifier: null, agentWallet: ADDR.echo, walletMatchesPayout: false }),
     };
     const out = await runReadTool("erc8004_reputation", '{"agentId":7}', ctx(data));
-    expect(out.step.summary).toBe("read agent #7's ERC-8004 reputation on Monad (no buyer ratings yet; agent wallet is NOT the payout address)");
+    expect(out.step.summary).toBe("read agent #7's ERC-8004 reputation on Arc (no buyer ratings yet; agent wallet is NOT the payout address)");
     expect(out.result).toMatchObject({ agentId: "7", agentWalletIsPayout: false, verifierScores: null });
 
     const none = await runReadTool("erc8004_reputation", '{"agentId":"7"}', ctx({ network: NETWORK }));
@@ -571,7 +558,7 @@ describe("the router's tools", () => {
     expect(missing.step).toMatchObject({ ok: true, source: "indexer", summary: "not in the Envio index yet (no registration indexed)" });
   });
 
-  it("recent_receipts and nansen_trust say when their source is missing", async () => {
+  it("recent_receipts and escrow_outcomes say when their source is missing", async () => {
     const noLedger = await runReadTool(
       "recent_receipts",
       '{"providerId":"prv_kimi"}',
@@ -582,16 +569,15 @@ describe("the router's tools", () => {
     );
     expect(noLedger.step.summary).toBe("no XorvLedger configured on this broker, so no receipts to check");
 
-    const off = await runReadTool("nansen_trust", '{"providerId":"prv_kimi"}', ctx({ network: NETWORK, trust: () => ({ enabled: false, signal: null }) }));
-    expect(off.step.summary).toBe("Nansen trust signals are off on this broker");
-    const pending = await runReadTool("nansen_trust", '{"providerId":"prv_kimi"}', ctx({ network: NETWORK, trust: () => ({ enabled: true, signal: null }) }));
-    expect(pending.step.summary).toBe("no Nansen signal yet for payout wallet 0xbbbb…000b");
-    const flagged = await runReadTool(
-      "nansen_trust",
+    const off = await runReadTool("escrow_outcomes", '{"providerId":"prv_kimi"}', ctx({ network: NETWORK }));
+    expect(off.step.summary).toBe("no escrow reputation contract on this broker");
+    const fresh = await runReadTool(
+      "escrow_outcomes",
       '{"providerId":"prv_kimi"}',
-      ctx({ network: NETWORK, trust: () => ({ enabled: true, signal: trustSignal({ score: 31, band: "low", riskFlags: ["fresh-wallet"] }) }) }),
+      ctx({ network: NETWORK, escrowOutcomes: async () => outcomes({ completed: 0, failed: 0, earnedUnits: "0", scoreBps: 5000, agentId: null }) }),
     );
-    expect(flagged.step.summary).toBe("Nansen trust 31 (low) for payout wallet 0xbbbb…000b; flags: fresh-wallet");
+    expect(fresh.step.summary).toBe("no escrow settlements yet for 0xbbbb…000b");
+    expect(fresh.result).toMatchObject({ erc8004Agent: null });
   });
 
   it("list_candidates filters by adapter and caps its rows", async () => {

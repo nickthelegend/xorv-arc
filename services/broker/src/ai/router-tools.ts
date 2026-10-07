@@ -10,11 +10,13 @@
  *                           and whether the Identity Registry's agent wallet is the payee
  *   recent_receipts         the provider's XorvLedger JobRecorded / JobRated history
  *   indexer_provider_stats  the provider's aggregates from the Envio indexer
- *   nansen_trust            the public view of the payout wallet's Nansen trust signal
+ *   escrow_outcomes         the provider's settlement record in XorvReputation: escrows
+ *                           released vs refunded at fault, USDC earned, and whether those
+ *                           outcomes are written to its ERC-8004 agent
  *   select_provider         the answer
  *
  * Each read goes through `RouterData` (router-data.ts wires the real sources:
- * Monad RPC, the ledger reader, the indexer, the trust cache) under its own
+ * Arc RPC, the ledger reader, the indexer, XorvReputation) under its own
  * timeout, and comes back two ways: a small JSON object for the model, and a
  * `RoutingStep` for the trace — a one-line summary in the broker's own words,
  * the validated arguments, and explorer links. The model never gets to write
@@ -36,7 +38,6 @@ import {
   type ChatTool,
   type JobRequest,
 } from "@xorv/protocol";
-import type { PublicTrustSignal } from "../trust/index.js";
 import { clip } from "./client.js";
 import type { RouteCandidate, RouterToolName, RoutingStep, TraceLink } from "./types.js";
 
@@ -107,11 +108,21 @@ export type IndexerStatsRead =
       } | null;
     };
 
-export interface TrustRead {
-  /** Whether this broker builds Nansen signals at all. */
-  enabled: boolean;
-  signal: PublicTrustSignal | null;
-}
+/** A provider's escrow settlement record, from XorvReputation on Arc. */
+export type EscrowOutcomesRead =
+  | { configured: false }
+  | {
+      configured: true;
+      reputation: string;
+      completed: number;
+      failed: number;
+      /** USDC units (6 decimals) released to the provider through the escrow. */
+      earnedUnits: string;
+      /** Laplace-smoothed success rate, basis points (5000 with no history). */
+      scoreBps: number;
+      /** The ERC-8004 agent the outcomes are written to, when bound. */
+      agentId: string | null;
+    };
 
 /** The provider a read is about. */
 export interface CandidateRef {
@@ -122,7 +133,7 @@ export interface CandidateRef {
 
 /**
  * Where the router's reads come from. Every member is optional: a broker
- * without an indexer, a ledger or Nansen still routes, and the tool tells the
+ * without an indexer, a ledger or an escrow still routes, and the tool tells the
  * model (and the trace tells the buyer) that the source isn't there.
  */
 export interface RouterData {
@@ -130,7 +141,7 @@ export interface RouterData {
   erc8004?(agentId: string, payTo: string): Promise<Erc8004Read>;
   receipts?(candidate: CandidateRef): Promise<ReceiptsRead>;
   indexerStats?(providerId: string): Promise<IndexerStatsRead>;
-  trust?(address: string): TrustRead;
+  escrowOutcomes?(address: string): Promise<EscrowOutcomesRead>;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +202,7 @@ export const ROUTER_TOOLS_SPEC: ChatTool[] = [
     function: {
       name: "erc8004_reputation",
       description:
-        "Read an agent's reputation on Monad from the ERC-8004 Reputation Registry: the average and count of buyer ratings " +
+        "Read an agent's reputation on Arc from the ERC-8004 Reputation Registry: the average and count of buyer ratings " +
         "(relayed by XorvLedger, one per paid job) and of Kimi verifier scores, plus whether the Identity Registry's " +
         "agent wallet is the provider's payout address.",
       parameters: {
@@ -225,9 +236,10 @@ export const ROUTER_TOOLS_SPEC: ChatTool[] = [
   {
     type: "function",
     function: {
-      name: "nansen_trust",
+      name: "escrow_outcomes",
       description:
-        "The Nansen trust score (0-100) of the provider's payout wallet: wallet age, activity, related wallets and risk flags.",
+        "The provider's settlement record in XorvEscrow on Arc: jobs whose escrowed USDC was released to it vs refunded " +
+        "because it failed, USDC earned, a smoothed success score, and the ERC-8004 agent those outcomes are written to.",
       parameters: providerIdParam,
     },
   },
@@ -272,7 +284,7 @@ function isReadTool(name: string): name is ReadTool {
     name === "erc8004_reputation" ||
     name === "recent_receipts" ||
     name === "indexer_provider_stats" ||
-    name === "nansen_trust"
+    name === "escrow_outcomes"
   );
 }
 
@@ -357,7 +369,7 @@ const TOOL_WHAT: Record<ReadTool, string> = {
   erc8004_reputation: "the ERC-8004 reputation",
   recent_receipts: "the XorvLedger receipts",
   indexer_provider_stats: "the Envio indexer stats",
-  nansen_trust: "the Nansen trust signal",
+  escrow_outcomes: "the escrow settlement record",
 };
 
 /** The arguments as the trace records them: validated ids only. */
@@ -400,7 +412,7 @@ async function readTool(name: ReadTool, args: Record<string, unknown>, ctx: Tool
       if (!candidate) return unknownCandidate(name, recorded, "a provider");
       if (name === "recent_receipts") return recentReceipts(candidate, recorded, ctx);
       if (name === "indexer_provider_stats") return indexerStats(candidate, recorded, ctx);
-      return nansenTrust(candidate, recorded, ctx);
+      return escrowOutcomes(candidate, recorded, ctx);
     }
   }
 }
@@ -502,7 +514,7 @@ async function erc8004Reputation(
     step: {
       tool: "erc8004_reputation",
       args: recorded,
-      summary: `read agent #${agentId}'s ERC-8004 reputation on Monad (${parts.join("; ")})`,
+      summary: `read agent #${agentId}'s ERC-8004 reputation on Arc (${parts.join("; ")})`,
       ms: 0,
       ok: read.failed.length < 3,
       source: "chain",
@@ -523,7 +535,7 @@ async function recentReceipts(
     };
   }
   const read = await ctx.data.receipts({ providerId: candidate.providerId, address: candidate.address, agentId: candidate.agentId });
-  const via = read.source === "indexer" ? " via Envio" : read.source === "rpc" ? " via Monad RPC" : "";
+  const via = read.source === "indexer" ? " via Envio" : read.source === "rpc" ? " via Arc RPC" : "";
   const links: TraceLink[] = [];
   const newest = read.latest[0];
   if (newest) links.push({ label: "latest receipt", url: explorerTx(ctx.network, newest.txHash) });
@@ -612,45 +624,46 @@ async function indexerStats(
   };
 }
 
-function nansenTrust(candidate: RouteCandidate, recorded: Record<string, string | null>, ctx: ToolContext): ToolOutcome {
+async function escrowOutcomes(
+  candidate: RouteCandidate,
+  recorded: Record<string, string | null>,
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
   const wallet = shortHex(candidate.address);
+  const read: EscrowOutcomesRead = ctx.data?.escrowOutcomes
+    ? await ctx.data.escrowOutcomes(candidate.address)
+    : { configured: false };
+  if (!read.configured) {
+    return {
+      result: { available: false, note: "this broker has no XorvReputation contract configured" },
+      step: { tool: "escrow_outcomes", args: recorded, summary: "no escrow reputation contract on this broker", ms: 0, ok: false, source: "none" },
+    };
+  }
   const links: TraceLink[] = [{ label: wallet, url: explorerAddress(ctx.network, candidate.address) }];
-  const read = ctx.data?.trust?.(candidate.address) ?? { enabled: false, signal: null };
-  if (!read.enabled) {
-    return {
-      result: { available: false, note: "Nansen trust signals are off on this broker" },
-      step: { tool: "nansen_trust", args: recorded, summary: "Nansen trust signals are off on this broker", ms: 0, ok: false, source: "none" },
-    };
-  }
-  const signal = read.signal;
-  if (!signal) {
-    return {
-      result: { available: false, note: "no Nansen signal has been built for this wallet yet" },
-      step: { tool: "nansen_trust", args: recorded, summary: `no Nansen signal yet for payout wallet ${wallet}`, ms: 0, ok: true, source: "nansen", links },
-    };
-  }
-  // The public view only — never the internal smart-money or related-wallet data.
+  if (read.agentId) links.push({ label: `agent #${read.agentId}`, url: explorerAgent(ctx.network, read.agentId) });
+  const total = read.completed + read.failed;
   return {
     result: {
-      score: signal.score,
-      band: signal.band,
-      walletAgeDays: signal.walletAgeDays,
-      txCount: signal.txCount,
-      txCountCapped: signal.txCountCapped,
-      relatedWalletCount: signal.relatedWalletCount,
-      riskFlags: signal.riskFlags.slice(0, 5),
-      labels: signal.labels.slice(0, 3).map((l) => clip(l, 40)),
-      degraded: signal.degraded,
+      released: read.completed,
+      refundedAtFault: read.failed,
+      earned: formatUsdc(read.earnedUnits),
+      successScore: Math.round(read.scoreBps / 100),
+      erc8004Agent: read.agentId,
+      note: read.agentId
+        ? "every release and at-fault refund is also written to this agent's ERC-8004 reputation (tag successRate)"
+        : "the provider's payout wallet is not bound to an ERC-8004 agent, so outcomes are counted but not written to ERC-8004",
     },
     step: {
-      tool: "nansen_trust",
+      tool: "escrow_outcomes",
       args: recorded,
       summary:
-        `Nansen trust ${signal.score} (${signal.band}) for payout wallet ${wallet}` +
-        (signal.riskFlags.length ? `; flags: ${signal.riskFlags.slice(0, 3).join(", ")}` : ""),
+        total === 0
+          ? `no escrow settlements yet for ${wallet}`
+          : `escrow: ${read.completed} released, ${read.failed} refunded at fault, earned ${formatUsdc(read.earnedUnits)}` +
+            (read.agentId ? `, written to agent #${read.agentId}` : ""),
       ms: 0,
       ok: true,
-      source: "nansen",
+      source: "chain",
       links,
     },
   };

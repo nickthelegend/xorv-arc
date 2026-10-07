@@ -15,6 +15,7 @@
 import {
   cancelEscrow,
   escrowWriter,
+  memoContractFor,
   publicClientFor,
   readEscrowJob,
   reassignEscrow,
@@ -36,7 +37,7 @@ export interface EscrowOps {
   read(jobId: Hex): Promise<Pick<EscrowJob, "status" | "provider" | "deadline">>;
   /**
    * The transaction that released or refunded a job, whoever sent it: a
-   * buyer's own release, or a keeper's (Chainlink CRE) refund after the deadline.
+   * buyer's own release, or a keeper's refund after the deadline.
    */
   settlement(jobId: Hex, fromTx?: string): Promise<{ tx: string; by: string } | null>;
 }
@@ -48,8 +49,8 @@ const REFUNDED = parseAbiItem(
   "event JobRefunded(bytes32 indexed jobId, address indexed buyer, uint256 amount, bool providerAtFault)",
 );
 
-/** Monad's public RPC answers at most 100 blocks per eth_getLogs. */
-const LOG_WINDOW = 99n;
+/** Arc's public RPC answers at most 10,000 blocks per eth_getLogs. */
+const LOG_WINDOW = 9_999n;
 
 /**
  * The real thing. `account` is the escrow's attester: the broker's settlement
@@ -59,7 +60,8 @@ const LOG_WINDOW = 99n;
 export function chainEscrow(network: string, address: string, account: Account): EscrowOps {
   const escrow = getAddress(address);
   const pub = publicClientFor(network) as PublicClient;
-  const wallet = escrowWriter(walletClientFor(network, account), account);
+  // Every release, refund, cancel and reassign is tagged with its job id through Arc's Memo.
+  const wallet = escrowWriter(walletClientFor(network, account), account, memoContractFor(network));
   const clients = { public: pub, wallet };
   return {
     address: escrow,

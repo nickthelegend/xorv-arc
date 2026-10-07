@@ -62,7 +62,7 @@ describe("createLedgerReader", () => {
     });
     const readRpc = vi.fn(async () => [rpcEvent(1)]);
     const reader = createLedgerReader({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       ledgerAddress: LEDGER,
       fromBlock: null,
       indexerUrl: "http://indexer.test/v1/graphql",
@@ -82,7 +82,7 @@ describe("createLedgerReader", () => {
 
   it("falls back to the RPC scan when the indexer fails, and says why", async () => {
     const reader = createLedgerReader({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       ledgerAddress: LEDGER,
       fromBlock: 10n,
       indexerUrl: "http://indexer.test/v1/graphql",
@@ -99,7 +99,7 @@ describe("createLedgerReader", () => {
     const fetch = indexerFetch({ data: {} });
     const readRpc = vi.fn(async () => [] as LedgerEvent[]);
     const reader = createLedgerReader({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       ledgerAddress: LEDGER,
       fromBlock: null,
       indexerUrl: "http://indexer.test/v1/graphql",
@@ -118,7 +118,7 @@ describe("createLedgerReader", () => {
       return [rpcEvent(1)];
     });
     const reader = createLedgerReader({
-      network: "eip155:10143",
+      network: "eip155:5042002",
       ledgerAddress: LEDGER,
       fromBlock: null,
       indexerUrl: null,
@@ -132,7 +132,7 @@ describe("createLedgerReader", () => {
   });
 
   it("returns an empty feed with no ledger and no indexer, and no leaderboard", async () => {
-    const reader = createLedgerReader({ network: "eip155:10143", ledgerAddress: null, fromBlock: null, indexerUrl: null });
+    const reader = createLedgerReader({ network: "eip155:5042002", ledgerAddress: null, fromBlock: null, indexerUrl: null });
     expect(await reader.events("receipts", 5)).toEqual({ source: "none", events: [] });
     expect(await reader.leaderboard(5)).toBeNull();
   });

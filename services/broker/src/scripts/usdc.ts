@@ -2,10 +2,11 @@
  * `pnpm usdc` — are the demo buyer and the facilitator funded?
  *
  * Written because "I sent it" and "it arrived" are different facts, and the
- * only way to tell them apart is to ask the chain. It reports the USDC and MON
- * each party actually holds and what each one needs: the buyer needs USDC
- * (and no MON — the facilitator pays the gas), the facilitator needs MON (and
- * no USDC — payments go straight to the provider).
+ * only way to tell them apart is to ask the chain. It reports the USDC each
+ * party actually holds and what each one needs. On Arc USDC is also the gas
+ * token, so everyone holds one asset: the buyer needs USDC to pay (the
+ * facilitator pays the gas), and the facilitator needs a little USDC for gas
+ * (payments go buyer → escrow/provider, never through it).
  *
  * Read-only. It never moves funds and never edits a file.
  */
@@ -17,7 +18,7 @@ import {
   explorerAddress,
   explorerToken,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   formatUsdc,
   isEvmAddress,
   networkConfig,
@@ -25,13 +26,13 @@ import {
 } from "@xorv/protocol";
 import { loadConfig } from "../config.js";
 
-/** Monad holds back ~10 MON per EOA as a reserve for in-flight gas. */
-const MON_RESERVE_WEI = 10n * 10n ** 18n;
+/** Below this a gas-paying key is worth topping up: 0.10 USDC is a few hundred Arc writes. */
+const GAS_FLOOR_WEI = 10n ** 17n;
 
 interface Party {
   label: string;
   address: string | null;
-  needs: "usdc" | "mon" | "none";
+  needs: "usdc" | "gas" | "none";
 }
 
 /** An address from `<PREFIX>_ADDRESS`, or derived from `<PREFIX>_KEY`. */
@@ -54,10 +55,10 @@ export async function main(): Promise<void> {
   const parties: Party[] = [
     { label: "buyer (spends USDC)", address: addressFrom("XORV_DEMO_PAYER"), needs: "usdc" },
     { label: "provider (receives)", address: addressFrom("XORV_DEMO_PROVIDER"), needs: "none" },
-    { label: "facilitator (pays gas)", address: config.facilitatorAccount?.address ?? null, needs: "mon" },
+    { label: "facilitator (pays gas)", address: config.facilitatorAccount?.address ?? null, needs: "gas" },
   ];
   if (config.operator && config.operator.address !== config.facilitatorAccount?.address) {
-    parties.push({ label: "operator (ledger writes)", address: config.operator.address, needs: "mon" });
+    parties.push({ label: "operator (ledger writes)", address: config.operator.address, needs: "gas" });
   }
 
   console.log("");
@@ -73,12 +74,12 @@ export async function main(): Promise<void> {
       continue;
     }
     try {
-      const { monWei, usdcUnits } = await fetchBalances(config.network, party.address);
+      const { nativeWei, usdcUnits } = await fetchBalances(config.network, party.address);
       console.log(`  ${party.label.padEnd(26)} ${party.address}`);
-      console.log(`    ${formatUsdc(usdcUnits).padStart(10)} USDC   ${formatMon(monWei).padStart(16)}`);
+      console.log(`    ${formatUsdc(usdcUnits).padStart(10)} USDC   (gas view ${formatGasUsdc(nativeWei)})`);
       if (party.needs === "usdc") buyerFunded = BigInt(usdcUnits) > 0n;
-      if (party.needs === "mon" && BigInt(monWei) < MON_RESERVE_WEI) {
-        console.log("    low on MON — keep it above ~10 MON (Monad's per-account reserve for in-flight gas)");
+      if (party.needs === "gas" && BigInt(nativeWei) < GAS_FLOOR_WEI) {
+        console.log("    low on gas — keep at least 0.10 USDC here (Arc pays gas in USDC)");
       }
       console.log(`    ${explorerAddress(config.network, party.address)}`);
     } catch (err) {
@@ -91,11 +92,10 @@ export async function main(): Promise<void> {
     console.log("  ✔ the buyer holds USDC and can pay for jobs.");
   } else if (buyerFunded === false) {
     console.log("  ✖ the buyer has no USDC yet.");
-    if (cfg.faucets.usdc) console.log(`    Get some at ${cfg.faucets.usdc} — pick "Monad Testnet" — then re-run this.`);
+    if (cfg.faucets.usdc) console.log(`    Get some at ${cfg.faucets.usdc} — pick "Arc Testnet" — then re-run this.`);
   } else {
     console.log("  set XORV_DEMO_PAYER_KEY (or XORV_DEMO_PAYER_ADDRESS) to check a buyer.");
   }
-  if (cfg.faucets.mon) console.log(`  MON for the facilitator/operator: ${cfg.faucets.mon}`);
   console.log("");
 }
 

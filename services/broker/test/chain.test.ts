@@ -43,7 +43,7 @@ function writer(opts: {
     });
   const logs: string[] = [];
   const w = new LedgerWriter({
-    network: "eip155:10143",
+    network: "eip155:5042002",
     ledgerAddress: opts.ledger === false ? null : LEDGER,
     account: opts.account === false ? null : privateKeyToAccount(generatePrivateKey()),
     batchMs: opts.batchMs ?? 20,

@@ -1,6 +1,6 @@
 /**
  * The job router — Alibaba Qwen 3.8 Max (qwen3.8-max, via Model Studio), as
- * a bounded, tool-using agent that reads Monad before it chooses.
+ * a bounded, tool-using agent that reads Arc before it chooses.
  *
  * When a buyer picks "Auto" and more than one live option fits under their
  * ceiling, something has to choose the provider that runs the job — the tool
@@ -9,13 +9,13 @@
  * price and a reputation tie-break; Qwen reads the prompt and then *looks*:
  *
  *   list_candidates → erc8004_reputation / recent_receipts /
- *   indexer_provider_stats / nansen_trust → select_provider
+ *   indexer_provider_stats / escrow_outcomes → select_provider
  *
- * — the ERC-8004 Reputation and Identity registries on Monad, XorvLedger's
- * receipts, the Envio indexer's aggregates and the payout wallet's Nansen
- * trust signal (router-tools.ts, router-data.ts). Every call is recorded as a
+ * — the ERC-8004 Reputation and Identity registries on Arc, XorvLedger's
+ * receipts, the Envio indexer's aggregates and the escrow's settlement record
+ * in XorvReputation (router-tools.ts, router-data.ts). Every call is recorded as a
  * step of the job's routing trace, so the buyer sees what the router read
- * ("read agent #12's ERC-8004 reputation on Monad (avg 92 from 5 buyer
+ * ("read agent #12's ERC-8004 reputation on Arc (avg 92 from 5 buyer
  * ratings)") and not just what it concluded.
  *
  * Bounded, because it sits on the quote path:
@@ -79,19 +79,19 @@ export const ROUTE_THINKING_BUDGET = 256;
 const ROUTE_PROMPT_MAX_CHARS = 6_000;
 
 function systemPrompt(maxTurns: number, maxTools: number): string {
-  return `You are the job router for Xorv, a marketplace where buyers pay per job, in USDC on Monad, to run a prompt on another person's AI agent. The buyer chose "Auto": choose the provider — and with it the adapter — that should run this job.
+  return `You are the job router for Xorv, a marketplace where buyers pay per job, in USDC on Arc, to run a prompt on another person's AI agent. The buyer chose "Auto": choose the provider — and with it the adapter — that should run this job.
 
 Your tools read live state:
 - list_candidates: every live provider under the buyer's price ceiling. Start here.
-- erc8004_reputation: an agent's reputation on Monad's ERC-8004 Reputation Registry (buyer ratings relayed by XorvLedger, Kimi verifier scores) and whether its registered agent wallet is the provider's payout address.
+- erc8004_reputation: an agent's reputation on Arc's ERC-8004 Reputation Registry (buyer ratings relayed by XorvLedger, Kimi verifier scores) and whether its registered agent wallet is the provider's payout address.
 - recent_receipts: the provider's recent XorvLedger job receipts and the ratings on them.
 - indexer_provider_stats: the provider's lifetime aggregates from the Envio indexer.
-- nansen_trust: the Nansen trust score of the provider's payout wallet.
+- escrow_outcomes: the provider's escrow record: jobs whose USDC was released to it vs refunded because it failed, and whether those outcomes are written to its ERC-8004 agent.
 - select_provider: your final answer.
 
 How to decide:
 - Match the tool to the task. Agentic coding CLIs (claude-code, codex, qwen-code, opencode, grok) work in a repository with files and a shell: prefer them for multi-step engineering such as building, refactoring or debugging across files. Direct model APIs (qwen, kimi, hunyuan, openai-compatible) answer in one pass: prefer them for questions, explanations, writing, analysis and self-contained snippets. "echo" only repeats the prompt; never choose it unless the prompt is explicitly a test of the network.
-- Among providers that suit the task, prefer proven quality — on-chain buyer ratings and verifier scores, delivered receipts, a high success rate, a trusted payout wallet whose agent wallet matches — then the lower price. No history means unproven, not bad. Failed receipts, low ratings, risk flags or an agent wallet that is not the payout address count against a provider.
+- Among providers that suit the task, prefer proven quality — on-chain buyer ratings and verifier scores, delivered receipts, a high success rate and escrow releases, an agent wallet that matches the payout address — then the lower price. No history means unproven, not bad. Failed receipts, at-fault refunds, low ratings or an agent wallet that is not the payout address count against a provider.
 - Be economical: you have at most ${maxTurns} turns and ${maxTools} lookups. Look up only the providers you are seriously considering (usually two or three), call several tools in one turn, then call select_provider.
 - select_provider.reason: one plain sentence the buyer will read, citing the evidence you used (for example "Kimi suits a short writing task, and agent #7 averages 92 from 5 on-chain buyer ratings").
 

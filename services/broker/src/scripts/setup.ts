@@ -1,9 +1,9 @@
 /**
- * `pnpm --filter @xorv/broker setup` — what this broker needs on Monad, and
+ * `pnpm --filter @xorv/broker setup` — what this broker needs on Arc, and
  * what it has.
  *
  * Read-only and idempotent: it never sends a transaction or edits a file. It
- * reports the operator, facilitator and verifier EOAs and their MON/USDC
+ * reports the operator, facilitator and verifier EOAs and their USDC
  * balances, which AI roles will run (and why the others won't), says
  * where to get more, checks the XorvLedger deployment (or prints the exact
  * command that makes one), and ends with the env lines to paste into `.env`.
@@ -11,10 +11,10 @@
  *   pnpm --filter @xorv/broker setup                the report
  *   pnpm --filter @xorv/broker setup -- --new-keys  also print fresh keys to use
  *
- * Deploying the ledger is deliberately a separate, explicit step
- * (`pnpm --filter @xorv/contracts deploy:testnet`): a redeploy moves the
- * ledger to a new address and orphans everything indexed under the old one,
- * which is not something a setup script should do on a whim.
+ * Deploying is deliberately a separate, explicit step
+ * (`sh scripts/deploy.sh testnet`): a redeploy moves the contracts to new
+ * addresses and orphans everything indexed under the old ones, which is not
+ * something a setup script should do on a whim.
  */
 
 import fs from "node:fs";
@@ -25,7 +25,7 @@ import {
   XORV_LEDGER_ABI,
   explorerAddress,
   fetchBalances,
-  formatMon,
+  formatGasUsdc,
   formatUsdc,
   networkConfig,
   publicClientFor,
@@ -34,8 +34,8 @@ import {
 import { loadConfig } from "../config.js";
 import { createAiHooks, describeAiRoles } from "../ai/index.js";
 
-/** Monad holds back ~10 MON per EOA as a reserve for in-flight gas. */
-const MON_RESERVE_WEI = 10n * 10n ** 18n;
+/** Below this a gas-paying key is worth topping up: 0.10 USDC is a few hundred Arc writes. */
+const GAS_FLOOR_WEI = 10n ** 17n;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,11 +43,11 @@ function line(label: string, value: string): void {
   console.log(`  ${label.padEnd(22)} ${value}`);
 }
 
-async function balanceLine(network: string, address: string, needs: "mon" | "usdc"): Promise<void> {
+async function balanceLine(network: string, address: string, needs: "gas" | "usdc"): Promise<void> {
   try {
-    const { monWei, usdcUnits } = await fetchBalances(network, address);
-    const low = needs === "mon" ? BigInt(monWei) < MON_RESERVE_WEI : BigInt(usdcUnits) === 0n;
-    line("", `${formatMon(monWei)} · ${formatUsdc(usdcUnits)} USDC${low ? "   ← needs funding" : ""}`);
+    const { nativeWei, usdcUnits } = await fetchBalances(network, address);
+    const low = needs === "gas" ? BigInt(nativeWei) < GAS_FLOOR_WEI : BigInt(usdcUnits) === 0n;
+    line("", `${formatUsdc(usdcUnits)} USDC (gas view ${formatGasUsdc(nativeWei)})${low ? "   ← needs funding" : ""}`);
   } catch (err) {
     line("", `balance unavailable (${err instanceof Error ? err.message : String(err)})`);
   }
@@ -59,11 +59,16 @@ interface DeploymentRecord {
   broker?: string;
 }
 
+/** The ledger in deployments/arc-<network>.json (written by contracts/script/Deploy.s.sol). */
 function readDeployment(network: string): DeploymentRecord | null {
-  const name = network === "eip155:143" ? "monad" : "monadTestnet";
-  const file = path.resolve(here, "../../../../packages/contracts/deployments", `${name}.json`);
+  const name = network === "eip155:5042" ? "arc-mainnet" : "arc-testnet";
+  const file = path.resolve(here, "../../../../deployments", `${name}.json`);
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8")) as DeploymentRecord;
+    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const contracts = (raw.contracts ?? raw) as Record<string, unknown>;
+    const address = (contracts.XorvLedger ?? contracts.xorvLedger ?? contracts.ledger) as string | undefined;
+    if (!address) return null;
+    return { address, blockNumber: typeof raw.blockNumber === "number" ? raw.blockNumber : undefined, broker: raw.broker as string | undefined };
   } catch {
     return null;
   }
@@ -100,7 +105,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   // -- operator: ledger writes, rating relays --------------------------------
   if (config.operator) {
     line("operator", `${config.operator.address}   ${explorerAddress(config.network, config.operator.address)}`);
-    await balanceLine(config.network, config.operator.address, "mon");
+    await balanceLine(config.network, config.operator.address, "gas");
   } else {
     line("operator", "not set — the broker runs read-only (no ledger writes, no rating relays)");
   }
@@ -112,13 +117,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       "facilitator",
       `${config.facilitatorAccount.address}${shared ? "   (same as operator — a separate XORV_FACILITATOR_KEY is recommended)" : ""}`,
     );
-    if (!shared) await balanceLine(config.network, config.facilitatorAccount.address, "mon");
+    if (!shared) await balanceLine(config.network, config.facilitatorAccount.address, "gas");
   } else {
     line(
       "facilitator",
       config.facilitatorMode === "self"
         ? "XORV_FACILITATOR=self but no key — payments are disabled"
-        : `no key — payments settle through the hosted facilitator (${cfg.facilitatorUrl})`,
+        : "no key — payments are disabled (Arc has no public x402 facilitator; set XORV_FACILITATOR_KEY)",
     );
   }
 
@@ -135,17 +140,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   if (verifier?.onChain && verifier.address) {
     const shared = config.operator && sameAddress(config.operator.address, verifier.address);
     if (!shared) {
-      await balanceLine(config.network, verifier.address, "mon");
+      await balanceLine(config.network, verifier.address, "gas");
       line("", "a separate verifier key: add it to the indexer's ENVIO_XORV_VERIFIER_ADDRESSES");
     }
   }
   console.log("");
-  if (cfg.faucets.mon || cfg.faucets.usdc) {
-    console.log("  faucets:");
-    if (cfg.faucets.mon) line("MON (gas)", cfg.faucets.mon);
-    if (cfg.faucets.usdc) line("USDC (buyers)", `${cfg.faucets.usdc}  — pick "Monad Testnet"`);
-    console.log("    Keep each broker EOA above ~10 MON: Monad reserves that much per account for in-flight gas.");
-    console.log("    Buyers need USDC only; the facilitator pays their gas.");
+  if (cfg.faucets.usdc) {
+    console.log("  faucet:");
+    line("USDC (gas and payments)", `${cfg.faucets.usdc}  — pick "Arc Testnet"`);
+    console.log("    On Arc USDC is the gas token: broker keys need a little, buyers need only what they spend.");
     console.log("");
   }
 
@@ -181,16 +184,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       env.XORV_LEDGER_FROM_BLOCK = String(deployment.blockNumber);
     }
   } else {
-    const task = config.network === "eip155:143" ? "deploy:mainnet" : "deploy:testnet";
+    const target = config.network === "eip155:5042" ? "mainnet" : "testnet";
     line("xorv ledger", "not deployed / not configured");
     console.log("");
-    console.log("  deploy it (the operator becomes the ledger's broker; needs MON for gas):");
+    console.log("  deploy XorvLedger, XorvEscrow, XorvReputation and the CCIP receiver (gas in USDC):");
     console.log("");
     console.log(
-      `      XORV_BROKER_ADDRESS=${config.operator?.address ?? newOperator ?? "<operator address>"} pnpm --filter @xorv/contracts ${task}`,
+      `      XORV_BROKER_ADDRESS=${config.operator?.address ?? newOperator ?? "<operator address>"} sh scripts/deploy.sh ${target}`,
     );
     console.log("");
-    console.log("  it prints XORV_LEDGER_ADDRESS and XORV_LEDGER_FROM_BLOCK — paste both into .env.");
+    console.log(`  it writes deployments/arc-${target}.json — copy the addresses into .env.`);
   }
   console.log("");
 

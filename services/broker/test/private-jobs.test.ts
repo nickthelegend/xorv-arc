@@ -54,7 +54,7 @@ import { QwenRouter, RoleClient } from "../src/ai/index.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 
-const NETWORK = "eip155:10143";
+const NETWORK = "eip155:5042002";
 const LEDGER = getAddress("0x00000000000000000000000000000000000000aa");
 const PAYEE = "0xaaaa00000000000000000000000000000000000a";
 const SECRET = "marmalade-4412";
@@ -87,7 +87,7 @@ class StubChain implements ChainLike {
   private result(): PublishResult {
     this.tx += 1;
     const txHash = `0x${this.tx.toString(16).padStart(64, "0")}`;
-    return { contract: LEDGER, txHash, explorerUrl: `https://testnet.monadscan.com/tx/${txHash}`, blockNumber: "1" };
+    return { contract: LEDGER, txHash, explorerUrl: `https://explorer.testnet.arc.io/tx/${txHash}`, blockNumber: "1" };
   }
   async registerProvider() {
     return this.result();
@@ -466,7 +466,7 @@ describe("a private job", () => {
             ? {
                 role: "assistant",
                 content: null,
-                tool_calls: [call("recent_receipts", { providerId: `the ${SECRET} memo` }), call("nansen_trust", { providerId: codex.providerId })],
+                tool_calls: [call("recent_receipts", { providerId: `the ${SECRET} memo` }), call("escrow_outcomes", { providerId: codex.providerId })],
               }
             : {
                 role: "assistant",
@@ -495,7 +495,7 @@ describe("a private job", () => {
     expect(q.body.routing).toMatchObject({ adapter: "codex", difficulty: "hard" });
     expect(q.body.routing.reason).toContain(SECRET);
     // …but the trace never carried the model's words, even in the buyer's own copy.
-    expect(q.body.routing.steps.map((st: Json) => st.tool)).toEqual(["list_candidates", "recent_receipts", "nansen_trust", "select_provider"]);
+    expect(q.body.routing.steps.map((st: Json) => st.tool)).toEqual(["list_candidates", "recent_receipts", "escrow_outcomes", "select_provider"]);
     expect(JSON.stringify(q.body.routing.steps)).not.toContain(SECRET);
     expect(q.body.routing.steps[1]).toMatchObject({ args: { providerId: "(not a candidate)" }, ok: false });
 

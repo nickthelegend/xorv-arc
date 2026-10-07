@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { loadConfig, loadNansenConfig } from "../src/config.js";
+import { loadConfig, parseSenders } from "../src/config.js";
 import { resolveFacilitator } from "../src/facilitator.js";
 import { validateRegistration } from "../src/app.js";
 
@@ -14,6 +14,11 @@ const VARS = [
   "XORV_OPERATOR_KEY",
   "XORV_FACILITATOR_KEY",
   "XORV_FACILITATOR",
+  "XORV_KEEPER",
+  "XORV_KEEPER_KEY",
+  "XORV_REPUTATION_ADDRESS",
+  "XORV_CCIP_RECEIVER_ADDRESS",
+  "XORV_CCIP_SENDERS",
   "XORV_LEDGER_ADDRESS",
   "XORV_LEDGER_FROM_BLOCK",
   "XORV_HEARTBEAT_PUBLISH_EVERY",
@@ -26,16 +31,6 @@ const VARS = [
   "XORV_VERIFIER",
   "XORV_SCREENER_FAIL",
   "XORV_VERIFIER_KEY",
-  "XORV_NANSEN_MODE",
-  "XORV_NANSEN_PAYER_KEY",
-  "NANSEN_API_KEY",
-  "XORV_NANSEN_PER_CALL_CAP",
-  "XORV_NANSEN_DAILY_CAP",
-  "XORV_NANSEN_PIN_PAYTO",
-  "XORV_NANSEN_SMART_MONEY",
-  "XORV_NANSEN_RATING_GUARD",
-  "XORV_NANSEN_REFRESH_MINUTES",
-  "XORV_NANSEN_FIXTURE_CLUSTER",
 ];
 
 let saved: Record<string, string | undefined>;
@@ -53,13 +48,13 @@ afterEach(() => {
 describe("loadConfig", () => {
   it("boots with no keys at all: testnet, read-only, no ledger", () => {
     const config = loadConfig();
-    expect(config.network).toBe("eip155:10143");
+    expect(config.network).toBe("eip155:5042002");
     expect(config.operator).toBeNull();
     expect(config.facilitatorAccount).toBeNull();
     expect(config.facilitatorMode).toBeNull();
     expect(config.ledgerAddress).toBeNull();
     expect(config.heartbeatPublishEvery).toBe(20);
-    expect(config.dbFile).toMatch(/xorv-monad\.db$/);
+    expect(config.dbFile).toMatch(/xorv-arc\.db$/);
     // "auto": each role turns on exactly when its provider's key is set (src/ai/index.ts).
     expect(config.ai).toEqual({ router: "auto", screener: "auto", verifier: "auto", screenerFail: "open" });
     expect(config.verifierAccount).toBeNull();
@@ -67,7 +62,7 @@ describe("loadConfig", () => {
 
   it("refuses a leftover Hedera network with a message that names the fix", () => {
     process.env.XORV_NETWORK = "hedera:testnet";
-    expect(() => loadConfig()).toThrow(/Monad.*eip155:10143/);
+    expect(() => loadConfig()).toThrow(/Arc.*eip155:5042002/);
   });
 
   it("uses the operator key for the facilitator unless given its own", () => {
@@ -133,30 +128,35 @@ describe("loadConfig", () => {
 });
 
 describe("resolveFacilitator", () => {
-  it("falls back to the hosted facilitator when nothing was configured, and says so", () => {
-    const choice = resolveFacilitator({ network: "eip155:10143", facilitatorMode: null, facilitatorAccount: null });
-    expect(choice.facilitator).not.toBeNull();
-    expect(choice.mode).toBe("hosted");
-    expect(choice.url).toBe("https://x402-facilitator.molandak.org");
-    expect(choice.notice).toMatch(/hosted facilitator/);
+  it("self-hosts by default (Arc has no public facilitator); with no key, payments are off and say why", () => {
+    const choice = resolveFacilitator({ network: "eip155:5042002", facilitatorMode: null, facilitatorAccount: null });
+    expect(choice.facilitator).toBeNull();
+    expect(choice.mode).toBe("self");
+    expect(choice.unavailableReason).toMatch(/XORV_FACILITATOR_KEY.*USDC for gas/);
+  });
+
+  it("refuses `hosted` on Arc rather than settling through nobody", () => {
+    const choice = resolveFacilitator({ network: "eip155:5042002", facilitatorMode: "hosted", facilitatorAccount: null });
+    expect(choice.facilitator).toBeNull();
+    expect(choice.unavailableReason).toMatch(/no public x402 facilitator/);
   });
 
   it("never turns an explicit `self` into hosted: payments are disabled instead", () => {
-    const choice = resolveFacilitator({ network: "eip155:10143", facilitatorMode: "self", facilitatorAccount: null });
+    const choice = resolveFacilitator({ network: "eip155:5042002", facilitatorMode: "self", facilitatorAccount: null });
     expect(choice.facilitator).toBeNull();
     expect(choice.unavailableReason).toMatch(/XORV_FACILITATOR_KEY/);
   });
 
-  it("stays hosted when a key exists but self-hosting was not asked for", () => {
+  it("self-hosts with the key when nothing was configured", () => {
     const account = privateKeyToAccount(generatePrivateKey());
-    const choice = resolveFacilitator({ network: "eip155:10143", facilitatorMode: null, facilitatorAccount: account });
-    expect(choice.mode).toBe("hosted");
-    expect(choice.url).toBe("https://x402-facilitator.molandak.org");
+    const choice = resolveFacilitator({ network: "eip155:5042002", facilitatorMode: null, facilitatorAccount: account });
+    expect(choice.mode).toBe("self");
+    expect(choice.address).toBe(account.address);
   });
 
   it("self-hosts when asked, with a key", () => {
     const account = privateKeyToAccount(generatePrivateKey());
-    const choice = resolveFacilitator({ network: "eip155:10143", facilitatorMode: "self", facilitatorAccount: account });
+    const choice = resolveFacilitator({ network: "eip155:5042002", facilitatorMode: "self", facilitatorAccount: account });
     expect(choice.mode).toBe("self");
     expect(choice.address).toBe(account.address);
     expect(choice.notice).toBeNull();
@@ -210,56 +210,25 @@ describe("validateRegistration", () => {
   });
 });
 
-describe("loadNansenConfig", () => {
-  it("is off by default, with the documented caps", () => {
-    const nansen = loadConfig().nansen!;
-    expect(nansen).toMatchObject({
-      mode: "off",
-      payer: null,
-      apiKey: null,
-      perCallCapUnits: 50_000n,
-      dailyCapUnits: 1_000_000n,
-      pinPayTo: null,
-      smartMoney: true,
-      ratingGuard: true,
-      refreshMs: 360 * 60_000,
-    });
+describe("Arc config", () => {
+  it("reads the Arc contracts, the keeper and the CCIP senders", () => {
+    process.env.XORV_REPUTATION_ADDRESS = "0x00000000000000000000000000000000000ae904";
+    process.env.XORV_CCIP_RECEIVER_ADDRESS = "0x00000000000000000000000000000000000cc1b0";
+    process.env.XORV_CCIP_SENDERS = "84532:0x00000000000000000000000000000000005e4de4";
+    const cfg = loadConfig();
+    expect(cfg.reputationAddress).toBe("0x00000000000000000000000000000000000Ae904");
+    expect(cfg.ccipReceiverAddress).toBe("0x00000000000000000000000000000000000CC1b0");
+    expect(cfg.ccipSenders).toEqual({ "84532": "0x00000000000000000000000000000000005e4De4" });
+    expect(cfg.keeper).toBe(true);
+    expect(cfg.ccipDeadlineSeconds).toBe(7_200);
+    delete process.env.XORV_REPUTATION_ADDRESS;
+    delete process.env.XORV_CCIP_RECEIVER_ADDRESS;
+    delete process.env.XORV_CCIP_SENDERS;
   });
 
-  it("refuses live mode with no way to pay, and names both options", () => {
-    process.env.XORV_NANSEN_MODE = "live";
-    expect(() => loadNansenConfig()).toThrow(/XORV_NANSEN_PAYER_KEY.*MAINNET.*NANSEN_API_KEY/);
-    process.env.NANSEN_API_KEY = "nansen-test";
-    expect(loadNansenConfig()).toMatchObject({ mode: "live", apiKey: "nansen-test", payer: null });
-    delete process.env.NANSEN_API_KEY;
-    process.env.XORV_NANSEN_PAYER_KEY = generatePrivateKey();
-    expect(loadNansenConfig().payer?.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
-  });
-
-  it("parses caps and the payTo pin, and rejects nonsense", () => {
-    process.env.XORV_NANSEN_MODE = "live";
-    process.env.NANSEN_API_KEY = "test-key";
-    process.env.XORV_NANSEN_PER_CALL_CAP = "10000";
-    process.env.XORV_NANSEN_DAILY_CAP = "250000";
-    process.env.XORV_NANSEN_PIN_PAYTO = "observed";
-    process.env.XORV_NANSEN_SMART_MONEY = "off";
-    expect(loadNansenConfig()).toMatchObject({
-      mode: "live",
-      perCallCapUnits: 10_000n,
-      dailyCapUnits: 250_000n,
-      pinPayTo: "0x93053f1e7A5eFEDa532Fe69CbbE43cBEc3A0F13f",
-      smartMoney: false,
-    });
-    process.env.XORV_NANSEN_DAILY_CAP = "$1";
-    expect(() => loadNansenConfig()).toThrow(/XORV_NANSEN_DAILY_CAP.*USDC units/);
-    delete process.env.XORV_NANSEN_DAILY_CAP;
-    process.env.XORV_NANSEN_MODE = "testnet";
-    expect(() => loadNansenConfig()).toThrow(/"off" or "live"/);
-    delete process.env.NANSEN_API_KEY;
-  });
-
-  it("refuses fixture data in a running broker: it is for tests only", () => {
-    process.env.XORV_NANSEN_MODE = "fixture";
-    expect(() => loadNansenConfig()).toThrow(/for tests only/);
+  it("refuses malformed CCIP senders", () => {
+    expect(() => parseSenders("base:0x1")).toThrow(/chainId:address/);
+    expect(() => parseSenders("84532:0x1")).toThrow(/XORV_CCIP_SENDERS/);
+    expect(parseSenders(null)).toEqual({});
   });
 });

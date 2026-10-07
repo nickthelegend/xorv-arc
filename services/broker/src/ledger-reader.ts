@@ -6,7 +6,7 @@
  *  1. the Envio indexer (`XORV_INDEXER_URL`), which has the whole history and
  *     the derived aggregates, and answers in one request;
  *  2. a bounded backward RPC scan (protocol `readLedgerEvents`) — the public
- *     Monad RPC caps `eth_getLogs` at 100 blocks, so this only reaches the
+ *     Arc RPC caps `eth_getLogs` at 10,000 blocks, so this only reaches the
  *     recent past, but it needs nothing but the contract address.
  *
  * Results are cached for a few seconds. The landing page polls, the network
