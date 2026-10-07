@@ -11,7 +11,7 @@
 # ARC_FORGE to its binaries (defaults: arc-anvil / arc-cast / arc-forge on PATH).
 #  1. starts arc-anvil forking Arc testnet with 1-second blocks (pid in .fork/arc-fork-<port>.pid);
 #  2. deploys with scripts/deploy.sh local, anvil's well-known dev account 0 as deployer and
-#     account 1 as the broker, into deployments/local-fork.json (git-ignored).
+#     account 2 as the broker (account 1 is blocklisted on Arc testnet), into deployments/local-fork.json (git-ignored).
 # The fork keeps running for the app/e2e; stop it with ARC_FORK_STOP=1.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -42,7 +42,8 @@ echo "Arc testnet fork on $RPC (chain $("$CAST" chain-id --rpc-url "$RPC"), pid 
 MNEMONIC="test test test test test test test test test test test junk"
 umask 077
 printf 'DEPLOYER_PRIVATE_KEY=%s\n' "$("$CAST" wallet private-key --mnemonic "$MNEMONIC")" > .fork/deployer.env
-BROKER=$("$CAST" wallet address --mnemonic "$MNEMONIC" --mnemonic-index 1)
+# Account 1 (0x7099…79C8) is on Arc testnet's USDC blocklist, so the broker defaults to account 2.
+BROKER=$("$CAST" wallet address --mnemonic "$MNEMONIC" --mnemonic-index 2)
 
 DEPLOYER_ENV="$ROOT/.fork/deployer.env" XORV_BROKER_ADDRESS=${XORV_BROKER_ADDRESS:-$BROKER} XORV_NO_LOCK=1 \
 ARC_RPC_URL=$RPC XORV_DEPLOYMENT_FINAL="$ROOT/deployments/local-fork.json" \

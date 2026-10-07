@@ -108,9 +108,11 @@ async function main(): Promise<void> {
   const fork = await startFork({ group, port: PORTS.chain, forkUrl, env: cleanEnv() });
   log(`  chain ${fork.url} (chain id ${fork.chainId}, from block ${fork.forkBlock})`);
 
-  // Fork-only keys: anvil's dev accounts deploy and run the broker; everyone else is fresh.
+  // Fork-only keys: anvil's dev account 0 deploys; everyone else is fresh.
   const deployer = { key: anvilKey(0), address: privateKeyToAccount(anvilKey(0)).address };
-  const operator = { key: anvilKey(1), address: privateKeyToAccount(anvilKey(1)).address };
+  // A fresh broker key: anvil's dev account 1 (0x7099…79C8) is on Arc testnet's USDC blocklist,
+  // and a blocklisted address can't even be read from on Arc.
+  const operator = party();
   const parties = { keeper: party(), buyer: party(), demo: party(), providers: PROVIDERS.map(party) };
   // On Arc the gas token is USDC: everyone here holds USDC and nothing else.
   for (const p of [deployer, operator, parties.keeper, ...parties.providers]) await setUsdc(fork, p.address, 50_000_000n);

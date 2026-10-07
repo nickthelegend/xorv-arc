@@ -161,9 +161,11 @@ async function main(): Promise<void> {
     note(`run directory ${runDir}`);
   });
 
-  // Fork-only keys: the deployer and broker are anvil's well-known dev accounts; everyone else is fresh.
+  // Fork-only keys: the deployer is anvil's well-known dev account 0; everyone else is fresh.
   const deployer = { key: anvilKey(0), address: privateKeyToAccount(anvilKey(0)).address };
-  const operator = { key: anvilKey(1), address: privateKeyToAccount(anvilKey(1)).address };
+  // A fresh broker key: anvil's dev account 1 (0x7099…79C8) is on Arc testnet's USDC blocklist,
+  // and a blocklisted address can't even be read from on Arc.
+  const operator = party();
   const parties = { keeper: party(), provider: party(), buyer: party(), requester: party(), cctp: party() };
   const buyer = privateKeyToAccount(parties.buyer.key);
   report.fact("deployer (owner of every contract)", deployer.address, "parties");
