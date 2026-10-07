@@ -1,19 +1,27 @@
 # @xorv/indexer
 
-An [Envio HyperIndex](https://docs.envio.dev/docs/HyperIndex/overview) (v3) indexer for Xorv on Monad.
-It follows three contracts and turns their events into the numbers the network page, the provider
+An [Envio HyperIndex](https://docs.envio.dev/docs/HyperIndex/overview) (v3) indexer for Xorv on Arc.
+It follows six contracts and turns their events into the numbers the network page, the provider
 leaderboard and the landing ledger show:
 
-| Contract | Address (testnet 10143 / mainnet 143) | Events |
+| Contract | Address (testnet 5042002 / mainnet 5042) | Events |
 |---|---|---|
 | `XorvLedger` (packages/contracts) | `ENVIO_XORV_LEDGER_ADDRESS` | `ProviderRegistered`, `ProviderHeartbeat`, `JobRecorded`, `JobRated`, `BrokerSet`, `OwnershipTransferred` |
+| `XorvEscrow` (contracts/) | `ENVIO_XORV_ESCROW_ADDRESS` | `JobFunded`, `JobReleased`, `JobRefunded`, `JobReassigned` |
+| `XorvReputation` (contracts/) | `ENVIO_XORV_REPUTATION_ADDRESS` | `AgentBound`, `OutcomeRecorded` (escrow settlements written to ERC-8004) |
+| `XorvCcipReceiver` (contracts/) | `ENVIO_XORV_CCIP_RECEIVER_ADDRESS` | `IntentReceived`, `IntentPending`, `IntentFunded`, `IntentReleased`, `IntentCancelled`, `RefundClaimed` |
 | ERC-8004 `IdentityRegistry` v2.0.0 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` / `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `Registered`, `URIUpdated`, `MetadataSet` (`agentWallet` only), `Transfer` |
 | ERC-8004 `ReputationRegistry` v2.0.0 | `0x8004B663056A597Dffe9eCcC1965A193B7388713` / `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `NewFeedback`, `FeedbackRevoked`, `ResponseAppended` |
 
-`config.yaml` is Monad testnet (the default everywhere) and `config.mainnet.yaml` is the same
-indexer on mainnet. Both read HyperSync (`monad-testnet.hypersync.xyz` / `monad.hypersync.xyz`), so a
-full history sync takes seconds and never touches the public RPC's 100-block `eth_getLogs` cap. The
-RPC in the config is only a fallback.
+`config.yaml` is Arc testnet (the default everywhere) and `config.mainnet.yaml` is the same
+indexer on mainnet. Both read HyperSync (`arc-testnet.hypersync.xyz` / `arc.hypersync.xyz`, both
+answering as of 2026-10-07), so a full history sync never touches the public RPC's 10,000-block
+`eth_getLogs` cap. The RPC in the config is only a fallback.
+
+Feedback is classified by client: `BUYER_RATING` (XorvLedger, tag `starred`), `XORV_VERIFIED`
+(the broker's verifier, tag `xorv-verified`) and `ESCROW_OUTCOME` (XorvReputation, tag
+`successRate`: 100 when an escrow released, 0 when it refunded with the provider at fault). Only
+these feed Xorv's scores; anything else from any client is kept as `OTHER`.
 
 The broker reads it through `XORV_INDEXER_URL` (below). It is an accelerator, never a dependency:
 with the variable unset or the indexer down, the broker answers `/api/leaderboard` from memory and
@@ -21,8 +29,9 @@ with the variable unset or the indexer down, the broker answers `/api/leaderboar
 
 ## What it derives
 
-`schema.graphql` is the reference; every field has a comment. It defines **14 entity types** (plus
-one enum, `FeedbackKind`), from 13 events on 3 contracts:
+`schema.graphql` is the reference; every field has a comment. It defines **19 entity types** (plus
+one enum, `FeedbackKind`), from 25 events on 6 contracts. Beyond the table below: `EscrowJob`,
+`EscrowOutcome`, `AgentBinding`, `ReputationContract` and `CrossChainIntent`.
 
 | Entity | Id | What it holds |
 |---|---|---|
@@ -92,11 +101,14 @@ with `toBigInt` / `toNumber`.
 | Variable | Needed for | Meaning |
 |---|---|---|
 | `ENVIO_API_TOKEN` | local runs only | HyperSync token (required since Nov 2025), from https://envio.dev/app/api-tokens. Envio Cloud does not need it. |
-| `ENVIO_XORV_LEDGER_ADDRESS` | always | XorvLedger address: `address` in `packages/contracts/deployments/<network>.json`, also printed by `pnpm deploy:ledger`. Unset, the configs fall back to the zero address and index no XorvLedger events (only the ERC-8004 registries). |
-| `ENVIO_XORV_LEDGER_START_BLOCK` | recommended | its deploy block (`blockNumber` in the same file). Keep it at or before the deploy block so the constructor's `BrokerSet` is indexed. |
+| `ENVIO_XORV_LEDGER_ADDRESS` | always | XorvLedger address: `contracts.XorvLedger` in `deployments/arc-<network>.json` (written by `scripts/deploy.sh`). Unset, the configs fall back to the zero address and index no XorvLedger events (only the ERC-8004 registries). |
+| `ENVIO_XORV_LEDGER_START_BLOCK` | recommended | its deploy block (`blockNumber` in the same file, or the block before it). Keep it at or before the deploy block so the constructor's `BrokerSet` is indexed. |
 | `ENVIO_XORV_VERIFIER_ADDRESSES` | optional | extra comma-separated addresses whose `"xorv-verified"` feedback counts: a verifier with its own key, or the broker when the start block is after the deploy |
 | `ENVIO_ERC8004_START_BLOCK` | optional | skip ERC-8004 history before this block (default: every agent on the chain) |
-| `ENVIO_MONAD_RPC_URL` | optional | fallback RPC (defaults to the public Monad RPC) |
+| `ENVIO_XORV_ESCROW_ADDRESS` / `ENVIO_XORV_ESCROW_START_BLOCK` | recommended | XorvEscrow from `deployments/arc-<network>.json`; the start block also applies to XorvReputation and the CCIP receiver |
+| `ENVIO_XORV_REPUTATION_ADDRESS` | recommended | XorvReputation; its `successRate` feedback counts as `ESCROW_OUTCOME` |
+| `ENVIO_XORV_CCIP_RECEIVER_ADDRESS` | optional | XorvCcipReceiver (cross-chain jobs) |
+| `ENVIO_ARC_RPC_URL` | optional | fallback RPC (defaults to the public Arc RPC) |
 
 They are interpolated into the config files. Only `ENVIO_`-prefixed variables reach an Envio Cloud
 deployment, which is why none of them reuse the broker's `XORV_*` names. Envio also interpolates

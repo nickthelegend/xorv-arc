@@ -7,12 +7,14 @@
  *                  one per paid job, authorised by the buyer who paid for it.
  *   XORV_VERIFIED  tag1 "xorv-verified" whose client is the ledger's broker at that
  *                  moment (Broker.active): the Kimi result verifier.
+ *   ESCROW_OUTCOME tag1 "successRate" whose client is XorvReputation: written by escrow
+ *                  settlement itself (100 released, 0 refunded at fault).
  * Everything else is kept (it is still public reputation) as OTHER. Who counts as the
  * ledger or the verifier is decided in lib/trust.ts.
  */
 
 import { indexer, type Feedback } from "envio";
-import { TAG_STARRED, TAG_VERIFIED } from "../lib/constants.js";
+import { TAG_STARRED, TAG_SUCCESS_RATE, TAG_VERIFIED } from "../lib/constants.js";
 import {
   DailyStatsCache,
   loadAgent,
@@ -20,12 +22,13 @@ import {
   saveNetworkStats,
   type Context,
 } from "../lib/entities.js";
-import { isLedgerClient, isVerifierClient } from "../lib/trust.js";
+import { isLedgerClient, isReputationClient, isVerifierClient } from "../lib/trust.js";
 import { feedbackId, lower, normalizeFeedbackValue, ratio } from "../lib/util.js";
 
 async function classify(context: Context, client: string, tag1: string): Promise<Feedback["kind"]> {
   if (tag1 === TAG_STARRED && (await isLedgerClient(context, client))) return "BUYER_RATING";
   if (tag1 === TAG_VERIFIED && (await isVerifierClient(context, client))) return "XORV_VERIFIED";
+  if (tag1 === TAG_SUCCESS_RATE && (await isReputationClient(context, client))) return "ESCROW_OUTCOME";
   return "OTHER";
 }
 
@@ -95,6 +98,10 @@ indexer.onEvent(
       stats.verifiedFeedbacks += 1;
       const broker = await context.Broker.get(client);
       if (broker) context.Broker.set({ ...broker, verifiedFeedbacks: broker.verifiedFeedbacks + 1 });
+    } else if (kind === "ESCROW_OUTCOME") {
+      agent.escrowOutcomeCount += 1;
+      if (normalized >= 100) agent.escrowReleasedCount += 1;
+      agent.escrowSuccessRate = ratio(agent.escrowReleasedCount, agent.escrowOutcomeCount);
     }
     context.Agent.set(agent);
 
@@ -146,6 +153,11 @@ indexer.onEvent(
     if (agent.feedbackCount === 0) agent.feedbackSum = 0;
     if (agent.buyerRatingCount === 0) agent.buyerRatingSum = 0;
     if (agent.verifiedCount === 0) agent.verifiedSum = 0;
+    if (feedback.kind === "ESCROW_OUTCOME") {
+      agent.escrowOutcomeCount = Math.max(0, agent.escrowOutcomeCount - 1);
+      if (n >= 100) agent.escrowReleasedCount = Math.max(0, agent.escrowReleasedCount - 1);
+      agent.escrowSuccessRate = ratio(agent.escrowReleasedCount, agent.escrowOutcomeCount);
+    }
     context.Agent.set(agent);
     saveNetworkStats(context, stats, event.block);
   },

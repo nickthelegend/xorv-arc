@@ -6,7 +6,7 @@
 # - bytes32 values (providerId, jobId, hashes, tx hashes) are lowercase 0x-hex.
 # - USDC amounts are BigInt base units, 6 decimals (1 USDC = 1000000). Hasura returns
 #   BigInt as a string; parse it with BigInt(), never Number().
-# - Timestamps are unix SECONDS from the block (Monad blocks are ~300 ms apart).
+# - Timestamps are unix SECONDS from the block (Arc blocks are sub-second; 1 s resolution).
 # - A relation field `provider: Provider` is stored and filterable as `provider_id`.
 # - Ratios (successRate, avg*) are Float and 0 when there is nothing to divide by.
 
@@ -19,6 +19,10 @@ enum FeedbackKind {
   # tag1 "xorv-verified" from the ledger's current broker (the broker's operator EOA runs
   # the Kimi result verifier) or from an ENVIO_XORV_VERIFIER_ADDRESSES address.
   XORV_VERIFIED
+  # tag1 "successRate" from XorvReputation: written by the escrow's own settlement (100 on a
+  # release, 0 on an at-fault refund). Payment-backed and Sybil-resistant: only a funded
+  # escrow job can produce one.
+  ESCROW_OUTCOME
   # Everything else, from any client. Indexed and shown, never mixed into Xorv scores.
   OTHER
 }
@@ -121,6 +125,10 @@ type Agent {
   verifiedCount: Int!
   verifiedSum: Float!
   verifiedScore: Float!
+  # ESCROW_OUTCOME only: settlements XorvEscrow reported through XorvReputation.
+  escrowOutcomeCount: Int!
+  escrowReleasedCount: Int!
+  escrowSuccessRate: Float!
   lastFeedbackAt: Int
   # Internal: the last BUYER_RATING feedback, so the JobRated that XorvLedger emits
   # right after it (same tx) can link Rating <-> Feedback.
@@ -361,4 +369,56 @@ type EscrowJob {
   # Refunded only: true when the attester refunded (the provider failed).
   providerAtFault: Boolean
   reassignments: Int!
+}
+
+# An XorvReputation contract this indexer has seen (AgentBound / OutcomeRecorded), so its
+# "successRate" feedback counts as ESCROW_OUTCOME even without ENVIO_XORV_REPUTATION_ADDRESS.
+type ReputationContract {
+  # contract address, lowercase
+  id: ID!
+  firstSeenAt: Int!
+}
+
+# A provider payout wallet bound to its ERC-8004 agent in XorvReputation.
+type AgentBinding {
+  # payout wallet, lowercase
+  id: ID!
+  agentId: BigInt! @index
+  reputation: String!
+  boundAt: Int!
+  txHash: String!
+}
+
+# One escrow settlement as XorvReputation recorded it (XorvEscrow -> recordOutcome).
+type EscrowOutcome {
+  # the escrow job id (bytes32, lowercase)
+  id: ID!
+  provider: String! @index
+  # null when the provider was not bound to an agent (the outcome was counted, not written)
+  agentId: BigInt
+  success: Boolean!
+  amount: BigInt!
+  feedbackWritten: Boolean!
+  blockTimestamp: Int! @index
+  txHash: String!
+}
+
+# A job posted from another chain over Chainlink CCIP (XorvCcipReceiver).
+type CrossChainIntent {
+  # the escrow job id (bytes32, lowercase)
+  id: ID!
+  messageId: String!
+  sourceChainSelector: BigInt! @index
+  # the buyer agent on the source chain (and its refund address on Arc)
+  requester: String! @index
+  provider: String!
+  price: BigInt!
+  deadline: BigInt!
+  # Received | Pending | Funded | Released | Refunded | Cancelled
+  status: String! @index
+  receivedAt: Int!
+  fundedAt: Int
+  settledAt: Int
+  receiveTx: String!
+  settleTx: String
 }

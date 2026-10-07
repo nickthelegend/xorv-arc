@@ -21,6 +21,9 @@ export const TAG_STARRED = "starred";
 /** tag1 the broker's Kimi verifier uses for its per-job score (0..100, decimals 0). */
 export const TAG_VERIFIED = "xorv-verified";
 
+/** tag1 XorvReputation writes on every escrow settlement (100 released, 0 refunded at fault). */
+export const TAG_SUCCESS_RATE = "successRate";
+
 /** The reserved IdentityRegistry metadata key holding the agent's payment wallet. */
 export const AGENT_WALLET_KEY = "agentWallet";
 

@@ -2,7 +2,7 @@
   "name": "@xorv/indexer",
   "version": "0.1.0",
   "private": true,
-  "description": "Envio HyperIndex indexer for XorvLedger + ERC-8004 identity/reputation on Monad. Self-contained: not part of the pnpm workspace (envio has no Windows binary).",
+  "description": "Envio HyperIndex indexer for XorvLedger + ERC-8004 identity/reputation, XorvEscrow, XorvReputation and CCIP jobs on Arc. Self-contained: not part of the pnpm workspace (envio has no Windows binary).",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.29.2",

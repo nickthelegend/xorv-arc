@@ -1,37 +1,27 @@
 /**
- * The chain: a local fork of Monad testnet, funded and with XorvLedger on it.
+ * The chain: a local fork of Arc testnet, with Xorv's contracts deployed by
+ * the real deploy script.
  *
  * Forking (rather than a blank local chain) is the point of the exercise: the
- * USDC the buyer pays in is Circle's real FiatToken at its real address, with
- * its real EIP-712 domain ("USDC", "2") and its real EIP-3009
- * `transferWithAuthorization`; the Identity and Reputation registries are the
- * canonical ERC-8004 v2.0.0 singletons at their vanity 0x8004… addresses. So
- * the broker, the CLI and the MCP server run with their default testnet
- * configuration — only the RPC URL points somewhere else.
+ * USDC the buyer pays in is Circle's real FiatToken at `0x3600…0000`, with its
+ * real EIP-712 domain ("USDC", "2") and its real EIP-3009 authorizations; the
+ * Identity and Reputation registries are the canonical ERC-8004 v2.0.0
+ * singletons; Arc's Memo predeploy, CCTP's TokenMessengerV2 and Chainlink's
+ * CCIP router are the real contracts. The broker, the CLI and the MCP server
+ * run with their default testnet configuration — only the RPC URL points
+ * somewhere else.
  *
- * The fork is Hardhat 3's EDR, from packages/contracts (`hardhat node
- * --network monadFork`): the toolchain is already in the repo, and its
- * `hardhat_*` methods do the funding. XorvLedger goes on with the package's
- * own deploy script (`--network monadForkRpc`), which recognises the fork by
- * its chain id and wires the ledger to the canonical registries.
+ * The fork is **Arc Foundry's** anvil (`arc-anvil --network arc`): plain anvil
+ * can fork Arc but cannot move Arc's native USDC (the ERC-20 at 0x3600… is a
+ * view of the native balance, implemented by a precompile). On Arc the native
+ * balance *is* the USDC balance, so funding is `anvil_setBalance` — 18-decimal
+ * native units, which the ERC-20 reports with 6.
  */
 
-import { createRequire } from "node:module";
+import fs from "node:fs";
 import path from "node:path";
-import {
-  createPublicClient,
-  createWalletClient,
-  getAddress,
-  http,
-  keccak256,
-  encodeAbiParameters,
-  parseAbi,
-  toHex,
-  type Address,
-  type Hex,
-  type PublicClient,
-} from "viem";
-import { MONAD_TESTNET, networkConfig, viemChain } from "@xorv/protocol";
+import { createPublicClient, getAddress, http, parseAbi, toHex, type Address, type Hex, type PublicClient } from "viem";
+import { ARC_TESTNET, networkConfig, viemChain } from "@xorv/protocol";
 import { delay, tail, type ManagedProcess, type ProcessGroup } from "./procs.js";
 
 export const FIAT_TOKEN_ABI = parseAbi([
@@ -39,13 +29,15 @@ export const FIAT_TOKEN_ABI = parseAbi([
   "function version() view returns (string)",
   "function decimals() view returns (uint8)",
   "function balanceOf(address) view returns (uint256)",
-  "function masterMinter() view returns (address)",
-  "function isMinter(address) view returns (bool)",
-  "function configureMinter(address minter, uint256 minterAllowedAmount) returns (bool)",
-  "function mint(address to, uint256 amount) returns (bool)",
+  "function transfer(address to, uint256 value) returns (bool)",
   "event Transfer(address indexed from, address indexed to, uint256 value)",
   "event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)",
 ]);
+
+/** Arc Foundry's anvil: ARC_ANVIL, else `arc-anvil` on PATH. */
+export function arcAnvil(): string {
+  return process.env.ARC_ANVIL?.trim() || "arc-anvil";
+}
 
 export interface Fork {
   url: string;
@@ -57,170 +49,141 @@ export interface Fork {
   rpc<T = unknown>(method: string, params?: unknown[]): Promise<T>;
 }
 
-/** Hardhat's CLI entry, resolved from packages/contracts so the repo's pinned version runs. */
-function hardhatCli(contractsDir: string): string {
-  const require = createRequire(path.join(contractsDir, "package.json"));
-  const pkgPath = require.resolve("hardhat/package.json");
-  const pkg = require(pkgPath) as { bin: string | Record<string, string> };
-  const bin = typeof pkg.bin === "string" ? pkg.bin : pkg.bin.hardhat;
-  if (!bin) throw new Error("could not find hardhat's CLI entry point");
-  return path.join(path.dirname(pkgPath), bin);
-}
-
+/** Start arc-anvil forking Arc testnet with 1-second blocks. */
 export async function startFork(opts: {
   group: ProcessGroup;
-  contractsDir: string;
   port: number;
   forkUrl: string;
-  forkBlock: string | null;
+  forkBlock?: string | null;
   env: NodeJS.ProcessEnv;
 }): Promise<Fork> {
   const url = `http://127.0.0.1:${opts.port}`;
-  const proc = opts.group.start("fork", process.execPath, [hardhatCli(opts.contractsDir), "node", "--network", "monadFork", "--port", String(opts.port)], {
-    cwd: opts.contractsDir,
-    env: { ...opts.env, MONAD_FORK_URL: opts.forkUrl, MONAD_FORK_BLOCK: opts.forkBlock ?? "" },
-  });
-  await proc.waitFor(/Started HTTP and WebSocket JSON-RPC server/, 180_000);
-
-  const rpc = async <T>(method: string, params: unknown[] = []): Promise<T> => {
+  const args = [
+    "--network",
+    "arc",
+    "--fork-url",
+    opts.forkUrl,
+    ...(opts.forkBlock ? ["--fork-block-number", opts.forkBlock] : []),
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(opts.port),
+    "--block-time",
+    "1",
+    "--silent",
+  ];
+  const proc = opts.group.start("fork", arcAnvil(), args, { cwd: process.cwd(), env: opts.env });
+  const rpc = async <T,>(method: string, params: unknown[] = []): Promise<T> => {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      signal: AbortSignal.timeout(120_000),
     });
-    const body = (await res.json()) as { result?: T; error?: { message: string } };
-    if (body.error) throw new Error(`${method}: ${body.error.message}`);
-    return body.result as T;
+    const json = (await res.json()) as { result?: T; error?: { message: string } };
+    if (json.error) throw new Error(`${method}: ${json.error.message}`);
+    return json.result as T;
   };
-
-  const chainId = Number(await rpc<string>("eth_chainId"));
-  if (chainId !== networkConfig(MONAD_TESTNET).chainId) {
-    throw new Error(`the fork reports chain id ${chainId}, expected 10143\n${tail(proc.output)}`);
-  }
-  const metadata = await rpc<{ forkedNetwork?: { forkBlockNumber: number; chainId: number } | null }>("hardhat_metadata");
-  if (!metadata.forkedNetwork) throw new Error("hardhat_metadata says the node is not forking");
-
-  const client = createPublicClient({ chain: viemChain(MONAD_TESTNET), transport: http(url, { timeout: 120_000 }), pollingInterval: 100 });
-  return {
-    url,
-    chainId,
-    forkBlock: BigInt(metadata.forkedNetwork.forkBlockNumber),
-    forkedFrom: opts.forkUrl,
-    process: proc,
-    client,
-    rpc,
-  };
+  let chainId = 0;
+  await waitUntil("arc-anvil to answer", 120_000, async () => {
+    if (!proc.running) throw new Error(`arc-anvil exited\n${tail(proc.output)}`);
+    chainId = Number(await rpc<string>("eth_chainId"));
+    return chainId > 0;
+  });
+  if (chainId !== networkConfig(ARC_TESTNET).chainId) throw new Error(`the fork reports chain ${chainId}, not Arc testnet`);
+  const client = createPublicClient({ chain: viemChain(ARC_TESTNET), transport: http(url, { timeout: 120_000 }), pollingInterval: 250 });
+  const forkBlock = await client.getBlockNumber();
+  return { url, chainId, forkBlock, forkedFrom: opts.forkUrl, process: proc, client, rpc };
 }
 
-/** Give an address native MON (hardhat_setBalance). */
-export async function setMon(fork: Fork, address: Address, wei: bigint): Promise<void> {
-  await fork.rpc("hardhat_setBalance", [address, toHex(wei)]);
-}
-
-export interface UsdcFunding {
-  method: "masterMinter" | "storage";
-  masterMinter: Address | null;
-  txHashes: Hex[];
-}
+/** USDC units (6 decimals) → the native balance's 18-decimal units. */
+export const nativeFromUsdc = (units: bigint): bigint => units * 10n ** 12n;
 
 /**
- * Mint real (forked) USDC to `to`: impersonate FiatToken's masterMinter, make
- * it a minter, and mint — the token's own code path, so the balance, total
- * supply and Transfer event are all genuine. If the masterMinter route is
- * unavailable (a contract masterMinter that can't be impersonated, a changed
- * token), fall back to writing the balance slot directly.
+ * Set an address's USDC to exactly `units` (6 decimals). On Arc the native
+ * balance is the USDC balance, so this is `anvil_setBalance`, read back
+ * through the ERC-20 to prove the two views agree.
  */
-export async function fundUsdc(fork: Fork, usdc: Address, to: Address, amount: bigint): Promise<UsdcFunding> {
-  const before = await fork.client.readContract({ address: usdc, abi: FIAT_TOKEN_ABI, functionName: "balanceOf", args: [to] });
-  try {
-    const masterMinter = getAddress(await fork.client.readContract({ address: usdc, abi: FIAT_TOKEN_ABI, functionName: "masterMinter" }));
-    await fork.rpc("hardhat_impersonateAccount", [masterMinter]);
-    await setMon(fork, masterMinter, 10n ** 20n);
-    const wallet = createWalletClient({ chain: viemChain(MONAD_TESTNET), transport: http(fork.url, { timeout: 120_000 }) });
-    const txHashes: Hex[] = [];
-    for (const [functionName, args] of [
-      ["configureMinter", [masterMinter, amount]],
-      ["mint", [to, amount]],
-    ] as const) {
-      const hash = await wallet.writeContract({
-        account: masterMinter,
-        address: usdc,
-        abi: FIAT_TOKEN_ABI,
-        functionName,
-        args: args as never,
-        chain: viemChain(MONAD_TESTNET),
-      });
-      const receipt = await fork.client.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") throw new Error(`${functionName} reverted (${hash})`);
-      txHashes.push(hash);
-    }
-    await fork.rpc("hardhat_stopImpersonatingAccount", [masterMinter]);
-    const after = await fork.client.readContract({ address: usdc, abi: FIAT_TOKEN_ABI, functionName: "balanceOf", args: [to] });
-    if (after - before !== amount) throw new Error(`minted ${amount} but the balance moved by ${after - before}`);
-    return { method: "masterMinter", masterMinter, txHashes };
-  } catch (err) {
-    console.error(`  ! minting through the masterMinter failed (${err instanceof Error ? err.message : err}); writing the balance slot`);
-    await writeBalanceSlot(fork, usdc, to, before + amount);
-    return { method: "storage", masterMinter: null, txHashes: [] };
-  }
+export async function setUsdc(fork: Fork, address: Address, units: bigint): Promise<void> {
+  await fork.rpc("anvil_setBalance", [address, toHex(nativeFromUsdc(units))]);
+  const usdc = networkConfig(ARC_TESTNET).usdc.address;
+  const seen = await fork.client.readContract({ address: usdc, abi: FIAT_TOKEN_ABI, functionName: "balanceOf", args: [address] });
+  if (seen !== units) throw new Error(`setBalance(${address}) shows ${seen} USDC units through the ERC-20, not ${units}`);
 }
 
-/**
- * Find the balances mapping by probing: write a candidate slot, read
- * `balanceOf`, and keep the slot that moved it (restoring the others).
- * FiatToken v2.2 keeps balances (and a blacklist bit) at slot 9, but probing
- * survives a layout change.
- */
-async function writeBalanceSlot(fork: Fork, token: Address, holder: Address, value: bigint): Promise<void> {
-  for (let slot = 0n; slot < 64n; slot++) {
-    const key = keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [holder, slot]));
-    const previous = await fork.rpc<Hex>("eth_getStorageAt", [token, key, "latest"]);
-    await fork.rpc("hardhat_setStorageAt", [token, key, toHex(value, { size: 32 })]);
-    const balance = await fork.client.readContract({ address: token, abi: FIAT_TOKEN_ABI, functionName: "balanceOf", args: [holder] });
-    if (balance === value) return;
-    await fork.rpc("hardhat_setStorageAt", [token, key, toHex(BigInt(previous), { size: 32 })]);
-  }
-  throw new Error(`could not find ${token}'s balance slot`);
-}
-
-export interface LedgerDeployment {
-  address: Address;
+export interface ArcDeployment {
+  ledger: Address;
+  escrow: Address;
+  reputation: Address;
+  ccipReceiver: Address;
+  owner: Address;
+  broker: Address;
   fromBlock: bigint;
-  txHash: Hex | null;
+  gasUsed: bigint | null;
+  costUsdc: string | null;
   output: string;
   ms: number;
 }
 
-/** Deploy XorvLedger with packages/contracts' own script, and read the address it prints. */
-export async function deployLedger(opts: {
+/**
+ * Deploy with the real script (`scripts/deploy.sh local`): XorvLedger,
+ * XorvReputation, XorvEscrow and XorvCcipReceiver, wired the way testnet and
+ * mainnet are. `deployerKey` is a throwaway fork key.
+ */
+export async function deployArc(opts: {
   group: ProcessGroup;
-  contractsDir: string;
+  repo: string;
+  runDir: string;
   fork: Fork;
+  deployerKey: Hex;
   broker: Address;
   env: NodeJS.ProcessEnv;
-}): Promise<LedgerDeployment> {
-  const result = await opts.group.run(
-    "deploy",
-    process.execPath,
-    [hardhatCli(opts.contractsDir), "run", "scripts/deploy.ts", "--network", "monadForkRpc"],
-    {
-      cwd: opts.contractsDir,
-      env: { ...opts.env, MONAD_FORK_RPC_URL: opts.fork.url, XORV_BROKER_ADDRESS: opts.broker },
-      timeoutMs: 300_000,
+}): Promise<ArcDeployment> {
+  const deployerEnv = path.join(opts.runDir, "deployer.env");
+  fs.writeFileSync(deployerEnv, `DEPLOYER_PRIVATE_KEY=${opts.deployerKey}\n`, { mode: 0o600 });
+  const record = path.join(opts.runDir, "deployment.json");
+  const fromBlock = await opts.fork.client.getBlockNumber();
+  const forge = process.env.ARC_FORGE?.trim();
+  const result = await opts.group.run("deploy", "bash", [path.join(opts.repo, "scripts", "deploy.sh"), "local"], {
+    cwd: opts.repo,
+    env: {
+      ...opts.env,
+      DEPLOYER_ENV: deployerEnv,
+      XORV_BROKER_ADDRESS: opts.broker,
+      XORV_NO_LOCK: "1",
+      ARC_RPC_URL: opts.fork.url,
+      XORV_DEPLOYMENT_FINAL: record,
+      ...(forge ? { ARC_FORGE: forge } : {}),
     },
-  );
+    timeoutMs: 600_000,
+  });
   const output = `${result.stdout}\n${result.stderr}`;
-  const address = /XORV_LEDGER_ADDRESS=(0x[0-9a-fA-F]{40})/.exec(output)?.[1];
-  const fromBlock = /XORV_LEDGER_FROM_BLOCK=(\d+)/.exec(output)?.[1];
-  if (result.code !== 0 || !address || !fromBlock) {
-    throw new Error(`the deploy script failed (exit ${result.code})\n${tail(output)}`);
-  }
-  if (!/is a fork of monadTestnet: using its canonical ERC-8004 registries/.test(output)) {
-    throw new Error(`the deploy script did not recognise the fork, so the ledger is not wired to the real registries\n${tail(output)}`);
-  }
-  const txHash = (/Sent\s+(0x[0-9a-fA-F]{64})/.exec(output)?.[1] ?? null) as Hex | null;
-  return { address: getAddress(address), fromBlock: BigInt(fromBlock), txHash, output, ms: result.ms };
+  if (result.code !== 0 || !fs.existsSync(record)) throw new Error(`scripts/deploy.sh local failed (exit ${result.code})\n${tail(output)}`);
+  const json = JSON.parse(fs.readFileSync(record, "utf8")) as {
+    contracts: Record<string, string>;
+    owner: string;
+    broker: string;
+    blockNumber?: number;
+  };
+  const gas = /gas used: (\d+)\s+cost: ([\d.e-]+) USDC/.exec(output);
+  return {
+    ledger: getAddress(json.contracts.XorvLedger!),
+    escrow: getAddress(json.contracts.XorvEscrow!),
+    reputation: getAddress(json.contracts.XorvReputation!),
+    ccipReceiver: getAddress(json.contracts.XorvCcipReceiver!),
+    owner: getAddress(json.owner),
+    broker: getAddress(json.broker),
+    fromBlock,
+    gasUsed: gas ? BigInt(gas[1]!) : null,
+    costUsdc: gas ? gas[2]! : null,
+    output,
+    ms: result.ms,
+  };
+}
+
+/** Move the fork's clock forward and mine a block (for deadlines). */
+export async function warp(fork: Fork, seconds: number): Promise<void> {
+  await fork.rpc("evm_increaseTime", [seconds]);
+  await fork.rpc("evm_mine", []);
 }
 
 /** Poll until `check` returns a value (or throw after `timeoutMs`). */

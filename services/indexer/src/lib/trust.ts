@@ -23,6 +23,22 @@ import { parseAddressList } from "./util.js";
 
 let ledgers: string[] | undefined;
 let verifiers: string[] | undefined;
+let reputations: string[] | undefined;
+
+function configuredReputations(): string[] {
+  reputations ??= parseAddressList(process.env.ENVIO_XORV_REPUTATION_ADDRESS);
+  return reputations;
+}
+
+/**
+ * True when `client` (lowercase) is an XorvReputation: the configured address, or one the
+ * indexer has seen emit AgentBound / OutcomeRecorded. Its "successRate" feedback is written
+ * by escrow settlement itself.
+ */
+export async function isReputationClient(context: Context, client: string): Promise<boolean> {
+  if (configuredReputations().includes(client)) return true;
+  return (await context.ReputationContract.get(client)) !== undefined;
+}
 
 function configuredLedgers(): string[] {
   ledgers ??= parseAddressList(process.env.ENVIO_XORV_LEDGER_ADDRESS);

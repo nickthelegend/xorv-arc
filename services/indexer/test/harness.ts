@@ -8,7 +8,7 @@
 import { createTestIndexer, type TestIndexerProcessConfig } from "envio";
 import { keccak256, toBytes, toHex } from "viem";
 
-export const CHAIN_ID = 10143;
+export const CHAIN_ID = 5042002;
 
 /** Must match vitest.config.ts (ENVIO_XORV_LEDGER_ADDRESS). */
 export const LEDGER = "0x1ed9e7c0a5f4c3b2a19d8e7f6a5b4c3d2e1f0a9b";
@@ -34,7 +34,7 @@ export type SimItem = NonNullable<ChainConfig["simulate"]>[number];
 
 /** An event without its block/transaction placement; `tx()` adds those. */
 export interface SimEvent {
-  contract: "XorvLedger" | "IdentityRegistry" | "ReputationRegistry" | "XorvEscrow";
+  contract: "XorvLedger" | "IdentityRegistry" | "ReputationRegistry" | "XorvEscrow" | "XorvReputation" | "XorvCcipReceiver";
   event: string;
   params: Record<string, unknown>;
   srcAddress?: string;
@@ -263,5 +263,51 @@ export const escrow = {
     event: "JobReassigned",
     srcAddress: ESCROW,
     params: { jobId, previousProvider, newProvider },
+  }),
+};
+
+/** Must match vitest.config.ts (ENVIO_XORV_REPUTATION_ADDRESS / ENVIO_XORV_CCIP_RECEIVER_ADDRESS). */
+export const XORV_REPUTATION = "0xae90000000000000000000000000000000000ae9";
+export const CCIP_RECEIVER = "0xcc1b000000000000000000000000000000000cc1";
+
+export const xorvReputation = {
+  agentBound: (wallet: string, agentId: bigint, srcAddress = XORV_REPUTATION): SimEvent => ({
+    contract: "XorvReputation",
+    event: "AgentBound",
+    params: { wallet, agentId },
+    srcAddress,
+  }),
+  outcome: (o: { jobId: string; provider: string; agentId: bigint; success: boolean; amount?: bigint; feedbackWritten?: boolean }, srcAddress = XORV_REPUTATION): SimEvent => ({
+    contract: "XorvReputation",
+    event: "OutcomeRecorded",
+    params: { jobId: o.jobId, provider: o.provider, agentId: o.agentId, success: o.success, amount: o.amount ?? 1_000n, feedbackWritten: o.feedbackWritten ?? true },
+    srcAddress,
+  }),
+};
+
+export const ccip = {
+  received: (i: { jobId: string; messageId: string; selector: bigint; requester: string; provider: string; price?: bigint; deadline?: number }): SimEvent => ({
+    contract: "XorvCcipReceiver",
+    event: "IntentReceived",
+    params: { jobId: i.jobId, messageId: i.messageId, sourceChainSelector: i.selector, requester: i.requester, provider: i.provider, price: i.price ?? 1_000n, deadline: BigInt(i.deadline ?? T0 + 7_200) },
+    srcAddress: CCIP_RECEIVER,
+  }),
+  funded: (jobId: string, provider: string, price = 1_000n): SimEvent => ({
+    contract: "XorvCcipReceiver",
+    event: "IntentFunded",
+    params: { jobId, provider, price },
+    srcAddress: CCIP_RECEIVER,
+  }),
+  released: (jobId: string): SimEvent => ({
+    contract: "XorvCcipReceiver",
+    event: "IntentReleased",
+    params: { jobId, messageId: ZERO32, resultHash: ZERO32 },
+    srcAddress: CCIP_RECEIVER,
+  }),
+  refundClaimed: (jobId: string, beneficiary: string, amount = 1_000n): SimEvent => ({
+    contract: "XorvCcipReceiver",
+    event: "RefundClaimed",
+    params: { jobId, beneficiary, amount },
+    srcAddress: CCIP_RECEIVER,
   }),
 };

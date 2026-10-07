@@ -44,6 +44,9 @@ export function emptyAgent(agentId: bigint): Mutable<Agent> {
     verifiedCount: 0,
     verifiedSum: 0,
     verifiedScore: 0,
+    escrowOutcomeCount: 0,
+    escrowReleasedCount: 0,
+    escrowSuccessRate: 0,
     lastFeedbackAt: undefined,
     lastLedgerFeedbackId: undefined,
   };

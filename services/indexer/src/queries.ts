@@ -647,8 +647,8 @@ export async function queryIndexer<T>(
 }
 
 /**
- * Escrowed payments still held past their refund deadline: what the Chainlink CRE refund
- * keeper (cre/refund-keeper/workflow.ts) refunds. Variables: `{ now, limit }` (now in unix
+ * Escrowed payments still held past their refund deadline: what the broker's refund keeper
+ * (services/broker/src/keeper.ts) refunds, or anyone may. Variables: `{ now, limit }` (now in unix
  * seconds). The keeper re-checks each one on chain (`isRefundable`) before refunding.
  */
 export const EXPIRED_ESCROW_JOBS_QUERY = /* GraphQL */ `

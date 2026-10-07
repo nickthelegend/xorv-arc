@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { createPublicClient, createWalletClient, getAddress, http, type Abi, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import {
-  MONAD_TESTNET,
+  ARC_TESTNET,
   networkConfig,
   viemChain,
   type Capability,
@@ -44,7 +44,7 @@ const FOUNDRY_OUT = path.join(REPO, "contracts", "out");
 const BROKER_ENTRY = path.join(REPO, "services", "broker", "dist", "index.js");
 const CLI_ENTRY = path.join(REPO, "packages", "cli", "dist", "index.js");
 const APP_DIR = path.join(REPO, "apps", "app");
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const NET = networkConfig(NETWORK);
 const USDC = NET.usdc.address as Address;
 const BASE = Number(process.env.XORV_DEMO_PORT_BASE ?? 8650);

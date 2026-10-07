@@ -2,7 +2,7 @@
   "name": "@xorv/e2e",
   "version": "0.2.0",
   "private": true,
-  "description": "End-to-end harness: a local fork of Monad testnet, the real broker, a real provider node and real buyers, with every claim checked on-chain.",
+  "description": "End-to-end harness: a local fork of Arc testnet (Arc Foundry), the real deploy script, the real broker, a real provider node and real buyers, with every claim checked on-chain.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -11,8 +11,8 @@
   "scripts": {
     "e2e": "tsx src/run.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "e2e:escrow": "tsx src/escrow.ts",
-    "demo": "tsx src/demo.ts"
+    "demo": "tsx src/demo.ts",
+    "e2e:arc": "tsx src/arc.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

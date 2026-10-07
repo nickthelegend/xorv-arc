@@ -136,14 +136,16 @@ describe("configs", () => {
   it("index the same contracts and events on both chains", () => {
     expect(eventNames(mainnet)).toEqual(eventNames(testnet));
     expect(contracts(mainnet)).toEqual(contracts(testnet));
-    expect(eventNames(testnet)).toHaveLength(17);
+    expect(eventNames(testnet)).toHaveLength(25);
   });
 
-  it("point at the SPEC §2 chain ids and ERC-8004 singletons", () => {
-    expect(testnet).toMatch(/- id: 10143\b/);
+  it("point at Arc's chain ids, HyperSync endpoints and ERC-8004 singletons", () => {
+    expect(testnet).toMatch(/- id: 5042002\b/);
     expect(testnet).toContain("0x8004A818BFB912233c491871b3d84c89A494BD9e");
     expect(testnet).toContain("0x8004B663056A597Dffe9eCcC1965A193B7388713");
-    expect(mainnet).toMatch(/- id: 143\b/);
+    expect(mainnet).toMatch(/- id: 5042\b/);
+    expect(testnet).toContain("https://arc-testnet.hypersync.xyz");
+    expect(mainnet).toContain("https://arc.hypersync.xyz");
     expect(mainnet).toContain("0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
     expect(mainnet).toContain("0x8004BAa17C55a88189AE136b182e5fdA19dE9b63");
   });

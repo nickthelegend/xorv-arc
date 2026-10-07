@@ -3,7 +3,7 @@
  *
  *   pnpm build && pnpm e2e
  *
- * 1. Forks Monad testnet locally (Hardhat 3 / EDR, chain id 10143), so Circle's
+ * 1. Forks Monad testnet locally (Hardhat 3 / EDR, chain id 5042002), so Circle's
  *    real USDC and the canonical ERC-8004 registries are there.
  * 2. Funds the parties (MON by hardhat_setBalance, USDC minted through the
  *    token's own masterMinter) and deploys XorvLedger with the contracts
@@ -33,7 +33,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { getAddress, keccak256, parseAbi, toHex, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import {
-  MONAD_TESTNET,
+  ARC_TESTNET,
   REPUTATION_ABI,
   capabilityString,
   deriveInboxKeys,
@@ -84,7 +84,7 @@ const KEEP_RUN = process.env.XORV_E2E_KEEP?.trim() === "1";
 // wants the built-in testnet table (the fork has the real addresses), whatever the shell says.
 for (const key of Object.keys(process.env)) if (key.startsWith("XORV_")) delete process.env[key];
 
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const NET = networkConfig(NETWORK);
 const USDC = NET.usdc.address;
 const IDENTITY = NET.erc8004.identity;
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
 
   // ---------------------------------------------------------------------------
   const forkPort = await freePort();
-  const fork: Fork = await report.step("fork Monad testnet (Hardhat 3 / EDR, chain id 10143)", async (note) => {
+  const fork: Fork = await report.step("fork Monad testnet (Hardhat 3 / EDR, chain id 5042002)", async (note) => {
     const f = await startFork({ group, contractsDir: CONTRACTS_DIR, port: forkPort, forkUrl, forkBlock, env: cleanEnv() });
     note(`serving ${f.url}, forked at block ${f.forkBlock}`);
     return f;
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
 
     const info = await api.get<Record<string, any>>("/api/network");
     report.equal("broker network", info.network, NETWORK);
-    report.equal("broker chain id", info.chainId, 10143);
+    report.equal("broker chain id", info.chainId, 5042002);
     report.equal("broker prices in the forked USDC", info.usdc?.address, USDC);
     report.equal("facilitator is self-hosted", info.facilitator?.mode, "self");
     report.equal("facilitator EOA", info.facilitator?.address, parties.facilitator.address);
@@ -446,7 +446,7 @@ async function main(): Promise<void> {
     // The agentURI written on-chain resolves, and the file points back at the agent.
     const file = await api.get<{ registrations?: Array<{ agentId: number | string; agentRegistry: string }> }>(`/agents/${live.id}.json`);
     report.equal("registration file names the agent", String(file.registrations?.[0]?.agentId ?? ""), agentId.toString());
-    report.equal("registration file names the canonical Identity Registry", file.registrations?.[0]?.agentRegistry, `eip155:10143:${IDENTITY}`);
+    report.equal("registration file names the canonical Identity Registry", file.registrations?.[0]?.agentRegistry, `eip155:5042002:${IDENTITY}`);
     return registered;
   });
   report.fact("provider id (broker)", provider.id, "parties");

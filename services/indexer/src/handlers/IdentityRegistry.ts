@@ -1,6 +1,6 @@
 /**
  * ERC-8004 IdentityRegistry (v2.0.0) handlers. The registry is a chain-wide singleton, so
- * this indexes every agent on Monad, not only Xorv providers; Agent.isXorvProvider (set
+ * this indexes every agent on Arc, not only Xorv providers; Agent.isXorvProvider (set
  * by ProviderRegistered only) is what narrows it down.
  *
  * Log order inside one register() call is Transfer (mint), Registered, then
