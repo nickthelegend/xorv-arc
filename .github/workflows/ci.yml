@@ -1,0 +1,231 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    # Node 22 is the workspace floor: the broker's persistence uses node:sqlite
+    # (unflagged from 22.13), the contracts run on Hardhat 3, and the MetaMask
+    # plugin's host needs 22.18. The published CLI and MCP server go lower —
+    # that floor is checked in its own job below.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.x", "24.x"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      # Hardhat downloads solc 0.8.24 on the first compile (the contracts'
+      # typecheck and tests both compile). The version is pinned in the config,
+      # so that file is the key; an older cache still restores and Hardhat
+      # only fetches what's missing.
+      - name: Cache solc
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hardhat-nodejs
+          key: solc-${{ runner.os }}-${{ hashFiles('packages/contracts/hardhat.config.ts') }}
+          restore-keys: solc-${{ runner.os }}-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Build before typecheck: every package resolves @xorv/protocol through its
+      # compiled dist/*.d.ts, which a clean checkout doesn't have yet.
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Every test in the repo runs with no keys and no network: the facilitator
+      # and the XorvLedger writer are stubbed, the contracts run on Hardhat's
+      # in-process chain against the vendored ERC-8004 registries, so CI proves
+      # the logic without spending testnet MON or depending on an RPC being up.
+      # The root "test" script covers packages/*, services/* and both apps
+      # (xorv-app, xorv-landing); the indexer has its own job.
+      - name: Test
+        run: pnpm test
+
+      - name: Build the frontends
+        run: pnpm build:all
+
+  indexer:
+    name: Envio indexer
+    # envio ships no Windows binary, which is why services/indexer sits outside
+    # the root workspace with its own lockfile. Linux is where it's checked.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/indexer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+          cache-dependency-path: services/indexer/pnpm-lock.yaml
+
+      # Its own pnpm-workspace.yaml makes this folder a workspace root, so the
+      # install reads services/indexer/pnpm-lock.yaml, not the monorepo's.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Types for the handlers (.envio/); no HyperSync token needed.
+      - name: Codegen
+        run: pnpm codegen
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # No database, no HyperSync token: the handlers run against Envio's
+      # createTestIndexer. test/abis.test.ts also compares abis/XorvLedger.json
+      # byte for byte with packages/contracts/abi, which the checkout has.
+      - name: Test
+        run: pnpm test
+
+  cli-node-floor:
+    name: CLI runs on its minimum Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+      # The engines floor of @xorv/cli and @xorv/mcp. It is set by their
+      # runtime dependencies, not their own code: @xorv/protocol's
+      # @noble/{hashes,curves,ciphers} 2.x declare >= 20.19.0.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @xorv/cli... --filter @xorv/mcp...
+      - run: pnpm --filter @xorv/protocol build
+      - run: pnpm --filter @xorv/cli --filter @xorv/mcp build
+      # The floor that matters for `npm i -g @xorv/cli`: it has to at least
+      # start. Every command module is imported eagerly, so --help loads the
+      # whole graph (viem, @x402/*, the noble ciphers).
+      - run: node packages/cli/dist/index.js --version
+      - run: node packages/cli/dist/index.js --help
+      - run: node packages/mcp/dist/scripts/privy-setup.js --help
+
+  docker:
+    name: Broker image builds and boots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose file is valid
+        run: docker compose config --quiet
+
+      - name: Build
+        run: docker build -t xorv-broker:ci .
+
+      # No keys, no .env: the broker must boot read-only on testnet, answer
+      # /health, run as a non-root user and keep its SQLite file on /data.
+      - name: Boot
+        run: |
+          docker run -d --name broker -p 8402:8402 xorv-broker:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8402/health; then break; fi
+            if [ "$i" = 30 ]; then docker logs broker; exit 1; fi
+            sleep 1
+          done
+          echo
+          network=$(curl -fsS http://127.0.0.1:8402/api/network)
+          grep -q '"eip155:10143"' <<<"$network"
+          test "$(docker exec broker id -u)" != 0
+          docker exec broker node -e "fetch('http://127.0.0.1:8402/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+          if docker logs broker 2>&1 | grep -q "PERSISTENCE UNAVAILABLE"; then docker logs broker; exit 1; fi
+          docker exec broker test -f /data/xorv-monad.db
+
+      - name: Logs
+        if: always()
+        run: docker logs broker || true
+
+  contracts:
+    name: Solidity — XorvEscrow, refund keeper, Cleanverse gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge build --sizes
+      - run: forge test -vv
+      # Against Monad testnet's real AUSD, USDC and Cleanverse A-Pass, on a fork. Needs the
+      # public RPC, so a flaky endpoint doesn't block the suite above.
+      - run: FORK_TESTS=1 forge test --match-contract Fork -vv
+        continue-on-error: true
+
+  cre:
+    name: Chainlink CRE refund keeper
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cre/refund-keeper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun test
+      - name: Compile to WASM
+        run: ./node_modules/.bin/cre-compile main.ts dist/refund-keeper.wasm
+
+  secrets:
+    name: No keys in the tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for committed key material
+        run: |
+          # A private key in a repo that handles money is the one mistake worth
+          # failing the build over. GitHub tokens, DER-encoded keys, JSON
+          # "privateKey" fields, and env-file lines assigning 32 bytes of hex to
+          # a *KEY / *SECRET variable (a pasted XORV_OPERATOR_KEY=0x…).
+          if grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
+               -E '(ghp_[A-Za-z0-9]{30,}|30740201010420[0-9a-f]{40,}|"privateKey"[[:space:]]*:[[:space:]]*"[0-9a-fA-F]{60,}")' .; then
+            echo "::error::possible secret committed"
+            exit 1
+          fi
+          if grep -rIn --exclude-dir=node_modules --exclude-dir=.git \
+               -E '^[[:space:]]*(export[[:space:]]+)?[A-Z0-9_]*(KEY|SECRET)[A-Z0-9_]*=["'"'"']?(0x)?[0-9a-fA-F]{64}["'"'"']?[[:space:]]*$' .; then
+            echo "::error::possible private key in an env file"
+            exit 1
+          fi
+          # .env, .env.local, .env.production … but never .env.example.
+          if git ls-files | grep -E '(^|/)\.env(\.[A-Za-z0-9_-]+)?$' | grep -vE '\.env\.example$'; then
+            echo "::error::an .env file is tracked"
+            exit 1
+          fi
+          echo "clean"

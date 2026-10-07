@@ -1,0 +1,56 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# secrets — never commit keys
+.env
+.env.local
+.env.*.local
+*.pem
+.xorv/
+
+# reference clones (not part of this repo)
+references_/
+
+# runtime state
+data/
+*.db
+*.sqlite
+*.log
+logs/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# tooling caches
+.turbo/
+.eslintcache
+coverage/
+
+# local Arc fork + deploy artefacts
+.fork/
+contracts/broadcast/*/31337/
+contracts/out/
+contracts/cache/
+deployments/local-fork.json
+
+# large media never belongs here
+*.mp4
+*.mov
+*.dmg
+_references/
+references_/
+
+# git worktrees created by parallel agents
+.claude/worktrees/

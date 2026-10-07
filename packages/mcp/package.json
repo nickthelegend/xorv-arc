@@ -1,0 +1,46 @@
+{
+  "name": "@xorv/mcp",
+  "version": "0.2.0",
+  "description": "MCP server for Xorv — lets any agent buy AI capacity from the network and pay for it in USDC over x402 on Monad, from a local key or a policy-bounded Privy server wallet.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "xorv-mcp": "./dist/index.js",
+    "xorv-mcp-privy-setup": "./dist/scripts/privy-setup.js"
+  },
+  "main": "./dist/index.js",
+  "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=20.19.0" },
+  "homepage": "https://github.com/nickthelegend/xorv-monad/tree/main/packages/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nickthelegend/xorv-monad.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": "https://github.com/nickthelegend/xorv-monad/issues",
+  "keywords": ["mcp", "x402", "monad", "evm", "usdc", "privy", "ai-agents", "model-context-protocol"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/make-executable.mjs dist/index.js dist/scripts/privy-setup.js",
+    "dev": "tsx src/index.ts",
+    "privy:setup": "tsx src/scripts/privy-setup.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@privy-io/node": "^0.35.0",
+    "@x402/core": "~2.27.0",
+    "@x402/evm": "~2.27.0",
+    "@x402/fetch": "~2.27.0",
+    "@xorv/protocol": "workspace:*",
+    "viem": "^2.56.9",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.23.1",
+    "typescript": "~5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

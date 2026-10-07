@@ -1,0 +1,583 @@
+# Architecture
+
+How Xorv is put together on Monad, and why the awkward parts are the way they are.
+
+The Hedera prototype this grew out of (see [README → Prior work](README.md#prior-work-what-existed-before-metropolis-and-what-is-new))
+had its own awkward parts: a 180-second transaction validity window, token association, a fresh SDK
+client per settlement, and HCS message chunking. None of them survived the port. What follows is
+the set of awkward parts that EVM and Monad bring instead.
+
+---
+
+## The shape
+
+```
+ buyers                         broker (services/broker)                 provider node (xorv start)
+ app+Privy · xorv run ·            │                                        dials OUT over WebSocket
+ MCP+Privy · mm xorv               │                                                  │
+   │ 1 POST /api/quotes ─────────► │ Hunyuan screen → Qwen agent → matcher             │
+   │ ◄── frozen quote ──────────── │ (provider 0x…, agentId, usdcAmount, accepts[])    │
+   │ 2 POST /api/jobs/:quoteId ──► │ 402: exact · USDC · payTo = PROVIDER              │
+   │ 3 PAYMENT-SIGNATURE ────────► │ facilitator: transferWithAuthorization ─────► Monad
+   │ ◄── 200 jobId, payment tx ─── │ (settled BEFORE the handler runs)                 │
+   │                               ├─── job.dispatch ─────────────────────────────────►│
+   │ ◄══ SSE ══════════════════════╪◄══ job.event (tool calls, reasoning, steps) ══════┤
+   │ ◄── result ───────────────────┤◄── job.result (sealed if private) ────────────────┤
+   │                               ├─ Kimi verify ─► ERC-8004 giveFeedback ────────► Monad
+   │                               ├─ XorvLedger.recordJobs (batched) ─────────────► Monad
+   │ 6 EIP-712 Rating (free) ─────►├─ XorvLedger.rateJob ─► ERC-8004 giveFeedback ─► Monad
+   │                               │
+   │                               ◄── Envio HyperIndex (services/indexer) GraphQL ◄─ Monad logs
+```
+
+The broker is the only process that has to run for the network to exist. The indexer, the app and
+the landing page are all optional. Provider nodes run anywhere.
+
+## Packages
+
+| Package | What it is |
+|---|---|
+| `packages/protocol` | The shared vocabulary: domain and wire types, the Monad chain table (`chains.ts`), viem helpers (`evm.ts`), the x402 facilitator (`x402.ts`, Node only) and buyer client (`x402-client.ts`), the XorvLedger ABI and feed reader (`ledger.ts`), ERC-8004 helpers (`erc8004.ts`), the OpenAI-compatible model presets (`llm.ts`), private-job crypto (`sealed.ts`, `vault.ts`). `@xorv/protocol/web` is the browser-safe subset. |
+| `packages/contracts` | `XorvLedger.sol`, its Hardhat 3 tests against the vendored ERC-8004 registries, and the deploy, verify and live-gas scripts. |
+| `packages/cli` | `xorv`: the provider node, `xorv run` (a buyer), `xorv identity`, and the adapters and sandbox. |
+| `packages/mcp` | `@xorv/mcp`: an MCP server that lets an agent buy jobs, from a local key or a Privy server wallet. |
+| `packages/mm-plugin` | `@xorv/mm-plugin`: `mm xorv …` for MetaMask Agent Wallet. |
+| `services/broker` | Registry, matcher, x402 resource server, facilitator selection, XorvLedger writer, rating relay, AI roles, private-job vaults, SQLite/Mongo, metrics. |
+| `services/indexer` | Envio HyperIndex over XorvLedger and ERC-8004. It has its own lockfile, outside the workspace. |
+| `apps/app` | The job board: Privy wallet, pay, rate, private jobs, and the network and providers pages. |
+| `apps/landing` | The marketing site, with a live receipts feed. |
+
+---
+
+## Decisions worth explaining
+
+### The broker is never the payee
+
+The 402 names the **matched provider's own address** as `payTo`. The buyer signs an EIP-3009
+`TransferWithAuthorization` for exactly that amount to exactly that address, and the facilitator
+submits it. The USDC moves buyer → provider in one transfer, and the broker's key never touches it.
+That is why the `payTo` in the route config (`services/broker/src/app.ts`) is a resolver over the
+quote rather than a constant.
+
+The protocol fee is 0% (`XORV_FEE_BPS` is display-only). A non-zero fee would need a splitter
+contract as the payee, because EIP-3009 moves one amount to one address. It must never become "pay
+the broker and trust it to forward".
+
+### A quote is a price commitment
+
+x402 asks the server for payment requirements **twice**: once to answer 402, and once to check the
+payment that comes back. Both answers must name the same provider and the same amount. If the
+matcher ran twice, a buyer could be quoted one node and pay another.
+
+So `POST /api/quotes` freezes the provider, its checksummed payout address, its verified ERC-8004
+agent id, the price and the USDC amount (`jobs.createQuote`), and both resolvers read from the
+quote. A quote is single-use and expires in 5 minutes (`QUOTE_TTL_SECONDS`). The same 300 seconds
+become the x402 `maxTimeoutSeconds` and so the EIP-3009 `validBefore`: client, server and token
+contract all agree on one window.
+
+The quote response also carries `accepts[]`, exactly the row the 402 will contain. Every Xorv buyer
+checks the 402 against it before signing (`buyerX402Client` with `expect`, `quoteMatchPolicy` in
+`packages/protocol/src/x402-client.ts`). On EVM, whoever holds a signed authorization can spend it,
+so "the broker swapped the payee" has to be caught before signing, not after.
+
+A quote also carries a `paying` flag. Two signed payments for one quote (a double-click, or two
+tabs) cannot both settle: the second gets 409. The flag also keeps a quote resolvable if its TTL
+runs out between settlement landing and the job being created.
+
+A settlement can also outlast the in-process facilitator's 30-second wait for its receipt (a slow
+or rate-limited RPC). The broker then checks the transfer once more; if it is still unconfirmed, the
+402 says so (`code: "settlement_pending"`, with the transaction hash), the quote stays locked and
+out of the TTL prune, a second payment for it gets 409, and the sweep keeps checking. When the
+transfer lands, the job is created and dispatched under that quote; if it fails, or stays
+unconfirmed for 15 minutes, the quote is released. `GET /api/quotes/:id` reports `open`,
+`settling` or `paid`, with the job id once there is one.
+
+### Payment settles before the job runs
+
+The paid route uses x402's **upfront** payment flow (`extra: { paymentFlow: "upfront" }`, supported
+by `@x402/core` 2.27). The facilitator settles the authorization *before* the handler runs, so the
+handler only ever sees a payment that has already landed on Monad, and only then creates and
+dispatches the job.
+
+The default flow settles after the handler returns. The first port used it, and it was a real bug:
+the job was dispatched from the handler, so a provider could start working on a payment that then
+failed to settle (the buyer spent the USDC in between, or signed two quotes against one balance),
+and it would never be paid. Settling first also means a five-minute authorization can never lapse
+under a ten-minute job.
+
+The other risk, a provider that takes the money and fails, is covered by the network rather than by
+each transaction. A failed job is **reassigned to another provider at no extra charge**, up to three
+providers in total (`MAX_PROVIDERS_PER_JOB`). A reassignment is a fresh assignment with fresh
+timestamps, and it never returns to a provider that already had the job. The failure counts against
+the original provider's success rate, which is the matcher's second sort key after price.
+
+### A settlement is matched to its job by quote id
+
+The settle hook (`onAfterSettle`) takes the quote id from the paid URL. Under the upfront flow the
+job does not exist yet, so the payment record waits in a map keyed by quote id until the handler
+picks it up. The Hedera prototype matched a settlement to "the most recent unpaid job for this
+payTo", which could swap the records of two buyers who paid the same provider at the same moment.
+
+### Pay first means cancel is not a refund, unless the job is escrowed
+
+`POST /api/jobs/:id/cancel` stops the work and frees the provider's slot. On an `exact` payment it
+does not refund, because the money has already moved and the provider may already have used real
+quota. On an escrowed payment the money has not moved yet, so cancel refunds it in full
+(`XorvEscrow.cancel`, no fault on the provider), and the response carries the refund tx. Only the
+buyer who paid can cancel: the payment response carries a one-time `cancelToken`, and the broker
+stores only its hash. Job ids are listed publicly on `/api/jobs`, so knowing one proves nothing.
+
+### Provider nodes dial out
+
+The node opens a WebSocket **to** the broker, and the broker never calls in. Someone sharing a
+laptop is behind NAT, on hotel wifi, on a machine that sleeps. Outbound works from all of those with
+no port forwarding and no inbound attack surface. Results and events also have authenticated HTTP
+fallbacks (`POST /api/jobs/:id/result`, `/events`), because the work is already paid for and a
+dropped socket must not be the reason a buyer never gets an answer.
+
+The socket is also what makes a provider sellable. Quotes and reassignments only consider providers
+that hold an open control socket, and the paid route answers 409 before any payment when the quoted
+provider has lost it, so the buyer is never charged for a node that can't be reached. If the socket
+drops after payment, the paid dispatch counts as a failure against the quoted provider (which is
+then not credited the earnings) and the job is reassigned.
+
+### Liveness is not a database row
+
+The registry is in memory on purpose: a provider is only real while heartbeats keep arriving (every
+15 s, offline after 45 s, reaped after 10 minutes). `registry.get()` re-derives status on every call,
+because status is a function of the clock and the guard that decides whether a quoted provider is
+still alive enough to be paid reads it. A provider with at least three failures in the last 30
+minutes, and more failures than completions in that window, is left out of matching until they age
+out.
+
+Provider ids are derived from the node's stable id (`providerIdFor` in `@xorv/protocol`: `prv_` and
+a truncated SHA-256 of the node id), not minted per broker process. They are hashed into XorvLedger
+events (`providerId = keccak256(id)`) and written into ERC-8004 agent URIs, so a new id per restart
+would split one node into many on-chain. The node id itself never goes on-chain, because it is what
+a node registers with. Re-registering a node id whose session is still live needs that session's
+bearer token (409 `node_live` otherwise). The node id alone reclaims only a slot nobody holds (after
+a broker restart, or once the old session went offline), and always gets a freshly minted token.
+
+What does survive a restart goes to SQLite or MongoDB (jobs, payments, earnings, vaults) and to
+Monad (registrations, sampled heartbeats, receipts, ratings). The chain is the part nobody has to
+take on trust.
+
+---
+
+## XorvLedger: the public record
+
+`packages/contracts/contracts/XorvLedger.sol` replaces the prototype's three HCS topics. Its
+interface is fixed, because the protocol ABI and the indexer depend on it
+(`packages/contracts/abi/XorvLedger.json`, pinned by `test/abi.test.ts`).
+
+**Monad bills the gas limit, not the gas used.** That one fact shapes every write:
+
+- **Every transaction sets its limit to `eth_estimateGas` × 1.15** (`withGasHeadroom`,
+  `packages/protocol/src/evm.ts`). A padded constant overpays on every transaction, and a bare
+  estimate can run short if state moves between the estimate and inclusion. The estimate also works
+  as a free preflight for a write that would revert.
+- **Receipts are batched.** The broker queues receipts and sends one `recordJobs` call after
+  `XORV_RECEIPT_BATCH_MS` (4 s) or as soon as `XORV_RECEIPT_BATCH_MAX` (20) are waiting. The fixed
+  cost of a transaction (21k intrinsic gas, cold account accesses at 10,100 each on Monad, one
+  signature, one round trip) is paid once. Measured on live Monad testnet (2026-09-27): 106,056
+  gas for one receipt alone, 41,040 per receipt in a batch of 20. Within a batch, the contract
+  checks each (agent, payTo) pair against the Identity Registry only once.
+- **One storage slot per job.** A new slot costs about 27.9k gas on Monad, and log data is cheap. So
+  a job stores exactly what `rateJob` has to check, packed into one slot (`buyer`, `agentId`,
+  `rated`), and everything else is in the `JobRecorded` event. Registrations and heartbeats store
+  nothing and only emit events.
+- **Heartbeats are sampled.** One beat in twenty is published (`XORV_HEARTBEAT_PUBLISH_EVERY`).
+  Publishing every beat would be thousands of transactions a day per node: noise rather than
+  evidence, and every one pays for its full gas limit.
+
+**`recordJobs` is all-or-nothing, so a bad receipt must not sink good ones.** On a revert, the
+broker splits the batch in half and retries each half, down to single receipts
+(`services/broker/src/chain.ts`, `sendBatch`). Other failures, such as a dead RPC or no gas money,
+fail the batch as a whole, because splitting would only repeat the same error. If a single receipt
+reverts with `PayToNotAgentWallet` (the agent NFT moved or its wallet was re-pointed after the
+quote), it is recorded once more under `NO_AGENT`. The payment still happened; it just can no longer
+be attributed to that identity, and the job stops being offered for rating. A single receipt that
+reverts with `DuplicateJob` is checked against `jobs(jobId)`: when the recorded buyer matches, it
+already landed (an earlier batch the broker stopped waiting for) and counts as recorded. A batch
+that was broadcast but not confirmed is looked up before any of its receipts is sent again, so a
+pending transaction is waited for rather than paid for twice at the full gas limit.
+
+`recordJobs` also refuses (`SelfDealing`) a receipt whose buyer is its `payTo`. A provider paying
+itself buys nothing (the USDC comes straight back), so the broker refuses that payment before it
+settles (403 `self_payment`) and the ledger refuses the receipt whoever writes it.
+
+**A receipt is written only when there is something to attest to**: the job is terminal *and* its
+payment is recorded. A fast job often finishes before its settlement is attached, and a receipt
+without a settlement transaction proves nothing. Receipts are queued from a job-store subscription,
+so every path that finishes a job (result, failure, timeout, cancel) triggers one without having to
+remember to. A failed write is retried by the 15-second sweep up to three times, and a buyer asking
+to rate earns the receipt one more attempt. Each receipt binds
+the settlement tx to `requestHash = keccak256(prompt)`, `resultHash = keccak256(result)`, the
+duration, the outcome, the buyer, the payee and the agent. The payload stays off-chain, and the
+record stays checkable.
+
+**Audit writes never block the request path.** Registration waits at most 2.5 s for its ledger write
+and then answers without it. An unchanged re-registration (a reconnect) writes nothing. A failed
+write lands in `lastPublishError` on `/api/network`. The one exception is the rating relay: the
+buyer is waiting to hear whether it landed, so it reports failure.
+
+### ERC-8004 identity binding: `payTo == agentWallet`
+
+A provider may claim an ERC-8004 agent id when it registers (`xorv identity register` creates one
+from the payout key: `register(agentURI)` makes the caller both owner and agent wallet in one
+transaction). The claim is worth recording only if the agent's wallet **is** the payout address.
+The broker checks `getAgentWallet(agentId)` with a 4-second timeout. If the lookup fails or the
+wallet differs, the node registers without an identity and is told why; it still earns.
+`XorvLedger` enforces the same rule on-chain for every receipt and registration
+(`PayToNotAgentWallet`), so "this agent was paid for this job" is a contract invariant, not a claim
+made by the broker.
+
+A reassigned job's receipt is recorded **without an agent**. The ledger requires the agent's wallet
+to be the address that was paid, and the address that was paid (the quoted provider) did not do the
+work. Crediting either identity with the outcome would misattribute it.
+
+The broker serves the agent's registration file at `GET /agents/<providerId>.json` (`x402Support:
+true`, `supportedTrust: ["reputation"]`, the jobs endpoint and the web app). `xorv identity register`
+builds that URI locally from the provider id, so the node id never reaches the Identity Registry,
+and `xorv identity show` warns when an older URI still publishes one. The URI stays stable, so it
+never needs a follow-up `setAgentURI` write.
+
+### Ratings: EIP-712, gasless, one per job
+
+```
+GET  /api/jobs/:id/rating?value=87 → EIP-712 typed data + the feedback file's hash
+     (409 instead when the job was paid by its own provider, has no agent to rate, or the
+      agent made the ledger its operator: code ledger_authorized)
+buyer signs it (Privy embedded wallet, MetaMask, a CLI or MCP key); no gas
+POST /api/jobs/:id/rate {value, deadline, signature}
+     → broker verifies the signer is the job's payer (ECDSA, then ERC-1271/6492 over RPC)
+     → waits up to 15 s for the job's receipt to land (the ledger rates only recorded jobs),
+       then re-checks the job against the landed receipt and re-reads the agent's operators
+     → Nansen: are buyer and provider one party? yes → 403 related_wallets, nothing relayed
+       (today's budget spent → 503 trust_budget_spent, retry after 00:00 UTC)
+     → XorvLedger.rateJob(rating, sig) → ReputationRegistry.giveFeedback(agentId, value, 0, "starred", …)
+```
+
+- **The domain is `{name: "XorvLedger", version: "1", chainId, verifyingContract: ledger}`.** The
+  signature check happens in the broker *and* in the contract, in the same order: ECDSA against the
+  buyer first, then ERC-1271. EOAs, EIP-7702 accounts (which have code, but whose key still signs)
+  and smart accounts all work. The broker checks first so it never spends gas relaying a rating the
+  contract would refuse.
+- **One rating per job** is enforced on-chain (`AlreadyRated`). An in-flight set in the broker stops
+  a double-submit from burning a second transaction.
+- **Buyers never sign what they are handed verbatim.** The app, the MCP server and the MetaMask
+  plugin each rebuild the typed data locally with `ratingTypedData` and compare the job, the value,
+  the deadline and the ledger before signing.
+- **The feedback file is reproducible.** Its keccak256 is inside the signed message and ends up
+  on-chain, and it is served later from `/feedback/<jobId>.json`. So it is built only from facts that
+  are frozen once the job is terminal, plus the value and deadline that travel with the signature.
+  Its `createdAt` is derived from the deadline for the same reason.
+- **Every rating reaches ERC-8004 with `clientAddress == XorvLedger`.** Filtering a summary by that
+  client gives a provider score made only of paid jobs, each rated by the wallet that paid.
+- **The payer must not be the provider.** The Reputation Registry's own self-feedback rule only
+  ever sees the ledger as the client, so the ledger applies it to the real rater: `rateJob` reverts
+  `SelfDealing` when the buyer is the agent's current wallet, owner or an approved operator (read
+  from the Identity Registry at rating time), on the direct and the relayed path alike. The broker
+  refuses self-payment before it settles and never offers such a job for rating.
+- **The payer should not be the provider's second wallet either.** A contract cannot see that two
+  wallets belong to one party. Before relaying, the broker asks Nansen whether they are linked and
+  refuses the rating if they are (next section but one). `rateJob` stays open to the buyer directly
+  and to any relayer, so that check binds what the broker relays, not what reaches the chain.
+
+The ledger must never own or operate a provider's agent NFT, and neither may the verifier EOA:
+ERC-8004 rejects feedback from an agent's owner and operators, so an agent that approves either
+would block its buyer ratings or its Kimi scores. The broker reads `isAuthorizedOrOwner` before it
+offers or relays a rating (409 `ledger_authorized`, with the reason) and before it writes verifier
+feedback (which then stays off-chain, with the reason in `verification.feedbackError`). A failed
+lookup never blocks: the chain still has the last word.
+
+---
+
+## AI roles, and how each one fails
+
+Three sponsor models sit in the core loop (`services/broker/src/ai/`,
+[services/broker/README.md](services/broker/README.md)). They share one client (`ai/client.ts`) with
+a hard per-role deadline raced against the request, strict validation of the JSON the model
+returns, per-role counters, and key hygiene: a key goes only to its preset's base URL and is
+scrubbed from any error text.
+
+| Role | Runs | Deadline | When it fails |
+|---|---|---|---|
+| **Screener**, Hunyuan hy4 | every quote, before any provider sees the prompt | 8 s (`XORV_SCREENER_TIMEOUT_MS`; `XORV_SCREENER_REASONING` sets TokenHub's reasoning effort, default low) | `XORV_SCREENER_FAIL=open` (default): quote anyway, recorded as "not screened: …". `closed`: 503 until the screen is back. A **block** is a 422 and no quote exists. |
+| **Router**, Qwen 3.8 Max | quotes with no adapter (or "auto") when more than one live option fits under the ceiling | 15 s for the whole tool loop (`XORV_ROUTER_TIMEOUT_MS`), 3 s per tool | Timeout, HTTP error, turn/read cap without a pick, or a pick that is not a live candidate under the ceiling (after one retry) → the deterministic matcher, recorded as `routing.fallback` with a templated reason. |
+| **Verifier**, Kimi K3 | every completed, non-private job | 20 s | Never blocks: it runs after the buyer has the result. No score means no feedback. A failed `giveFeedback` is stored as `verification.feedbackError`. |
+
+Why they are shaped this way:
+
+- **What was screened is what runs.** The quote freezes the screened request, and the paid route
+  runs only the quoted request, so a prompt cannot be swapped after screening.
+- **The router is an agent that reads Monad, and its pick is checked.** Qwen 3.8 Max runs at most 4
+  turns and 6 reads (`services/broker/src/ai/router.ts`): `list_candidates`, `erc8004_reputation`
+  (ERC-8004 Reputation `getSummary` for the XorvLedger client and the verifier client, plus the
+  Identity registry's agent wallet), `recent_receipts` (XorvLedger events, indexer first), 
+  `indexer_provider_stats` (Envio aggregates) and `nansen_trust` (public view), then
+  `select_provider`. Tool results are small JSON built by the broker (`router-tools.ts`,
+  `router-data.ts`), each with its own timeout and cache. The pick must be a live candidate under
+  the buyer's ceiling, so the model can choose among eligible providers but never outside them or
+  above the price. Thinking stays on with a small budget because Model Studio supports non-streaming
+  thinking for the commercial `qwen3.8-max`; `tool_choice` stays `auto` because `required` is refused
+  while thinking.
+- **The trace is the broker's words, not the model's.** `routing.steps` records each call with
+  validated ids, a templated summary and explorer links, and the app renders it as an agent trace.
+  A made-up id is recorded as "(not a candidate)". For a private job the model's reason is
+  withheld, while the steps (public provider data) stay.
+- **Envio ranks providers even without the router.** When no router runs, the matcher breaks price
+  ties on reputation from the indexer (buyer ratings and Kimi scores, shrunk toward a neutral 50
+  worth three ratings), refreshed in the background at most once a minute
+  (`services/broker/src/ai/reputation-book.ts`), and from the broker's own jobs without an indexer.
+- **The verifier's score is a separate signal.** It is written from the verifier EOA under tag
+  `xorv-verified`, never mixed with buyer `starred` ratings. The feedback file at
+  `/verifications/<jobId>.json` hashes to the committed `feedbackHash`, and its hash is stored on the
+  job before the transaction is sent. Private jobs are skipped, because the broker holds only
+  ciphertext.
+- **A missing key turns a role off, never the broker.** `GET /api/network` reports each role's
+  state (`ai`, `aiRoles`) and why a role is off.
+
+## Nansen wallet trust, and how it fails
+
+The broker buys wallet intelligence from Nansen per call, over x402 on Monad **mainnet**
+(`services/broker/src/trust/`, [docs/NANSEN.md](docs/NANSEN.md)). It is the one place the broker is
+itself a paying x402 client, and it is built like the buyers are: a client registered for exactly
+one network (`eip155:143`, mainnet USDC hard-coded rather than read from `networkConfig`, which an
+`XORV_STABLECOIN` override would change), spend controls, a price table checked before signing, and a
+daily budget whose reservations are released when a payment fails.
+
+| Use | When | When it fails |
+|---|---|---|
+| **Provider trust signal** (0–100) | when the node opens its control socket, in the background (not at registration, which is free and unauthenticated); the sweep refreshes connected providers every 6 h (10 min when degraded) | nothing waits for it; a failed call leaves the score where it was; all calls failed = exactly 50, "no opinion" to the matcher |
+| **Wash-rating guard** | `POST /api/jobs/:id/rate`, after the payer's signature verifies and the receipt has landed, bounded to 12 s | a failed or slow lookup is recorded as `degraded` and the rating is relayed: only a proven link refuses. A lookup that can't run because the daily budget is spent defers the rating (503 `trust_budget_spent`) rather than relaying it unchecked |
+| **Matching tie-breaker** | every quote | an unknown wallet ranks as neutral; the nudge is at most ±0.1 on the 0–1 reliability scale, after price |
+
+Provider signals stop short of the last 30% of the daily budget (`GUARD_RESERVE_BPS`), which only the
+guard's lookups may spend. Registrations that never connect cost nothing, so nobody can drain the
+budget and switch the guard off with throwaway providers.
+
+Why it is shaped this way:
+
+- **Missing data is not evidence.** Most provider wallets exist only on Monad testnet, where Nansen
+  has nothing, and a wallet funded straight from an exchange has no first funder. Zero activity is
+  not penalised, and the badge says "No wallet history" rather than a low number.
+- **A shared funder is only a link when the funder is not a service.** Exchange hot wallets, bridge
+  relayers and faucets fund thousands of strangers, so two wallets sharing one are not related.
+- **Nansen charges before it validates**, so every request is validated locally and an invalid one
+  is never sent.
+- **What Nansen does not allow to be redistributed stays in the broker.** Smart-money membership only
+  nudges matching; related-wallet addresses are used for the check and never published. The public
+  view is built in one function (`publicTrustView`).
+
+## Private jobs
+
+A private job's answer is sealed on the provider's machine to an X25519 key derived from the buyer's
+passkey (through Mera's PRF evaluation), stored by the broker as an envelope it cannot open, and
+committed on-chain as the envelope's hash. The design, the three key namespaces, the vault and the
+threat model are in [docs/PRIVATE_JOBS.md](docs/PRIVATE_JOBS.md). Architecturally, it changes four
+things:
+
+- `encryptTo` is validated at quote time, before anyone is reserved or paid.
+- A plaintext result for a private job is discarded unstored and the job fails over, the same way as
+  any other provider failure.
+- Public views redact the prompt and title, and the event stream carries only status lines. The
+  router's and screener's free-text reasons (which paraphrase the prompt) read "withheld for a
+  private job"; the buyer's own quote response still carries them.
+- The verifier is skipped.
+
+---
+
+## XorvEscrow: money that waits for the work
+
+`contracts/` (Foundry) holds three contracts that were not in the first line of this repo:
+`XorvEscrow`, `XorvRefundKeeper` and `CleanverseGate`. The escrow is opt-in: the broker offers it
+only with `XORV_ESCROW_ADDRESS` and a self-hosted facilitator, whose key is the escrow's
+**attester**.
+
+- **Funding is the payment.** The x402 `escrow` scheme (`packages/protocol/src/escrow.ts`) is EIP-3009
+  `ReceiveWithAuthorization` to the escrow. Only the escrow can redeem it, so a leaked authorization
+  can't be front-run into a plain transfer. The nonce is a hash of the chain, the escrow, the job id
+  and the deadline. The contract derives it the same way, so one authorization funds exactly one job
+  with one deadline. The 402's `payTo` is the escrow, and
+  `extra.provider` names the payee. Buyers accept the row only when both match the frozen quote.
+- **Release carries the result.** `release(jobId, resultHash)` pays the provider and puts
+  `keccak256(result)` on-chain. The XorvLedger receipt is written **after** the release, with the
+  release as its `paymentTx`, so ERC-8004 crediting (`payTo == agentWallet`) still applies to the
+  provider who was paid.
+- **Reassignment is on-chain.** A failed job's escrow is re-pointed to the new provider before the
+  new provider is paid. The escrow never pays an address that isn't its current provider.
+- **Refunds need nobody's permission after the deadline.** `refund` is open to anyone once
+  `deadline` has passed. The Chainlink CRE workflow (`cre/refund-keeper`) is the "anyone" when the
+  broker is gone: Envio finds the expired funded jobs, the workflow checks `isRefundable` on Monad,
+  and `XorvRefundKeeper` refunds them from one DON-signed report.
+- **Identity gates the value, never the refund.** With `CleanverseGate` set, `fund` requires a valid
+  Cleanverse A-Pass on buyer and provider, and `release`/`reassign` on the payee. A frozen,
+  revoked or expired credential stops the money, but a buyer can always be refunded. The broker
+  mirrors the gate off-chain (`services/broker/src/identity.ts`): the facilitator refuses before
+  signing, and unverified providers are never quoted.
+- **Settlement is retried.** If a release or refund fails, the broker reads the job's state back
+  from the chain, records who settled it (`settledBy`) and retries in its sweep. The 100-block log
+  limit is respected (99-block windows).
+
+## Reading the record back: indexer first, RPC second
+
+The public Monad RPC caps `eth_getLogs` at **100 blocks** (about 30 seconds at 300 ms blocks).
+Answering "the last 50 receipts" or "the best provider" by walking logs is slow and burns the RPC's
+rate limit. So reads have two sources (`services/broker/src/ledger-reader.ts`):
+
+1. **The Envio indexer** (`XORV_INDEXER_URL`), which has the whole history and the derived
+   aggregates and answers in one GraphQL request. It serves receipts, ratings, registrations and the
+   leaderboard.
+2. **A bounded backward RPC scan** (`readLedgerEvents` in `packages/protocol/src/ledger.ts`). It
+   works in ≤100-block windows from the latest block, 20,000 blocks by default (about 100 minutes),
+   and never before `XORV_LEDGER_FROM_BLOCK`. It needs nothing but the contract address. Heartbeats
+   are always read this way.
+
+The indexer is an accelerator, never a dependency. If it is unset, slow or erroring, the broker
+falls back and says so in the response (`source: "indexer" | "rpc" | "memory"`, plus
+`indexerError`). The leaderboard falls back to in-memory stats. Results are cached for 5 seconds,
+because the landing page and the network page poll, and without a cache every visitor would cost the
+RPC hundreds of `eth_getLogs` calls per refresh.
+
+The indexer itself uses HyperSync, so it never touches the 100-block cap. It classifies each
+ERC-8004 feedback entry once, by the client address that wrote it: `BUYER_RATING` from the ledger,
+`XORV_VERIFIED` from the ledger's active broker or listed verifier addresses, and `OTHER` for
+everything else. Anyone can call `giveFeedback`, so the writer decides what an entry is worth. See
+[services/indexer/README.md](services/indexer/README.md).
+
+## Nonces: one queue per signer
+
+The broker can have three EOAs: the facilitator (settlement gas), the operator (ledger writes and
+rating relays) and the verifier (Kimi feedback). By default they are all the same key, and several
+of them can fire in the same millisecond, which is how two transactions end up racing for one
+nonce. Every broadcast therefore goes through `withSignerLock` (`packages/protocol/src/evm.ts`), a
+per-address queue shared across the process, and every account carries viem's `nonceManager`. A
+settlement and a receipt batch from the same key get consecutive nonces instead of one failing.
+
+A separate `XORV_FACILITATOR_KEY` is still recommended, so a buyer's settlement never queues behind
+a receipt batch. Each EOA must also stay above Monad's ~10 MON per-account reserve for in-flight gas.
+`pnpm setup:monad` checks the balances.
+
+## Addresses and ids
+
+- Addresses are normalized with viem's `getAddress` at every boundary (registration, settle hook,
+  receipts, the agent-wallet check) and compared case-insensitively (`sameAddress`). The indexer
+  stores lowercase.
+- On-chain ids are hashes of the broker's ids: `jobId = keccak256(utf8(brokerJobId))`,
+  `providerId = keccak256(utf8(brokerProviderId))`. The broker keeps a map back, so ledger feeds link
+  to job pages.
+- `capabilities` on-chain is the compact string `"claude-code:10000,qwen:5000"` (adapter:price in
+  micro-USD). The indexer parses it into `ProviderCapability` rows.
+
+---
+
+## Data flow, precisely
+
+**Registration.** Node → `POST /api/providers/register {address, agentId?, capabilities}` (plus
+the bearer token it holds, when it has one) → the address is checksummed, every price must be a
+whole number of micro-USD, and a claimed agent is verified → registry keyed on the stable node id
+(a live session is only taken over with its token: 409 `node_live` otherwise) → a bearer token comes
+back (a fresh one unless the caller presented the current one) → `registerProvider` on XorvLedger in
+the background. The node opens `wss://…/ws/provider?token=…`, and only then does the broker buy its
+payout wallet's Nansen signal. Every frame the node sends is validated before it is handled (8 MiB
+cap).
+
+**Heartbeat.** Every 15 s, `POST /api/providers/:id/heartbeat` with the node's bearer token, carrying
+load and per-capability availability. One in twenty is published as `ProviderHeartbeat`.
+
+**Quote.** Screen → candidates (live providers holding a control socket × capabilities, filtered on
+adapter, price ceiling, per-capability availability and free concurrency, minus providers failing
+more than they complete; sorted by price, then success rate, then load, with the Nansen trust nudge
+inside the success-rate key) → route when the buyer left the adapter open → freeze. Expired quotes
+are pruned by the sweep, and at 10,000 open quotes the broker answers 503.
+
+**Payment.** `@x402/hono` middleware on `POST /api/jobs/:quoteId`, behind a guard that turns an
+expired quote into a clean 404, a paid, settling or offline one (or one whose provider has no
+control socket) into a 409, and a payment from the quoted provider's own `payTo` into a 403
+`self_payment`, all before anything settles. An `onBeforeSettle` hook refuses self-payment again as
+a backstop. The facilitator is in-process
+(`XORV_FACILITATOR=self`, a viem EOA), Monad's hosted one (`hosted`, `https://x402-facilitator.molandak.org`)
+or any URL. With nothing configured, the broker uses self-hosted when a key exists and hosted
+otherwise, and says so at boot. An explicit `self` without a key is never silently downgraded: the
+paid route answers 503 with the fix.
+
+**Dispatch.** `job.dispatch` down the socket. The node runs the adapter in a fresh directory under
+the Xorv home, inside the sandbox, streams `job.event` and returns `job.result`, sealed first if the
+job is private.
+
+**Completion.** The success counts for the provider that did the work. The earnings are credited to
+the provider that was **paid** (the quoted one), because that is where the USDC went, even when a
+reassignment means someone else finished the job. The verifier runs, and the receipt is queued.
+
+---
+
+## Testing
+
+The root `pnpm test` runs every workspace suite: **1,234 tests**, counted on 2026-10-07 by running
+each suite once, one after another, on macOS. On Windows, 14 POSIX-only CLI cases are skipped.
+None of them needs a key, an RPC or testnet funds.
+
+| Suite | Files | Tests | What it leans on |
+|---|---:|---:|---|
+| `packages/protocol` | 14 | 267 | viem over a fake JSON-RPC, a real x402 facilitator over a stub transport, known-answer crypto vectors |
+| `packages/contracts` | 5 | 59 | Hardhat's in-process chain (EDR), the vendored ERC-8004 registries, `node:test` |
+| `packages/cli` | 18 | 267 (+14 skipped on Windows) | fake agent binaries, a fake RPC, scripted model endpoints |
+| `packages/mcp` | 8 | 83 | the real server over stdio, a mock broker that verifies signatures, a fake Privy client |
+| `packages/mm-plugin` | 9 | 74 | the real `PluginCommand` base, a fake executor that signs the way MetaMask's JSON-RPC signer does |
+| `services/broker` | 14 | 353 | the real Hono app, x402 resource server and WebSocket hub, with the chain stubbed |
+| `apps/app` | 14 | 116 | real Mera against a fake synced authenticator, a mocked broker `fetch` |
+| `apps/landing` | 2 | 15 | hand-built broker payloads, including malformed ones |
+| **Total** | **84** | **1,234** | |
+
+Outside the workspace: Foundry (`contracts/`, 76 tests, plus opt-in fork tests against Monad
+testnet), the Envio indexer (66), the CRE workflow (4), and the two end-to-end runs on a Monad
+testnet fork (`pnpm e2e`, `pnpm e2e:escrow`).
+
+What makes that possible:
+
+- **The chain is behind interfaces.** The broker takes a `ChainLike` and an injectable
+  `FacilitatorClient`, so the integration suite (`services/broker/test/integration.test.ts`) boots a
+  real HTTP server, the real Hono app, the real x402 resource server with `ExactEvmScheme` and the
+  real WebSocket hub. A real viem account signs a real EIP-3009 authorization, and only the
+  facilitator's broadcast and the ledger writer are stubbed. It covers upfront settlement,
+  settlement-to-job matching for simultaneous buyers, replay refusal, reassignment and timeouts,
+  cancel tokens, SSE, receipts and their retries, ratings, the no-key boot and the AI roles.
+  `services/broker/test/private-jobs.test.ts` does the same for private jobs.
+- **Contracts run against the real registry code.** `packages/contracts` deploys the vendored
+  ERC-8004 v2.0.0 registries behind ERC1967 proxies the way upstream's own tests do, so behaviour
+  like "`giveFeedback` rejects the agent's owner" is the real code, not a mock's approximation. Gas
+  tests report every call the broker pays for, and `pnpm --filter @xorv/contracts gas:monad`
+  re-measures them on live Monad with state overrides.
+- **Viem runs over stub transports.** Protocol and CLI tests drive viem through a fake JSON-RPC
+  (`test/support/fake-rpc.ts`), so the gas headroom, the signer lock and the calldata are asserted
+  on real encodings.
+- **Sponsor models are scripted `fetch`es.** This includes one that ignores its abort signal, to
+  prove the deadline holds.
+- **Signers are checked the way the real counterparties check them.** The MCP mock broker verifies
+  payment and rating signatures, the MetaMask fake executor hashes `EIP712Domain` literally the way
+  MetaMask's JSON-RPC signer does, and the plugin manifest is validated with MetaMask's own schema.
+- **Passkeys are simulated faithfully.** The app's private-job tests run real Mera against a fake
+  authenticator that computes PRF the way WebAuthn does and syncs between two "devices".
+
+The Envio indexer's 52 tests (`services/indexer/test`) drive the real handlers through Envio's
+`createTestIndexer` with simulated events. They run in Linux or WSL, or in a throwaway container from
+Windows, because Envio ships no Windows binary.
+
+**End to end, on a fork of Monad testnet.** `pnpm e2e` ([e2e/README.md](e2e/README.md)) removes the
+stubs at the chain boundary. It forks Monad testnet with Hardhat 3's EDR, so Circle's real USDC
+(FiatToken v2.2, EIP-3009) and the canonical ERC-8004 v2.0.0 registries are the contracts in play,
+mints the buyer's USDC through the token's own masterMinter, deploys XorvLedger with its deploy
+script, and runs the built broker (self-hosted facilitator, ledger writer, rating relay), a real
+`xorv` provider node that registers its identity with `xorv identity register`, `xorv run --json`,
+the MCP server over stdio and a private job. Only the three models are stand-ins: a local
+OpenAI-compatible server behind each preset's base URL, so the roles' real request, parsing and
+feedback code runs. Every claim is then read back off the fork: 189 checks, last green run in
+[e2e/last-run.md](e2e/last-run.md). It found three bugs the unit suites could not: Hardhat dropped
+the fork's hardfork history (a chain-type mismatch); `xorv start` off a terminal printed its status
+footer once a second instead of its jobs; and a provider's earnings ledger carried no settlement
+transaction, and credited a node for a reassigned job it was never paid for.
+
+What the tests do not prove: that the public Monad RPC under load, the hosted facilitator, Privy,
+MetaMask or the three model APIs behave on the day as their documentation and our stubs say. That is
+what the testnet deployment and the demo are for (see [SUBMISSION.md](SUBMISSION.md#before-you-submit)).

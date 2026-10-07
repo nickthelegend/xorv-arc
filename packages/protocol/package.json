@@ -1,0 +1,60 @@
+{
+  "name": "@xorv/protocol",
+  "version": "0.2.0",
+  "description": "Shared Xorv protocol: domain types, money math, Monad chain config, XorvLedger + ERC-8004 helpers, x402 (EVM exact) wiring and OpenAI-compatible LLM presets.",
+  "license": "MIT",
+  "homepage": "https://github.com/nickthelegend/xorv-monad#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nickthelegend/xorv-monad.git",
+    "directory": "packages/protocol"
+  },
+  "bugs": "https://github.com/nickthelegend/xorv-monad/issues",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "default": "./dist/web.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "web": [
+        "./dist/web.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.2.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.3.0",
+    "@x402/core": "~2.27.0",
+    "@x402/evm": "~2.27.0",
+    "viem": "^2.56.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "typescript": "~5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

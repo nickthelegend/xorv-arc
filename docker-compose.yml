@@ -1,0 +1,93 @@
+# Xorv broker on Monad.
+#
+#   docker compose up --build           broker only (SQLite in the xorv-data volume)
+#   docker compose --profile mongo up   plus MongoDB; set XORV_MONGO_URI=mongodb://mongo:27017
+#
+# Compose reads the root .env for the ${…} values below, so `cp .env.example
+# .env` and fill in what you have. No variable is required: with none set the
+# broker boots on Monad testnet, settles payments through the hosted
+# facilitator and runs the ledger read-only. .env.example says what each key
+# adds. Only the variables listed here reach the container.
+services:
+  broker:
+    build: .
+    ports:
+      - "8402:8402"
+    environment:
+      XORV_NETWORK: ${XORV_NETWORK:-eip155:10143}
+      XORV_RPC_URL: ${XORV_RPC_URL:-}
+      XORV_EXPLORER_URL: ${XORV_EXPLORER_URL:-}
+      # Broker EOA (ledger writes, rating relays) and the facilitator EOA
+      # (settlement gas; defaults to the operator). Both need MON, above
+      # Monad's ~10 MON per-account reserve.
+      XORV_OPERATOR_KEY: ${XORV_OPERATOR_KEY:-}
+      XORV_FACILITATOR_KEY: ${XORV_FACILITATOR_KEY:-}
+      XORV_FACILITATOR: ${XORV_FACILITATOR:-}
+      XORV_LEDGER_ADDRESS: ${XORV_LEDGER_ADDRESS:-}
+      XORV_LEDGER_FROM_BLOCK: ${XORV_LEDGER_FROM_BLOCK:-}
+      XORV_HEARTBEAT_PUBLISH_EVERY: ${XORV_HEARTBEAT_PUBLISH_EVERY:-20}
+      XORV_RECEIPT_BATCH_MS: ${XORV_RECEIPT_BATCH_MS:-4000}
+      XORV_RECEIPT_BATCH_MAX: ${XORV_RECEIPT_BATCH_MAX:-20}
+      # Must be the URL clients actually reach this broker on — not the
+      # in-container one. It is baked into on-chain agent and feedback URIs.
+      XORV_PUBLIC_URL: ${XORV_PUBLIC_URL:-http://localhost:8402}
+      XORV_BROKER_URL: ${XORV_BROKER_URL:-http://localhost:8402}
+      XORV_APP_URL: ${XORV_APP_URL:-}
+      XORV_INDEXER_URL: ${XORV_INDEXER_URL:-}
+      XORV_CORS_ORIGINS: ${XORV_CORS_ORIGINS:-http://localhost:3000,http://localhost:3002}
+      XORV_FEE_BPS: ${XORV_FEE_BPS:-0}
+      # Behind a reverse proxy, set this so rate limiting sees real client IPs.
+      XORV_TRUST_PROXY: ${XORV_TRUST_PROXY:-0}
+      XORV_TRUSTED_HOPS: ${XORV_TRUSTED_HOPS:-1}
+      XORV_STABLECOIN: ${XORV_STABLECOIN:-}
+      XORV_STABLECOIN_NAME: ${XORV_STABLECOIN_NAME:-}
+      XORV_STABLECOIN_VERSION: ${XORV_STABLECOIN_VERSION:-}
+      XORV_MONGO_URI: ${XORV_MONGO_URI:-}
+      XORV_MONGO_DB: ${XORV_MONGO_DB:-xorv_monad}
+      # AI roles — each on when its key is set (auto); see .env.example.
+      XORV_ROUTER: ${XORV_ROUTER:-auto}
+      XORV_SCREENER: ${XORV_SCREENER:-auto}
+      XORV_VERIFIER: ${XORV_VERIFIER:-auto}
+      XORV_SCREENER_FAIL: ${XORV_SCREENER_FAIL:-open}
+      # Signs the verifier's ERC-8004 feedback; defaults to the operator key.
+      XORV_VERIFIER_KEY: ${XORV_VERIFIER_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      TOKENHUB_API_KEY: ${TOKENHUB_API_KEY:-}
+      # Per-preset overrides (the key ones win over the vendor keys above).
+      XORV_QWEN_API_KEY: ${XORV_QWEN_API_KEY:-}
+      XORV_QWEN_BASE_URL: ${XORV_QWEN_BASE_URL:-}
+      XORV_QWEN_MODEL: ${XORV_QWEN_MODEL:-}
+      XORV_KIMI_API_KEY: ${XORV_KIMI_API_KEY:-}
+      XORV_KIMI_BASE_URL: ${XORV_KIMI_BASE_URL:-}
+      XORV_KIMI_MODEL: ${XORV_KIMI_MODEL:-}
+      XORV_HUNYUAN_API_KEY: ${XORV_HUNYUAN_API_KEY:-}
+      XORV_HUNYUAN_BASE_URL: ${XORV_HUNYUAN_BASE_URL:-}
+      XORV_HUNYUAN_MODEL: ${XORV_HUNYUAN_MODEL:-}
+      # Nansen wallet trust — off unless asked for; see .env.example and docs/NANSEN.md.
+      XORV_NANSEN_MODE: ${XORV_NANSEN_MODE:-off}
+      XORV_NANSEN_PAYER_KEY: ${XORV_NANSEN_PAYER_KEY:-}
+      NANSEN_API_KEY: ${NANSEN_API_KEY:-}
+      XORV_NANSEN_PER_CALL_CAP: ${XORV_NANSEN_PER_CALL_CAP:-50000}
+      XORV_NANSEN_DAILY_CAP: ${XORV_NANSEN_DAILY_CAP:-1000000}
+      XORV_NANSEN_PIN_PAYTO: ${XORV_NANSEN_PIN_PAYTO:-}
+      XORV_NANSEN_SMART_MONEY: ${XORV_NANSEN_SMART_MONEY:-on}
+      XORV_NANSEN_RATING_GUARD: ${XORV_NANSEN_RATING_GUARD:-on}
+      XORV_NANSEN_REFRESH_MINUTES: ${XORV_NANSEN_REFRESH_MINUTES:-360}
+      # XORV_DB and XORV_BROKER_PORT are fixed by the image (/data, 8402).
+    volumes:
+      # Jobs, lifetime earnings and private-job vaults. Without this they go
+      # with the container.
+      - xorv-data:/data
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    profiles: ["mongo"]
+    volumes:
+      - xorv-mongo:/data/db
+    restart: unless-stopped
+
+volumes:
+  xorv-data:
+  xorv-mongo:

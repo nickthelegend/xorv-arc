@@ -1,0 +1,259 @@
+/**
+ * Guards, tested through a real Hono app rather than by calling the middleware
+ * directly — the thing worth checking is that a request actually gets refused,
+ * not that a function returns an object.
+ */
+
+import { describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { bodyLimit, clientIp, rateLimit, requestLog } from "../src/guards.js";
+import { Metrics } from "../src/metrics.js";
+import { Registry } from "../src/registry.js";
+import { JobStore } from "../src/jobs.js";
+import type { ChainLike } from "../src/chain.js";
+
+function appWith(...middleware: Parameters<Hono["use"]>[1][]) {
+  const app = new Hono();
+  for (const m of middleware) app.use("*", m);
+  app.get("/", (c) => c.json({ ok: true }));
+  app.post("/", (c) => c.json({ ok: true }));
+  return app;
+}
+
+describe("rateLimit", () => {
+  it("allows up to the limit and refuses the next one with 429", async () => {
+    const app = appWith(rateLimit({ limit: 3, windowMs: 60_000, keyOf: () => "same" }));
+    for (let i = 0; i < 3; i += 1) {
+      expect((await app.request("/")).status).toBe(200);
+    }
+    const blocked = await app.request("/");
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ error: expect.stringContaining("rate limit") });
+  });
+
+  it("advertises the limit, what's left, and when it resets", async () => {
+    const app = appWith(rateLimit({ limit: 5, windowMs: 60_000, keyOf: () => "k" }));
+    const res = await app.request("/");
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("5");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("4");
+    expect(Number(res.headers.get("X-RateLimit-Reset"))).toBeGreaterThan(0);
+  });
+
+  it("sends Retry-After when it refuses", async () => {
+    const app = appWith(rateLimit({ limit: 1, windowMs: 60_000, keyOf: () => "k" }));
+    await app.request("/");
+    const blocked = await app.request("/");
+    expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
+  });
+
+  it("buckets callers separately, so one abuser doesn't block everyone", async () => {
+    let caller = "a";
+    const app = appWith(rateLimit({ limit: 1, windowMs: 60_000, keyOf: () => caller }));
+    expect((await app.request("/")).status).toBe(200);
+    expect((await app.request("/")).status).toBe(429);
+    caller = "b";
+    expect((await app.request("/")).status).toBe(200);
+  });
+
+  it("lets a caller back in once the window rolls over", async () => {
+    vi.useFakeTimers();
+    const app = appWith(rateLimit({ limit: 1, windowMs: 1_000, keyOf: () => "k" }));
+    expect((await app.request("/")).status).toBe(200);
+    expect((await app.request("/")).status).toBe(429);
+    vi.advanceTimersByTime(1_100);
+    expect((await app.request("/")).status).toBe(200);
+    vi.useRealTimers();
+  });
+});
+
+describe("clientIp", () => {
+  it("ignores proxy headers unless explicitly told to trust them", () => {
+    delete process.env.XORV_TRUST_PROXY;
+    const c = {
+      req: { header: (n: string) => (n === "x-forwarded-for" ? "1.2.3.4" : undefined) },
+      env: undefined,
+    } as never;
+    // Trusting this by default would make the limiter useless — anyone can set
+    // the header themselves.
+    expect(clientIp(c)).toBe("unknown");
+  });
+
+  const forwardedFor = (value: string) =>
+    ({ req: { header: (n: string) => (n === "x-forwarded-for" ? value : undefined) }, env: undefined }) as never;
+
+  it("uses the address its proxy appended to X-Forwarded-For when the operator opts in", () => {
+    process.env.XORV_TRUST_PROXY = "1";
+    // "1.2.3.4" is what the client sent; the proxy appended the real address.
+    // Keying on the leftmost entry let a random header buy a fresh bucket.
+    expect(clientIp(forwardedFor("1.2.3.4, 5.6.7.8"))).toBe("5.6.7.8");
+    expect(clientIp(forwardedFor("9.9.9.9"))).toBe("9.9.9.9");
+    delete process.env.XORV_TRUST_PROXY;
+  });
+
+  it("can't be moved to a fresh bucket by a forged X-Forwarded-For", async () => {
+    process.env.XORV_TRUST_PROXY = "1";
+    const app = appWith(rateLimit({ limit: 1, windowMs: 60_000 }));
+    const from = (forged: string) => app.request("/", { headers: { "x-forwarded-for": `${forged}, 203.0.113.7` } });
+    expect((await from("10.0.0.1")).status).toBe(200);
+    expect((await from("10.0.0.2")).status).toBe(429);
+    delete process.env.XORV_TRUST_PROXY;
+  });
+
+  it("counts XORV_TRUSTED_HOPS proxies from the right", () => {
+    process.env.XORV_TRUST_PROXY = "1";
+    process.env.XORV_TRUSTED_HOPS = "2";
+    expect(clientIp(forwardedFor("6.6.6.6, 203.0.113.7, 10.0.0.9"))).toBe("203.0.113.7");
+    // Fewer entries than hops: the leftmost is all there is.
+    expect(clientIp(forwardedFor("203.0.113.7"))).toBe("203.0.113.7");
+    process.env.XORV_TRUSTED_HOPS = "junk";
+    expect(clientIp(forwardedFor("6.6.6.6, 203.0.113.7"))).toBe("203.0.113.7");
+    delete process.env.XORV_TRUSTED_HOPS;
+    delete process.env.XORV_TRUST_PROXY;
+  });
+});
+
+describe("bodyLimit", () => {
+  it("rejects an oversized declared body with 413", async () => {
+    const app = appWith(bodyLimit(100));
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "content-length": "5000" },
+      body: "x",
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it("counts a chunked body with no Content-Length and refuses it past the limit", async () => {
+    // Checking only the declared length let a streamed body through at any
+    // size, and every handler buffers its body whole.
+    const app = appWith(bodyLimit(1_000));
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 64_000) return controller.close();
+        sent += 4_000;
+        controller.enqueue(new Uint8Array(4_000).fill(120));
+      },
+    });
+    const res = await app.request("/", { method: "POST", body, duplex: "half" } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining("too large") });
+    // It stopped reading at the limit instead of draining the whole stream.
+    expect(sent).toBeLessThan(64_000);
+  });
+
+  it("lets a small chunked body through, intact", async () => {
+    const app = new Hono();
+    app.use("*", bodyLimit(1_000));
+    app.post("/", async (c) => c.json(await c.req.json()));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"a":'));
+        controller.enqueue(new TextEncoder().encode("1}"));
+        controller.close();
+      },
+    });
+    const res = await app.request("/", { method: "POST", body, duplex: "half" } as RequestInit);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ a: 1 });
+  });
+
+  it("lets a normal request through", async () => {
+    const app = appWith(bodyLimit(1_000));
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "content-length": "10" },
+      body: "x",
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("requestLog", () => {
+  it("stamps every response with a request id", async () => {
+    const app = appWith(requestLog());
+    const res = await app.request("/");
+    expect(res.headers.get("X-Request-Id")).toMatch(/^req_/);
+  });
+
+  it("gives consecutive requests distinct ids", async () => {
+    const app = appWith(requestLog());
+    const a = (await app.request("/")).headers.get("X-Request-Id");
+    const b = (await app.request("/")).headers.get("X-Request-Id");
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("Metrics", () => {
+  const chain: ChainLike = {
+    network: "eip155:10143",
+    ledgerAddress: null,
+    writerAddress: null,
+    mode: () => "off",
+    counts: () => ({ registrations: 2, heartbeats: 7, receipts: 5, ratings: 1 }),
+    pendingReceipts: () => 3,
+    lastPublishError: () => null,
+    registerProvider: async () => null,
+    heartbeat: async () => null,
+    recordJob: async () => null,
+    rateJob: async () => {
+      throw new Error("no ledger");
+    },
+    verifyTypedDataOnChain: async () => false,
+    flush: async () => {},
+    close: async () => {},
+  };
+
+  function render(m: Metrics) {
+    return m.render({ registry: new Registry(), jobs: new JobStore(), chain, connected: 3 });
+  }
+
+  it("emits valid exposition format with HELP and TYPE for every series", () => {
+    const m = new Metrics();
+    m.inc("xorv_quotes_total");
+    const out = render(m);
+    for (const line of out.trim().split("\n")) {
+      expect(line).toMatch(/^(#|[a-z_]+(\{.*\})? -?[\d.]+$)/);
+    }
+    expect(out).toContain("# TYPE xorv_uptime_seconds gauge");
+    expect(out).toContain("xorv_providers_connected 3");
+  });
+
+  it("counts and labels", () => {
+    const m = new Metrics();
+    m.inc("xorv_errors_total", { path: "/api/quotes" });
+    m.inc("xorv_errors_total", { path: "/api/quotes" });
+    m.inc("xorv_errors_total", { path: "/other" });
+    const out = render(m);
+    expect(out).toContain('xorv_errors_total{path="/api/quotes"} 2');
+    expect(out).toContain('xorv_errors_total{path="/other"} 1');
+  });
+
+  it("summarises durations as quantiles in seconds", () => {
+    const m = new Metrics();
+    for (const ms of [100, 200, 300, 400, 500]) m.observe("xorv_job_duration", ms);
+    const out = render(m);
+    expect(out).toContain("# TYPE xorv_job_duration_seconds summary");
+    expect(out).toContain('xorv_job_duration_seconds{quantile="0.5"}');
+    expect(out).toContain("xorv_job_duration_seconds_count 5");
+  });
+
+  it("escapes label values so a hostile path can't break the format", () => {
+    const m = new Metrics();
+    m.inc("xorv_errors_total", { path: 'a"b\\c\nd' });
+    expect(render(m)).toContain('xorv_errors_total{path="a\\"b\\\\c\\nd"} 1');
+  });
+
+  it("bounds retained histogram samples", () => {
+    const m = new Metrics();
+    for (let i = 0; i < 5_000; i += 1) m.observe("xorv_job_duration", i);
+    expect(render(m)).toContain("xorv_job_duration_seconds_count 1000");
+  });
+
+  it("reports ledger writes per feed and the receipt backlog", () => {
+    const out = render(new Metrics());
+    expect(out).toContain('xorv_ledger_writes_total{kind="receipts"} 5');
+    expect(out).toContain('xorv_ledger_writes_total{kind="ratings"} 1');
+    expect(out).toContain("xorv_ledger_pending_receipts 3");
+  });
+});
