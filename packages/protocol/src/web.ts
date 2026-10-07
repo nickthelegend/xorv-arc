@@ -30,3 +30,6 @@ export * from "./vault.js";
 export * from "./memo.js";
 export * from "./gateway.js";
 export * from "./cctp.js";
+export * from "./abi/xorv-reputation.js";
+export * from "./abi/xorv-ccip-receiver.js";
+export * from "./abi/xorv-ccip-sender.js";

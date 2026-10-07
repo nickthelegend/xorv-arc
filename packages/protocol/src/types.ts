@@ -164,9 +164,47 @@ export interface PaymentRecord {
   explorerUrl: string;
   /** "escrow": the money waits in XorvEscrow until the job delivers. Absent on direct payments. */
   scheme?: "exact" | "escrow";
+  /**
+   * Funded from another chain: CCTP moved the dollars, Chainlink CCIP carried
+   * the instruction, and XorvCcipReceiver (the escrow's buyer of record) funded
+   * the job. `payer` is the requester, the buyer agent's address on the source
+   * chain (the same EOA on Arc, where refunds go).
+   */
+  crossChain?: CrossChainFunding;
   /** How fast the settlement landed, and what it cost, as the broker measured and read it back. */
   timing?: ChainTiming;
   escrow?: EscrowRecord;
+}
+
+export interface CrossChainFunding {
+  via: "ccip";
+  /** XorvCcipReceiver on Arc. */
+  receiver: string;
+  sourceChain: string | null;
+  sourceChainSelector: string | null;
+  requester: string;
+  /** The CCIP message id, when the broker saw the receiver's IntentReceived event. */
+  messageId: string | null;
+  /** ccip.chain.link link for the message. */
+  ccipExplorerUrl: string | null;
+  /** The receiver's claimRefund (refund forwarded to the requester), when the job was refunded. */
+  refundForwardTx?: string;
+}
+
+/** What a buyer agent on another chain needs to fund a quote over CCIP. */
+export interface CcipQuoteTerms {
+  /** XorvCcipReceiver on Arc (also the escrow's buyer of record). */
+  receiver: string;
+  arcChainSelector: string;
+  /** The escrow job id, provider, price (USDC units) and deadline to pass to postJob. */
+  jobId: string;
+  provider: string;
+  price: string;
+  deadline: number;
+  /** Chains with a live CCIP lane to Arc, and their USDC / CCTP domain. */
+  sources: { name: string; chainId: number; selector: string; usdc: string; cctpDomain: number }[];
+  /** XorvCcipSender per source chain id, when this broker knows one. */
+  senders: Record<string, string>;
 }
 
 /**
@@ -576,6 +614,15 @@ export interface QuoteResponse {
    * client's quote check, which then signs the escrow option and nothing else.
    */
   escrow?: { address: string; jobId: string; deadline: number; explorerUrl: string } | null;
+  /**
+   * Set when the quote was asked for with `payVia: "ccip"`: how a buyer agent
+   * on Base or Ethereum funds this exact job from its own chain. It calls
+   * `XorvCcipSender.postJob(jobId, provider, price, deadline, maxFee,
+   * minFinalityThreshold)` there: CCTP burns `price + maxFee` USDC to the
+   * receiver on Arc and Chainlink CCIP carries the job. The quote is held
+   * until the escrow deadline; the job runs once XorvEscrow shows it funded.
+   */
+  ccip?: CcipQuoteTerms | null;
   routing?: JobRouting | null;
   screening?: JobScreening | null;
 }
@@ -637,7 +684,29 @@ export interface NetworkInfo {
     url: string;
     /** Seconds from quote until anyone (a keeper) may refund the buyer. */
     deadlineSeconds: number;
-    /** Cleanverse CVI: when set, only active A-Pass holders can fund the escrow or be paid by it. */
-    identityGate: { address: string; kind: "cleanverse"; apass: string | null; validator: string | null; pool: string | null } | null;
   } | null;
+  /** The Arc and Circle/Chainlink pieces this broker uses, for the app's "Arc stack" panel. */
+  arc?: ArcStackInfo;
+}
+
+/** What the broker exposes about its Arc stack (all addresses checksummed, with explorer links). */
+export interface ArcStackInfo {
+  /** Arc pays gas in USDC; buyers and providers hold one token. */
+  gasToken: "USDC";
+  finality: string;
+  /** Arc's Memo extension: every escrow move and x402 transfer carries its job id. */
+  memo: { address: string; url: string; enabled: boolean };
+  /** XorvReputation: escrow settlements written to ERC-8004 (tag "successRate"). */
+  reputation: { address: string; url: string } | null;
+  gateway: { wallet: string; minter: string; sources: { domain: number; name: string }[]; enabled: boolean };
+  cctp: { tokenMessengerV2: string; domain: number; destinations: { name: string; chainId: number; domain: number }[] };
+  ccip: {
+    router: string;
+    chainSelector: string;
+    /** XorvCcipReceiver on Arc, when deployed: jobs posted and settled from Base/Ethereum. */
+    receiver: { address: string; url: string } | null;
+    sources: { name: string; chainId: number; selector: string }[];
+  };
+  /** The refund keeper: refunds escrowed jobs past their deadline (anyone may; the broker does). */
+  keeper: { enabled: boolean; address: string | null };
 }

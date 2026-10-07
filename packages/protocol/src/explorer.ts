@@ -62,3 +62,8 @@ export function shortHex(hex: string, head = 6, tail = 4): string {
   if (value.length <= head + tail + 1) return value;
   return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
 }
+
+/** Chainlink's CCIP explorer page for a message id. */
+export function ccipMessageUrl(messageId: string): string {
+  return `https://ccip.chain.link/msg/${messageId.trim()}`;
+}
