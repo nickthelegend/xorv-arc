@@ -14,7 +14,7 @@
  */
 
 import type { PrivateKeyAccount } from "viem";
-import { DEFAULT_NETWORK, accountFromKey, isSupportedNetwork, networkConfig, type MonadNetwork } from "@xorv/protocol/web";
+import { DEFAULT_NETWORK, accountFromKey, isSupportedNetwork, networkConfig, type ArcNetwork } from "@xorv/protocol/web";
 import { errorMessage } from "@/lib/errors";
 import { demoReceiptSecret } from "@/lib/server/demo-guard";
 
@@ -27,7 +27,7 @@ const DEFAULT_MAX_USDC_UNITS = "500000";
 
 export interface DemoPayer {
   account: PrivateKeyAccount;
-  network: MonadNetwork;
+  network: ArcNetwork;
   brokerUrl: string;
   maxUsdcUnits: string;
   /**
@@ -48,7 +48,7 @@ function serverNetwork(): string {
 export function loadDemoPayer(): DemoPayerResult {
   const network = serverNetwork();
   if (!isSupportedNetwork(network)) {
-    return { ok: false, status: 500, error: `XORV_NETWORK="${network}" is not a Monad network (use eip155:10143).` };
+    return { ok: false, status: 500, error: `XORV_NETWORK="${network}" is not an Arc network (use eip155:5042002).` };
   }
   if (networkConfig(network).label === "mainnet") {
     return {
@@ -63,7 +63,7 @@ export function loadDemoPayer(): DemoPayerResult {
     return {
       ok: false,
       status: 501,
-      error: "No demo account configured. Set XORV_DEMO_PAYER_KEY (a funded Monad testnet key) in apps/app/.env.local.",
+      error: "No demo account configured. Set XORV_DEMO_PAYER_KEY (a key holding test USDC on Arc Testnet) in apps/app/.env.local.",
     };
   }
 

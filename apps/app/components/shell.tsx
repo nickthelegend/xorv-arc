@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Connect } from "@/components/connect";
 import { api, type NetworkInfo } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { LiveHeartbeat, MonadLiveProvider } from "@/components/monad-live";
+import { ArcLiveProvider, LiveHeartbeat } from "@/components/arc-live";
 
 /**
  * The app shell.
@@ -36,7 +36,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const setOpen = (next: boolean): void => setOpenAt(next ? pathname : null);
 
   return (
-    <MonadLiveProvider>
+    <ArcLiveProvider>
     <div className="flex min-h-dvh">
       {/* Mobile scrim */}
       {open ? (
@@ -114,7 +114,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </span>
           <div className="ml-auto flex items-center gap-3">
             <Link
-              href="https://github.com/nickthelegend/xorv-monad"
+              href="https://github.com/nickthelegend/xorv-arc"
               target="_blank"
               rel="noopener noreferrer"
               className="hidden text-[13px] text-fg-3 transition-colors hover:text-fg sm:block"
@@ -128,7 +128,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 lg:px-8 lg:py-10">{children}</main>
       </div>
     </div>
-    </MonadLiveProvider>
+    </ArcLiveProvider>
   );
 }
 

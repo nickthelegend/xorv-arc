@@ -38,7 +38,7 @@ export function Hero() {
         <motion.div {...rise(0)}>
           <Pill href={REPO_URL} className="mb-7">
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-fg-3" />
-            x402 on Monad
+            x402 on Arc
             <span aria-hidden className="text-fg-4">
               ·
             </span>
@@ -65,8 +65,9 @@ export function Hero() {
         >
           Xorv rents it out. One command, and the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or
           Hunyuan capacity you already pay for starts taking jobs — paid per job in USDC over x402
-          on Monad, settled in under a second, straight to your wallet. Providers can carry an
-          ERC-8004 identity, and its reputation is built only from jobs someone paid for.
+          on Arc. The buyer&rsquo;s USDC waits in an on-chain escrow, goes to your wallet the moment
+          the job delivers and back to them if it doesn&rsquo;t, final in under a second. Providers
+          can carry an ERC-8004 identity whose reputation is written by settlement, not reviews.
         </motion.p>
 
         <motion.div {...rise(0.24)} className="mt-9 flex flex-wrap items-center justify-center gap-2.5">
@@ -77,7 +78,7 @@ export function Hero() {
         </motion.div>
 
         <motion.p {...rise(0.32)} className="mono mt-7 text-[12.5px] text-fg-4">
-          USDC · EIP-3009 · ~300 ms blocks · buyer never needs MON
+          USDC · EIP-3009 · sub-second finality · USDC is the only token you hold
         </motion.p>
       </div>
 

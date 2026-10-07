@@ -12,7 +12,7 @@ import { awaitingOnChain, followUpJob } from "@/lib/job-follow-up";
  * without a manual reload.
  */
 
-const PAYMENT = { payer: "0x1", payTo: "0x2", amount: "10000", network: "eip155:10143", txHash: "0xpay", explorerUrl: "" };
+const PAYMENT = { payer: "0x1", payTo: "0x2", amount: "10000", network: "eip155:5042002", txHash: "0xpay", explorerUrl: "" };
 
 function job(overrides: Partial<Job> = {}): Job {
   return {

@@ -13,16 +13,16 @@
  *
  *   BROKER=http://localhost:8402 XORV_DEMO_PAYER_KEY=0x… node scripts/verify-wallet.mts
  *
- * Optional: XORV_NETWORK (default eip155:10143), ADAPTER (default "echo").
+ * Optional: XORV_NETWORK (default eip155:5042002), ADAPTER (default "echo").
  */
 import { wrapFetchWithPayment, x402HTTPClient } from "@x402/fetch";
 import { accountFromKey, buyerX402Client, explorerTx } from "@xorv/protocol/web";
 
 const BROKER = (process.env.BROKER ?? "http://localhost:8402").replace(/\/+$/, "");
-const NETWORK = process.env.XORV_NETWORK ?? "eip155:10143";
+const NETWORK = process.env.XORV_NETWORK ?? "eip155:5042002";
 const KEY = process.env.XORV_DEMO_PAYER_KEY;
 if (!KEY) {
-  console.error("set XORV_DEMO_PAYER_KEY to a funded Monad testnet key");
+  console.error("set XORV_DEMO_PAYER_KEY to a key holding test USDC on Arc Testnet");
   process.exit(2);
 }
 
@@ -70,5 +70,5 @@ try {
 } catch {
   console.log("settlement       : (no PAYMENT-RESPONSE header)");
 }
-console.log("\n*** the wallet path settled on Monad ***");
+console.log("\n*** the wallet path settled on Arc ***");
 console.log("job:", `${BROKER}/api/jobs/${body.jobId}`);

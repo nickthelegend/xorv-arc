@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Mark } from "@/components/ui/logo";
 import { CHAIN, explorer } from "@/lib/chain";
-import { APP_URL, CLI_GUIDE_URL, ERC8004_URL, LOOM_URL, MONAD_URL, REPO_URL, X402_URL } from "@/lib/links";
+import { APP_URL, ARC_URL, CLI_GUIDE_URL, ERC8004_URL, FAUCET_URL, LOOM_URL, REPO_URL, X402_URL } from "@/lib/links";
 
 interface FooterLink {
   label: string;
@@ -9,12 +9,17 @@ interface FooterLink {
   external?: boolean;
 }
 
-// The on-chain column lists what a reader can open right now. XorvLedger is
-// only listed when the build was told its address — a link to an empty
-// address would be the kind of proof this column exists to avoid.
+// The on-chain column lists what a reader can open right now. Xorv's own
+// contracts are only listed when the build was told their addresses — a link
+// to an empty address would be the kind of proof this column exists to avoid.
 const ON_CHAIN: FooterLink[] = [
   { label: "USDC", href: explorer.token(CHAIN.usdc), external: true },
+  ...(CHAIN.escrow ? [{ label: "XorvEscrow", href: explorer.address(CHAIN.escrow), external: true }] : []),
+  ...(CHAIN.reputation
+    ? [{ label: "XorvReputation", href: explorer.address(CHAIN.reputation), external: true }]
+    : []),
   ...(CHAIN.ledger ? [{ label: "XorvLedger", href: explorer.address(CHAIN.ledger), external: true }] : []),
+  { label: "Arc Memo", href: explorer.address(CHAIN.memo), external: true },
   { label: "ERC-8004 identity", href: explorer.address(CHAIN.erc8004.identity), external: true },
   { label: "ERC-8004 reputation", href: explorer.address(CHAIN.erc8004.reputation), external: true },
 ];
@@ -36,7 +41,8 @@ const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
       { label: "Provider guide", href: CLI_GUIDE_URL, external: true },
       { label: "x402", href: X402_URL, external: true },
       { label: "ERC-8004", href: ERC8004_URL, external: true },
-      { label: "Monad", href: MONAD_URL, external: true },
+      { label: "Arc", href: ARC_URL, external: true },
+      { label: "Testnet USDC", href: FAUCET_URL, external: true },
     ],
   },
   { title: "On-chain", links: ON_CHAIN },
@@ -54,7 +60,7 @@ export function Footer() {
             </div>
             <p className="mt-4 max-w-[26ch] text-[13.5px] leading-relaxed text-fg-3">
               A decentralized AI capacity network. Idle subscriptions in, paid jobs out — settled
-              per job in USDC over x402 on Monad.
+              per job in USDC over x402 on Arc.
             </p>
           </div>
 

@@ -25,13 +25,28 @@ export interface NetworkSnapshot {
   chainId: number | null;
   explorerUrl: string | null;
   ledger: { address: string; url: string | null } | null;
+  /** XorvEscrow, when this broker pays jobs into escrow. */
+  escrow: { address: string; url: string | null } | null;
+  /** XorvReputation (`arc.reputation`): escrow settlements written to ERC-8004. */
+  reputation: { address: string; url: string | null } | null;
+  /** Arc's Memo contract (`arc.memo`), which tags every USDC move with its job id. */
+  memo: { address: string; url: string | null } | null;
   usdc: { address: string; url: string | null } | null;
   erc8004: { identity: string | null; reputation: string | null };
   /** True when the broker reads its feeds from an Envio indexer. */
   indexer: boolean;
-  /** Which sponsor model holds each AI role on this broker, when enabled. */
+  /** Which model holds each AI role on this broker, when enabled. */
   ai: { router: string | null; screener: string | null; verifier: string | null };
-  stats: { providersLive: number; jobsCompleted: number; paidUsdMicros: number } | null;
+  stats: {
+    providersLive: number;
+    jobsCompleted: number;
+    /** Reached a provider: a direct payment, or an escrow that released. */
+    paidUsdMicros: number;
+    /** Still held in XorvEscrow for jobs in flight. */
+    heldUsdMicros: number;
+    /** Returned to buyers by an escrow refund. */
+    refundedUsdMicros: number;
+  } | null;
 }
 
 /** One `JobRecorded` receipt, flattened. */
@@ -131,6 +146,13 @@ function isZeroHash(value: string | null): boolean {
   return value === null || /^0x0*$/i.test(value);
 }
 
+/** `{ address, url }` from the broker, or null when the address is missing. */
+function contract(value: unknown): { address: string; url: string | null } | null {
+  const c = obj(value);
+  const address = str(c?.address);
+  return address ? { address, url: safeUrl(c?.url) } : null;
+}
+
 function role(value: unknown): string | null {
   const r = obj(value);
   if (!r) return null;
@@ -144,19 +166,19 @@ function role(value: unknown): string | null {
 export function parseNetwork(body: unknown): NetworkSnapshot | null {
   const b = obj(body);
   if (!b) return null;
-  const ledger = obj(b.ledger);
-  const usdc = obj(b.usdc);
   const erc8004 = obj(b.erc8004);
+  const arc = obj(b.arc);
   const ai = obj(b.ai);
   const stats = obj(b.stats);
-  const ledgerAddress = str(ledger?.address);
-  const usdcAddress = str(usdc?.address);
   return {
     network: str(b.network),
     chainId: num(b.chainId),
     explorerUrl: safeUrl(b.explorerUrl),
-    ledger: ledgerAddress ? { address: ledgerAddress, url: safeUrl(ledger?.url) } : null,
-    usdc: usdcAddress ? { address: usdcAddress, url: safeUrl(usdc?.url) } : null,
+    ledger: contract(b.ledger),
+    escrow: contract(b.escrow),
+    reputation: contract(arc?.reputation),
+    memo: contract(arc?.memo),
+    usdc: contract(b.usdc),
     erc8004: { identity: str(erc8004?.identity), reputation: str(erc8004?.reputation) },
     indexer: obj(b.indexer) !== null,
     ai: { router: role(ai?.router), screener: role(ai?.screener), verifier: role(ai?.verifier) },
@@ -165,6 +187,8 @@ export function parseNetwork(body: unknown): NetworkSnapshot | null {
           providersLive: num(stats.providersLive) ?? 0,
           jobsCompleted: num(stats.jobsCompleted) ?? 0,
           paidUsdMicros: num(stats.paidUsdMicros) ?? 0,
+          heldUsdMicros: num(stats.heldUsdMicros) ?? 0,
+          refundedUsdMicros: num(stats.refundedUsdMicros) ?? 0,
         }
       : null,
   };
@@ -173,7 +197,7 @@ export function parseNetwork(body: unknown): NetworkSnapshot | null {
 /**
  * `/api/receipts` rows.
  *
- * The broker serves each receipt with both the Monad names (`buyer`, `payTo`,
+ * The broker serves each receipt with both the current names (`buyer`, `payTo`,
  * `paymentTx`, `explorerUrl`, `paymentUrl`) and the keys the feed carried
  * before the port (`payer`, `providerAccountId`, `transactionId`). The new
  * names win; the old ones are a fallback so a broker mid-upgrade still renders.

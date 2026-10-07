@@ -1,4 +1,4 @@
-export const REPO_URL = "https://github.com/nickthelegend/xorv-monad";
+export const REPO_URL = "https://github.com/nickthelegend/xorv-arc";
 /** Public broker the live ledger section reads. Optional: the page works without it. */
 export const BROKER_URL = (
   process.env.NEXT_PUBLIC_XORV_BROKER_URL?.trim() || "http://localhost:8402"
@@ -10,9 +10,15 @@ export const APP_URL = (process.env.NEXT_PUBLIC_XORV_APP_URL?.trim() || "http://
 );
 export const LOOM_URL = "https://loompad.tech";
 export const X402_URL = "https://x402.org";
-export const MONAD_URL = "https://monad.xyz";
+export const ARC_URL = "https://arc.network";
+export const ARC_DOCS_URL = "https://docs.arc.network";
+/** Circle's faucet: testnet USDC, which on Arc is also the gas token. */
+export const FAUCET_URL = "https://faucet.circle.com";
+export const GATEWAY_URL = "https://developers.circle.com/gateway";
+export const CCTP_URL = "https://developers.circle.com/cctp";
+export const CCIP_URL = "https://docs.chain.link/ccip";
 export const ERC8004_URL = "https://eips.ethereum.org/EIPS/eip-8004";
-/** Where a provider guide lives until `@xorv/cli@0.2.0` is on npm. */
+/** Where a provider guide lives until the Arc build of `@xorv/cli` is on npm. */
 export const CLI_GUIDE_URL = `${REPO_URL}/tree/main/packages/cli#readme`;
 
 export const NAV = [

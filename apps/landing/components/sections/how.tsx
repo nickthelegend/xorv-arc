@@ -13,32 +13,32 @@ const STEPS = [
   {
     n: "01",
     title: "Someone posts a job",
-    body: "A prompt, an optional model, a price ceiling. Hunyuan hy4 screens the prompt, Qwen 3.8 Max picks a model when the buyer didn't, and the matcher takes the cheapest live provider that can run it — liveness proven by heartbeat, not by a status page.",
+    body: "A prompt, an optional model, a price ceiling — from the app, a script, an agent, or another chain over Chainlink CCIP. Hunyuan hy4 screens the prompt, Qwen 3.8 Max picks a model when the buyer didn't, and the matcher takes the cheapest live provider that can run it — liveness proven by heartbeat, not by a status page.",
   },
   {
     n: "02",
     title: "The network answers 402",
-    body: "The quote freezes one provider at one price, single-use, for five minutes. The paid request answers HTTP 402 with the exact USDC amount — and the provider's own address as the payee, never the broker's.",
+    body: "The quote freezes one provider at one price, single-use, for five minutes. The paid request answers HTTP 402 with the exact USDC amount, a refund deadline, and XorvEscrow as the payee — never the broker's own wallet.",
   },
   {
     n: "03",
-    title: "The buyer signs, and pays no gas",
-    body: "An EIP-712 signature over an EIP-3009 transferWithAuthorization — a message, not a transaction. The facilitator submits it and pays the MON gas, so the buyer only ever holds USDC. In the app, a Privy embedded wallet does the signing.",
+    title: "The buyer signs once, and pays no gas",
+    body: "One EIP-712 signature over an EIP-3009 authorization — a message, not a transaction — whose nonce commits to the job and its deadline. The broker's facilitator submits it and pays the gas, in USDC, so the buyer only ever holds USDC. Short on Arc? Circle Gateway tops the wallet up from any chain with one more signature.",
   },
   {
     n: "04",
-    title: "Money moves, then the job runs",
-    body: "Settlement lands in one Monad block — about 300 ms, final in well under a second — buyer to provider, directly. The broker never takes custody. Then the job is dispatched to the provider's node and streams back live.",
+    title: "The money waits, then the job runs",
+    body: "The USDC lands in XorvEscrow, final in under a second — Arc has no reorgs and no confirmation wait. The broker never takes custody. Then the job is dispatched to the provider's node and streams back live.",
   },
   {
     n: "05",
-    title: "A receipt goes on-chain",
-    body: "XorvLedger records the job, the provider's ERC-8004 agent, buyer, payee, amount, the settlement transaction, and hashes of the prompt and the result. It refuses any receipt whose payee isn't the agent's registered wallet.",
+    title: "Delivered: released. Not delivered: refunded.",
+    body: "On delivery the escrow pays the provider and records the result's hash; if the job fails, is cancelled or misses its deadline, it refunds the buyer in full — and after the deadline anyone may trigger that refund. Every move carries the job id in Arc's Memo, so the USDC can be reconciled by job on chain.",
   },
   {
     n: "06",
-    title: "The buyer rates it — gaslessly",
-    body: "A second EIP-712 signature, relayed by the broker. The contract checks it came from the wallet that paid, allows one rating per job, and forwards it to the ERC-8004 Reputation Registry. Kimi K3 scores every public result there too.",
+    title: "Settlement becomes reputation",
+    body: "XorvReputation writes each release, and each at-fault refund, to the provider's ERC-8004 agent as successRate feedback — reputation that can only be earned by delivering paid work. The buyer can add a gasless rating, and Kimi K3 scores every public result there too.",
   },
 ];
 
@@ -48,7 +48,7 @@ export function How() {
       <Reveal>
         <SectionHeading
           title="A job, a payment and a receipt — in one request"
-          sub="x402 turns HTTP 402 from a status code nobody used into a working payment rail. Xorv runs the whole loop on Monad, and every step that moves money or reputation leaves an event you can read."
+          sub="x402 turns HTTP 402 from a status code nobody used into a working payment rail. Xorv runs the whole loop on Arc, where USDC is both the payment and the gas, and every step that moves money or reputation leaves an event you can read."
         />
       </Reveal>
 
@@ -73,11 +73,12 @@ export function How() {
 
       <Reveal delay={0.1}>
         <p className="measure mx-auto mt-12 text-center text-[13.5px] leading-relaxed text-fg-3">
-          Payment settles <em className="not-italic text-fg-2">before</em> the job runs. The provider
-          is about to spend real quota on a stranger&rsquo;s prompt, and on Monad paying first costs
-          the buyer a third of a second. The authorization carries a single-use nonce and expires
-          with the quote, so it can&rsquo;t be replayed or cashed late. A failed job is reassigned
-          to another provider at no extra charge.
+          Payment is locked <em className="not-italic text-fg-2">before</em> the job runs and
+          released only after it delivers. The provider knows the money is there before spending
+          real quota on a stranger&rsquo;s prompt, and the buyer knows it can only go to work that
+          arrived — on Arc that costs a single sub-second, final block. The authorization is bound
+          to one job and expires with the quote, so it can&rsquo;t be replayed or cashed late. A
+          failed job is reassigned to another provider at no extra charge.
         </p>
       </Reveal>
     </Section>

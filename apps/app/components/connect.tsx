@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { explorerAddress, formatMon, formatUsdc, shortHex } from "@xorv/protocol/web";
+import { explorerAddress, formatGasUsdc, formatUsdc, shortHex } from "@xorv/protocol/web";
 import { CHAIN_CONFIG, IS_TESTNET, NETWORK, NETWORK_LABEL } from "@/lib/network";
 import { EASE, useEntrance } from "@/lib/motion";
 import { useWallet } from "@/components/wallet-provider";
@@ -14,13 +14,14 @@ import { cn } from "@/lib/utils";
  *
  * With Privy this is a login button — email, Google, passkey or an existing
  * wallet — and the address it shows afterwards is the embedded wallet Privy
- * created for you on Monad, which is the wallet every job you buy is paid from
+ * created for you on Arc, which is the wallet every job you buy is paid from
  * and every rating you leave is signed by. Without Privy it connects the
  * browser's injected wallet instead.
  *
- * The balances are the two numbers that decide whether a payment can work.
- * USDC is what a job costs. MON is shown for honesty but you don't need any:
- * the facilitator pays settlement gas and the broker pays for rating relays.
+ * On Arc there is one number that decides whether a payment can work: USDC.
+ * It is what a job costs and also what gas is metered in (the native view,
+ * 18 decimals, is the same balance). A buyer still never pays gas: the
+ * facilitator pays settlement and the broker pays for rating relays.
  */
 export function Connect() {
   const wallet = useWallet();
@@ -131,28 +132,23 @@ export function Connect() {
                 <dd className="mono text-fg">{wallet.balances ? formatUsdc(wallet.balances.usdcUnits) : "—"}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-fg-3">MON</dt>
-                <dd className="mono text-fg-2">{wallet.balances ? formatMon(wallet.balances.monWei) : "—"}</dd>
+                <dt className="text-fg-3">gas view</dt>
+                <dd className="mono text-fg-3">{wallet.balances ? formatGasUsdc(wallet.balances.nativeWei) : "—"}</dd>
               </div>
             </dl>
             {wallet.balancesError ? (
               <p className="mt-2 text-[11.5px] text-warn">Couldn&rsquo;t read balances from the RPC just now.</p>
             ) : null}
 
-            {IS_TESTNET && (CHAIN_CONFIG.faucets.usdc || CHAIN_CONFIG.faucets.mon) ? (
+            {IS_TESTNET && CHAIN_CONFIG.faucets.usdc ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {CHAIN_CONFIG.faucets.usdc ? (
-                  <FaucetLink href={CHAIN_CONFIG.faucets.usdc} label="Test USDC" hint="Circle faucet · pick Monad Testnet" />
-                ) : null}
-                {CHAIN_CONFIG.faucets.mon ? (
-                  <FaucetLink href={CHAIN_CONFIG.faucets.mon} label="Test MON" hint="Monad faucet" />
-                ) : null}
+                <FaucetLink href={CHAIN_CONFIG.faucets.usdc} label="Test USDC" hint="Circle faucet · pick Arc Testnet" />
               </div>
             ) : null}
 
             <p className="mt-3 text-[12px] leading-relaxed text-fg-3">
-              You sign each payment and rating in this wallet. Xorv never holds your key, and gas is paid by
-              the facilitator and the relay — you only need USDC.
+              You sign each payment and rating in this wallet. Xorv never holds your key. Arc meters gas in USDC
+              (both rows are one balance), and the facilitator and the relay pay it — you only need USDC.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">

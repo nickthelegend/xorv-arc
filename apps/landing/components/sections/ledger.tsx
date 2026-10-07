@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Reveal } from "@/components/ui/reveal";
 import { LiveDot, Section, SectionHeading } from "@/components/ui/kit";
-import { CHAIN, explorer, shortHex } from "@/lib/chain";
+import { CHAIN, explorer, networkName, shortHex } from "@/lib/chain";
 import {
   formatUsdMicros,
   formatUsdcUnits,
@@ -24,9 +24,15 @@ import { cn } from "@/lib/utils";
  * Deliberately not four big numbers in four boxes. That template says "we have
  * metrics" without saying anything true, and on a network this young the honest
  * numbers are small — which is fine, because the argument here is *verifiable*,
- * not *large*. So: the real receipts, read from XorvLedger events on Monad
- * (through the broker, which asks Envio's indexer first and the RPC second),
- * each one a link you can open.
+ * not *large*. So: the real receipts, read from Xorv's contract events on Arc
+ * (through the broker, which asks Envio's indexer first and Arc's RPC second),
+ * each one a link to Arc's Blockscout explorer you can open.
+ *
+ * Nothing here is hard-coded per deployment: Xorv's own contract addresses
+ * come from the broker's `/api/network`, or from `NEXT_PUBLIC_XORV_*_ADDRESS`
+ * at build time, and a contract neither knows is shown as unknown rather than
+ * guessed. Only Circle's and the ERC-8004 registries' fixed addresses ship
+ * as defaults.
  *
  * Three feeds, fetched independently. A broker whose leaderboard query times
  * out still shows its receipts, and a ledger read that fails does not blank
@@ -92,7 +98,7 @@ export function Ledger() {
       <Reveal>
         <SectionHeading
           title="Every job leaves a receipt"
-          sub="Payments settle in USDC on Monad, and every paid job is recorded as an event on XorvLedger — public, ordered and indexed by Envio. You don't have to trust the broker's database; read the contract yourself."
+          sub="Every job's USDC is funded, released or refunded by XorvEscrow on Arc, tagged with its job id, and recorded as an event — public, final in under a second and indexed by Envio. You don't have to trust the broker's database; read the contracts yourself."
         />
       </Reveal>
 
@@ -124,16 +130,38 @@ function Facts({ network }: { network: NetworkSnapshot | null }) {
   // settles payments, so its addresses and explorer are the ones that matter.
   const base = network?.explorerUrl?.replace(/\/+$/, "") ?? null;
   const addressUrl = (address: string): string => (base ? `${base}/address/${address}` : explorer.address(address));
-  const ledger = network?.ledger ?? (CHAIN.ledger ? { address: CHAIN.ledger, url: null } : null);
-  const usdc = network?.usdc?.address ?? CHAIN.usdc;
-  const identity = network?.erc8004.identity ?? CHAIN.erc8004.identity;
-  const reputation = network?.erc8004.reputation ?? CHAIN.erc8004.reputation;
+  const known = (
+    fromBroker: { address: string; url: string | null } | null | undefined,
+    fromBuild: string | null,
+  ): { address: string; url: string | null } | null => fromBroker ?? (fromBuild ? { address: fromBuild, url: null } : null);
 
-  const rows: Array<[label: string, value: string | null, href: string | null]> = [
-    ["XorvLedger", ledger?.address ?? null, ledger ? (ledger.url ?? addressUrl(ledger.address)) : null],
-    ["USDC", usdc, network?.usdc?.url ?? (base ? `${base}/token/${usdc}` : explorer.token(usdc))],
-    ["ERC-8004 identity", identity, addressUrl(identity)],
-    ["ERC-8004 reputation", reputation, addressUrl(reputation)],
+  const escrow = known(network?.escrow, CHAIN.escrow);
+  const reputation = known(network?.reputation, CHAIN.reputation);
+  const ledger = known(network?.ledger, CHAIN.ledger);
+  const usdc = network?.usdc?.address ?? CHAIN.usdc;
+  const memo = network?.memo?.address ?? CHAIN.memo;
+  const identity = network?.erc8004.identity ?? CHAIN.erc8004.identity;
+  const erc8004Reputation = network?.erc8004.reputation ?? CHAIN.erc8004.reputation;
+
+  const link = (c: { address: string; url: string | null } | null): string | null =>
+    c ? (c.url ?? addressUrl(c.address)) : null;
+
+  // XorvEscrow is always listed — it is where the money is. XorvReputation and
+  // XorvLedger only when someone has said where they are; a row of "unknown"
+  // contracts would read as more than it is.
+  const rows: Array<[label: string, value: string | null, href: string | null, missing: string]> = [
+    [
+      "XorvEscrow",
+      escrow?.address ?? null,
+      link(escrow),
+      network ? "this broker pays providers directly, without escrow" : "address comes from the broker",
+    ],
+    ...(reputation ? [["XorvReputation", reputation.address, link(reputation), ""] as [string, string, string | null, string]] : []),
+    ...(ledger ? [["XorvLedger", ledger.address, link(ledger), ""] as [string, string, string | null, string]] : []),
+    ["USDC", usdc, network?.usdc?.url ?? (base ? `${base}/token/${usdc}` : explorer.token(usdc)), ""],
+    ["Arc Memo", memo, network?.memo?.url ?? addressUrl(memo), ""],
+    ["ERC-8004 identity", identity, addressUrl(identity), ""],
+    ["ERC-8004 reputation", erc8004Reputation, addressUrl(erc8004Reputation), ""],
   ];
 
   return (
@@ -141,10 +169,10 @@ function Facts({ network }: { network: NetworkSnapshot | null }) {
       <div className="flex items-center justify-between gap-4 py-3.5">
         <dt className="text-[13.5px] text-fg-2">Network</dt>
         <dd className="mono text-[12.5px] text-fg-3">
-          {CHAIN.name} · {network?.network ?? CHAIN.network}
+          {networkName(network?.network ?? CHAIN.network)} · {network?.network ?? CHAIN.network}
         </dd>
       </div>
-      {rows.map(([label, value, href]) => (
+      {rows.map(([label, value, href, missing]) => (
         <div key={label} className="flex items-center justify-between gap-4 py-3.5">
           <dt className="text-[13.5px] text-fg-2">{label}</dt>
           <dd className="min-w-0">
@@ -160,9 +188,7 @@ function Facts({ network }: { network: NetworkSnapshot | null }) {
                 <span className="hidden sm:inline">{value}</span>
               </a>
             ) : (
-              <span className="text-[12.5px] text-fg-4">
-                {network ? "this broker isn't writing to a ledger yet" : "address comes from the broker"}
-              </span>
+              <span className="text-[12.5px] text-fg-4">{missing}</span>
             )}
           </dd>
         </div>
@@ -183,7 +209,7 @@ function StatusLine({ network }: { network: Feed<NetworkSnapshot | null> }) {
       <div className="mb-4 flex items-center gap-2.5">
         <span className="h-1.5 w-1.5 rounded-full bg-fg-4" />
         <span className="text-[12.5px] text-fg-4">
-          live feed offline — the contracts above are still readable on the explorer
+          live feed offline — the contracts above are still readable on Arc&rsquo;s explorer
         </span>
       </div>
     );
@@ -199,6 +225,18 @@ function StatusLine({ network }: { network: Feed<NetworkSnapshot | null> }) {
             <span className="tnum text-fg-2">{stats.jobsCompleted}</span> completed ·{" "}
             <span className="tnum text-fg-2">${formatUsdMicros(stats.paidUsdMicros)}</span> paid to
             providers
+            {stats.heldUsdMicros > 0 ? (
+              <>
+                {" "}
+                · <span className="tnum text-fg-2">${formatUsdMicros(stats.heldUsdMicros)}</span> in escrow
+              </>
+            ) : null}
+            {stats.refundedUsdMicros > 0 ? (
+              <>
+                {" "}
+                · <span className="tnum text-fg-2">${formatUsdMicros(stats.refundedUsdMicros)}</span> refunded
+              </>
+            ) : null}
             {network.failed ? <span className="text-fg-4"> · last read, reconnecting</span> : null}
           </>
         ) : network.data ? (
@@ -288,7 +326,7 @@ function Leaderboard({ feed }: { feed: Feed<LeaderboardFeed> }) {
   // fallback is one broker's own counters, which is narrower and should read so.
   const source =
     data?.source === "indexer"
-      ? "indexed by Envio from XorvLedger and ERC-8004 events"
+      ? "indexed by Envio from Xorv's contract and ERC-8004 events on Arc"
       : data?.source === "memory"
         ? "from this broker's own counters"
         : null;

@@ -9,7 +9,7 @@ import { checkResultAgainstReceipt, type ReceiptReader } from "@/lib/private/rec
  * broker's envelope with the broker's own hash of it. A broker (or a tampered
  * store) that swaps the envelope recomputes that hash too, and the page still
  * showed the green check. The claim has to be checked against the receipt on
- * Monad, which nobody can rewrite after the fact.
+ * Arc, which nobody can rewrite after the fact.
  */
 
 const LEDGER = "0x1111111111111111111111111111111111111111";
@@ -60,7 +60,7 @@ describe("checking a sealed result against its XorvLedger receipt", () => {
   it("catches a broker that swapped the envelope and recomputed its own resultHash", async () => {
     // What the page used to check: the broker's envelope against the broker's hash. It passes.
     expect(receiptMatchesCiphertext(swapped, hashOf(swapped))).toBe(true);
-    // The receipt on Monad still commits to the original.
+    // The receipt on Arc still commits to the original.
     const check = await checkResultAgainstReceipt({
       client: chain([jobRecorded("job_1", hashOf(genuine))]),
       txHash: TX,

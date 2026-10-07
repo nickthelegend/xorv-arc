@@ -9,7 +9,7 @@ export default function NetworkPage() {
     <>
       <PageHeader
         title="Network"
-        sub="Xorv keeps live state in memory and its record on Monad: payments as USDC transfers, receipts on the XorvLedger contract, reputation in ERC-8004. Everything here links to the chain, so you can check it yourself."
+        sub="Xorv keeps live state in memory and its record on Arc: payments in USDC through XorvEscrow, each tagged with its job by Arc's Memo, receipts on XorvLedger, reputation in ERC-8004. Everything here links to the chain, so you can check it yourself."
       />
       <NetworkView />
     </>

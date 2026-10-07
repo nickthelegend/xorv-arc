@@ -22,9 +22,9 @@ const SITE = (
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
   "http://localhost:3000"
 ).replace(/\/+$/, "");
-const TITLE = "Xorv — rent out your idle AI capacity, get paid per job in USDC on Monad";
+const TITLE = "Xorv — rent out your idle AI capacity, get paid per job in USDC on Arc";
 const DESCRIPTION =
-  "Xorv is a decentralized AI capacity network on Monad. Rent out the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or Hunyuan capacity you already pay for and get paid per job in USDC over x402 — sub-second settlement, buyers never need gas, and ERC-8004 identities carry reputation that only paid jobs can build.";
+  "Xorv is a decentralized AI capacity network on Arc, Circle's stablecoin chain. Rent out the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or Hunyuan capacity you already pay for and get paid per job in USDC over x402 — held in an on-chain escrow that pays you on delivery and refunds the buyer otherwise, final in under a second, with USDC as the only token anyone holds. ERC-8004 identities carry reputation written from escrow settlement, not from reviews.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
@@ -33,8 +33,14 @@ export const metadata: Metadata = {
   applicationName: "Xorv",
   keywords: [
     "x402",
-    "Monad",
+    "Arc",
+    "Circle",
     "USDC",
+    "stablecoin chain",
+    "escrow",
+    "Circle Gateway",
+    "CCTP",
+    "Chainlink CCIP",
     "EIP-3009",
     "ERC-8004",
     "agent reputation",
@@ -97,7 +103,7 @@ const jsonLd = {
       operatingSystem: "macOS, Linux, Windows",
       url: SITE,
       description:
-        "Command-line provider node for the Xorv network. Share idle AI capacity and get paid per job in USDC over x402 on Monad, with an optional ERC-8004 agent identity.",
+        "Command-line provider node for the Xorv network. Share idle AI capacity and get paid per job in USDC over x402 on Arc, released from an on-chain escrow on delivery, with an optional ERC-8004 agent identity.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       publisher: { "@id": `${SITE}/#organization` },
     },

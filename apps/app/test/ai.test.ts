@@ -99,11 +99,11 @@ const AGENT_ROUTING = {
     {
       tool: "erc8004_reputation",
       args: { agentId: "7" },
-      summary: "read agent #7's ERC-8004 reputation on Monad (avg 92 from 5 buyer ratings; agent wallet is the payout address)",
+      summary: "read agent #7's ERC-8004 reputation on Arc (avg 92 from 5 buyer ratings; agent wallet is the payout address)",
       ms: 412,
       ok: true,
       links: [
-        { label: "agent #7", url: "https://testnet.monadscan.com/nft/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432/7" },
+        { label: "agent #7", url: "https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/7" },
         { label: "evil", url: "javascript:alert(1)" },
       ],
     },
@@ -113,9 +113,9 @@ const AGENT_ROUTING = {
       summary: "checked 7 receipts on XorvLedger via Envio: 6 delivered, 1 failed",
       ms: 95,
       ok: true,
-      links: [{ label: "latest receipt", url: `https://testnet.monadscan.com/tx/0x${"ab".repeat(32)}` }],
+      links: [{ label: "latest receipt", url: `https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}` }],
     },
-    { tool: "nansen_trust", args: { providerId: "prv_kimi" }, summary: "couldn't read the Nansen trust signal: timed out after 3000ms", ms: 3_000, ok: false },
+    { tool: "escrow_outcomes", args: { providerId: "prv_kimi" }, summary: "couldn't read XorvReputation: timed out after 3000ms", ms: 3_000, ok: false },
     { tool: "select_provider", args: { providerId: "prv_kimi", adapter: "kimi" }, summary: "picked kimi node — kimi at $0.0050, agent #7", ms: 0, ok: true },
   ],
 };
@@ -133,11 +133,11 @@ describe("the router's agent trace", () => {
       "Candidates",
       "ERC-8004 reputation",
       "XorvLedger receipts",
-      "Nansen trust",
+      "Escrow outcomes",
       "Decision",
     ]);
     expect(trace.steps[1]!.links).toEqual([
-      { label: "agent #7", url: "https://testnet.monadscan.com/nft/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432/7" },
+      { label: "agent #7", url: "https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/7" },
     ]);
     expect(trace.steps[3]!.ok).toBe(false);
     expect(describeTrace(trace)).toBe("3 lookups in 3 turns · 2.4 s · thinking on");
@@ -153,10 +153,10 @@ describe("the router's agent trace", () => {
     const html = renderToStaticMarkup(createElement(RoutingTrace, { routing: AGENT_ROUTING }));
     expect(html).toContain("How Qwen 3.8 Max chose");
     expect(html).toContain("3 lookups in 3 turns · 2.4 s · thinking on");
-    expect(html).toContain("read agent #7&#x27;s ERC-8004 reputation on Monad (avg 92 from 5 buyer ratings; agent wallet is the payout address)");
+    expect(html).toContain("read agent #7&#x27;s ERC-8004 reputation on Arc (avg 92 from 5 buyer ratings; agent wallet is the payout address)");
     expect(html).toContain("checked 7 receipts on XorvLedger via Envio");
-    expect(html).toContain('href="https://testnet.monadscan.com/nft/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432/7"');
-    expect(html).toContain(`href="https://testnet.monadscan.com/tx/0x${"ab".repeat(32)}"`);
+    expect(html).toContain('href="https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/7"');
+    expect(html).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
     expect(html).not.toContain("javascript:");
     expect(html).toContain("412 ms");
     expect(html).toContain("picked kimi node");

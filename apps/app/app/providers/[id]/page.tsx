@@ -23,7 +23,7 @@ export default async function ProviderPage({ params }: { params: Promise<{ id: s
         title={initial?.label ?? "Provider"}
         sub={
           initial
-            ? `Sells ${initial.capabilities.map((c) => c.displayName).join(", ") || "AI capacity"} on Xorv, paid per job in USDC over x402 on Monad.`
+            ? `Sells ${initial.capabilities.map((c) => c.displayName).join(", ") || "AI capacity"} on Xorv, paid per job in USDC over x402 on Arc.`
             : undefined
         }
       />

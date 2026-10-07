@@ -26,13 +26,13 @@ describe("loadDemoPayer", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.payer.account.address).toBe(privateKeyToAccount(key).address);
-    expect(loaded.payer.network).toBe("eip155:10143");
+    expect(loaded.payer.network).toBe("eip155:5042002");
     expect(loaded.payer.maxUsdcUnits).toBe("500000");
     expect(loaded.payer.brokerUrl).toBe("http://broker.test");
   });
 
   it("refuses on mainnet even with a key", () => {
-    stub({ XORV_NETWORK: "eip155:143", XORV_DEMO_PAYER_KEY: generatePrivateKey() });
+    stub({ XORV_NETWORK: "eip155:5042", XORV_DEMO_PAYER_KEY: generatePrivateKey() });
     const loaded = loadDemoPayer();
     expect(loaded).toMatchObject({ ok: false, status: 403 });
   });
@@ -52,7 +52,7 @@ describe("loadDemoPayer", () => {
     expect(loaded.error).not.toContain(der);
   });
 
-  it("rejects a non-Monad network and a malformed cap", () => {
+  it("rejects a non-Arc network and a malformed cap", () => {
     stub({ XORV_NETWORK: "hedera:testnet", XORV_DEMO_PAYER_KEY: generatePrivateKey() });
     expect(loadDemoPayer()).toMatchObject({ ok: false, status: 500 });
     stub({ XORV_DEMO_PAYER_KEY: generatePrivateKey(), XORV_DEMO_MAX_USDC_UNITS: "0.5" });

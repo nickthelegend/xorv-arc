@@ -21,9 +21,9 @@ function job(overrides: Partial<Job> = {}): Job {
     receiptTxHash: "0xrcpt",
     payment: {
       asset: "usdc",
-      assetAddress: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+      assetAddress: "0x3600000000000000000000000000000000000000",
       amount: "1000",
-      network: "eip155:10143",
+      network: "eip155:5042002",
       txHash: "0xfund",
       payer: "0x9735aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5c96",
       payTo: "0xd5cdc9020acd286fe06c587694b38f4795df238c",
@@ -73,7 +73,7 @@ describe("paymentTimeline", () => {
     expect(jobOutcome(cancelled)).toBe("refunded");
   });
 
-  it("names who settled it when it wasn't this broker (a CRE keeper's refund after the deadline)", () => {
+  it("names who settled it when it wasn't this broker (the refund keeper's refund after the deadline)", () => {
     const steps = paymentTimeline(
       withEscrow(job({ status: "failed", error: "timed out" }), { state: "refunded", refundTx: "0xr", settledBy: "0x1111111111111111111111111111111111111111" }),
     );
@@ -85,7 +85,7 @@ describe("paymentTimeline", () => {
     const running = withEscrow(job({ status: "running", completedAt: null, receiptTxHash: null }), { state: "funded", releaseTx: undefined, settledAt: undefined });
     const states = Object.fromEntries(paymentTimeline(running).map((s) => [s.key, s.state]));
     expect(states).toEqual({ paid: "done", running: "active", delivered: "pending", settled: "pending", receipt: "pending" });
-    expect(paymentTimeline(running)[3]!.detail).toContain("Chainlink CRE keeper");
+    expect(paymentTimeline(running)[3]!.detail).toContain("refund keeper");
   });
 
   it("shows a settlement in flight, with the retry reason, once the job is over", () => {
@@ -97,6 +97,29 @@ describe("paymentTimeline", () => {
     const steps = paymentTimeline(withEscrow(job(), { reassignTxs: ["0xmove"] }));
     expect(steps[1]).toMatchObject({ tx: "0xmove" });
     expect(steps[1]!.detail).toContain("re-pointed on-chain");
+  });
+
+  it("tells a job funded from another chain over Chainlink CCIP", () => {
+    const base = withEscrow(job(), {});
+    const funded = {
+      ...base,
+      payment: {
+        ...base.payment!,
+        crossChain: {
+          via: "ccip",
+          receiver: "0x2222222222222222222222222222222222222222",
+          sourceChain: "Base Sepolia",
+          sourceChainSelector: "10344971235874465080",
+          requester: "0x3333333333333333333333333333333333333333",
+          messageId: `0x${"cd".repeat(32)}`,
+          ccipExplorerUrl: `https://ccip.chain.link/msg/0x${"cd".repeat(32)}`,
+        },
+      },
+    } as Job;
+    const detail = paymentTimeline(funded)[0]!.detail!;
+    expect(detail).toContain("on Base Sepolia");
+    expect(detail).toContain("Chainlink CCIP");
+    expect(detail).toContain("0x3333…3333");
   });
 
   it("tells a direct payment without an escrow step", () => {

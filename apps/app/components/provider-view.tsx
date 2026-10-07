@@ -5,17 +5,18 @@ import { explorerAddress, explorerAgent, explorerTx, formatUsdc, shortHex } from
 import { api, formatDuration, formatUsd, type Provider } from "@/lib/api";
 import { usePoll } from "@/lib/hooks";
 import { NETWORK } from "@/lib/network";
-import { readTrust } from "@/lib/trust";
 import { Empty, Ext, Panel, Row, Status } from "@/components/ui";
-import { TrustPanel } from "@/components/trust";
 import { Ago } from "@/components/ago";
 import { EarningsPanel } from "@/components/earnings";
+import { EscrowRecordPanel } from "@/components/escrow-record";
+import { WithdrawPanel } from "@/components/withdraw-panel";
 
 /**
- * One provider: what it sells, what it has done, and how much its payout
- * wallet can be trusted. This is the page every provider's ERC-8004 agent
- * file points at (its `web` service), so it has to stand on its own for a
- * visitor arriving from an explorer.
+ * One provider: what it sells, what it has done, its escrow record on Arc
+ * (XorvReputation, written to its ERC-8004 agent), and — for the provider
+ * itself — a way to take its earnings to another chain over CCTP. This is the
+ * page every provider's ERC-8004 agent file points at (its `web` service), so
+ * it has to stand on its own for a visitor arriving from an explorer.
  */
 export function ProviderView({ id, initial }: { id: string; initial: Provider | null }) {
   const { data, error } = usePoll<Provider>(useCallback(() => api.provider(id), [id]), 10_000);
@@ -29,7 +30,6 @@ export function ProviderView({ id, initial }: { id: string; initial: Provider | 
     );
   }
 
-  const trust = readTrust(provider.trust);
   const jobs = provider.stats.jobsCompleted + provider.stats.jobsFailed;
 
   return (
@@ -47,7 +47,7 @@ export function ProviderView({ id, initial }: { id: string; initial: Provider | 
             {provider.agentId ? (
               <Ext href={provider.agentUrl || explorerAgent(NETWORK, provider.agentId)}>agent #{provider.agentId} ↗</Ext>
             ) : (
-              "none yet"
+              <span className="text-fg-3">none yet — <span className="mono">xorv identity register</span></span>
             )}
           </Row>
           <Row label="registered on-chain">
@@ -77,9 +77,11 @@ export function ProviderView({ id, initial }: { id: string; initial: Provider | 
         </div>
       </Panel>
 
+      <EscrowRecordPanel providerId={provider.id} agentId={provider.agentId} />
+
       <EarningsPanel provider={provider} />
 
-      <TrustPanel trust={trust} />
+      <WithdrawPanel payout={provider.address} />
 
       <section>
         <h2 className="mb-3 text-[13px] font-medium text-fg">Capabilities</h2>

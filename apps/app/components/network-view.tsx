@@ -18,16 +18,15 @@ import { usePoll } from "@/lib/hooks";
 import { NETWORK } from "@/lib/network";
 import { valueToStars } from "@/lib/rating";
 import { formatMs } from "@/lib/speed";
-import { CommitPipeline } from "@/components/monad-live";
+import { ArcLiveStrip } from "@/components/arc-live";
+import { ArcStackPanel } from "@/components/arc-stack";
 import { Empty, Ext, Panel, Row, Skeleton } from "@/components/ui";
-import { NansenPanel } from "@/components/trust";
-import { readNansenStatus } from "@/lib/trust";
 
 /**
  * The network, as the chain sees it.
  *
  * Xorv keeps live state (who is online, which job is running) in the broker's
- * memory, and everything that has to be *believed* on Monad: providers
+ * memory, and everything that has to be *believed* on Arc: providers
  * registered and job receipts recorded on the XorvLedger contract, payments as
  * USDC transfers, reputation in the ERC-8004 registries. This page reads those
  * back — through the Envio indexer when the broker has one, a bounded RPC log
@@ -46,12 +45,13 @@ export function NetworkView() {
   if (error && !info) return <Empty title="Can't reach the broker" hint="The network page reads everything through it." />;
 
   const indexed = Boolean(info?.indexer);
-  const nansen = readNansenStatus(info);
   const via = indexed ? "Envio HyperIndex" : "an RPC log scan";
 
   return (
     <div className="space-y-8">
-      <CommitPipeline />
+      <ArcLiveStrip />
+
+      {info ? <ArcStackPanel info={info} /> : <Skeleton rows={2} />}
 
       {/* Facts, as a definition list. Four numbers in four boxes would say
           "we have metrics" without saying anything true. */}
@@ -59,13 +59,13 @@ export function NetworkView() {
         <h2 className="text-[13px] font-medium text-fg">Settlement</h2>
         <p className="measure mt-1.5 text-[12.5px] leading-relaxed text-fg-3">
           Every job is paid with an x402 EIP-3009 authorization: the buyer signs, the facilitator submits the
-          USDC transfer and pays the gas, so a buyer needs no MON at all.{" "}
+          USDC transfer and pays the gas (in USDC, Arc&rsquo;s gas token), so a buyer pays exactly the price.{" "}
           {info?.escrow
             ? "The money waits in XorvEscrow until the job delivers, then goes to the provider; a job that fails is refunded in full."
             : "The money goes straight to the provider."}
         </p>
         <div className="mt-4 border-t border-[var(--line)] pt-1">
-          <Row label="network">{info ? `Monad ${info.label} · chain ${info.chainId}` : "—"}</Row>
+          <Row label="network">{info ? `Arc ${info.label} · chain ${info.chainId}` : "—"}</Row>
           <Row label="facilitator">{info?.facilitator.description ?? "—"}</Row>
           <Row label="gas payer">
             {info?.facilitator.address ? (
@@ -79,14 +79,14 @@ export function NetworkView() {
           <Row label="usdc">
             {info ? <Ext href={explorerToken(NETWORK, info.usdc.address)}>{shortHex(info.usdc.address)} ↗</Ext> : "—"}
           </Row>
-          <Row label="payment executed in">
+          <Row label="payment final in">
             {info?.stats.settleMedianMs != null ? (
               <span className="tnum">
                 {formatMs(info.stats.settleMedianMs)} median
                 <span className="text-fg-4">
                   {" "}
                   · {info.stats.timingSamples} recent jobs
-                  {info.stats.timingChain === "local" ? " · measured on a local fork, not Monad" : " · an Ethereum block is 12 s"}
+                  {info.stats.timingChain === "local" ? " · measured on a local fork, not Arc" : " · an Ethereum block is 12 s"}
                 </span>
               </span>
             ) : (
@@ -94,7 +94,7 @@ export function NetworkView() {
             )}
           </Row>
           {info?.stats.releaseMedianMs != null ? (
-            <Row label="escrow release executed in">
+            <Row label="escrow release final in">
               <span className="tnum">{formatMs(info.stats.releaseMedianMs)} median</span>
             </Row>
           ) : null}
@@ -149,24 +149,6 @@ export function NetworkView() {
               "—"
             )}
           </Row>
-          {info?.escrow ? (
-            <Row label="identity gate">
-              {info.escrow.identityGate ? (
-                <span>
-                  Cleanverse CVI ·{" "}
-                  <Ext href={explorerAddress(NETWORK, info.escrow.identityGate.address)}>gate ↗</Ext>
-                  {info.escrow.identityGate.apass ? (
-                    <>
-                      {" · "}
-                      <Ext href={explorerAddress(NETWORK, info.escrow.identityGate.apass)}>A-Pass ↗</Ext>
-                    </>
-                  ) : null}
-                </span>
-              ) : (
-                "off: anyone can fund and be paid"
-              )}
-            </Row>
-          ) : null}
           <Row label="ERC-8004 identity">
             {info ? <Ext href={explorerAddress(NETWORK, info.erc8004.identity)}>{shortHex(info.erc8004.identity)} ↗</Ext> : "—"}
           </Row>
@@ -196,8 +178,6 @@ export function NetworkView() {
       </Panel>
 
       {info ? <AiRoles info={info} /> : null}
-
-      {nansen ? <NansenPanel status={nansen} /> : null}
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -303,7 +283,7 @@ function AiRoles({ info }: { info: NetworkInfo }) {
     {
       name: "router",
       label: "Router",
-      what: "when the buyer chooses Auto, reads the prompt and each candidate's ERC-8004 reputation, receipts and wallet trust on Monad, then picks the provider",
+      what: "when the buyer chooses Auto, reads the prompt and each candidate's ERC-8004 reputation, receipts and escrow outcomes on Arc, then picks the provider",
     },
     { name: "verifier", label: "Verifier", what: "scores every result and writes it to ERC-8004 as reputation" },
   ];

@@ -5,7 +5,7 @@
  * broker, and the broker computes that hash from the same string it serves.
  * Comparing the two proves nothing: a broker (or a tampered store) that swaps
  * the envelope recomputes the hash too. What it cannot rewrite is the
- * XorvLedger receipt already on Monad. So this reads the receipt transaction,
+ * XorvLedger receipt already on Arc. So this reads the receipt transaction,
  * finds the `JobRecorded` event the ledger emitted for this job id, and
  * compares the envelope with the `resultHash` in *that* event.
  *
@@ -21,7 +21,7 @@ import { receiptMatchesCiphertext } from "@/lib/private/result";
 export type ReceiptCheck =
   /** The envelope hashes to the receipt's `resultHash`. */
   | { status: "match"; resultHash: Hex }
-  /** The receipt on Monad commits to something else. */
+  /** The receipt on Arc commits to something else. */
   | { status: "mismatch"; resultHash: Hex }
   /** The transaction has no `JobRecorded` for this job from this ledger. */
   | { status: "not-found" }

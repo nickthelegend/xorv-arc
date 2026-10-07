@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getAddress, verifyTypedData, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_MAINNET, MONAD_TESTNET, networkConfig } from "@xorv/protocol/web";
+import { ARC_MAINNET, ARC_TESTNET, networkConfig } from "@xorv/protocol/web";
 import {
   PaymentError,
   classifyPaymentError,
@@ -21,7 +21,7 @@ import {
  * recover the signer and check exactly what was authorized.
  */
 
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const cfg = networkConfig(NETWORK);
 const BROKER = "http://broker.test";
 const PROVIDER = privateKeyToAccount(generatePrivateKey()).address;
@@ -243,7 +243,7 @@ describe("payQuote", () => {
     expect(auth.nonce).toMatch(/^0x[0-9a-f]{64}$/i);
   });
 
-  it("produces a signature that recovers to the buyer under USDC's Monad domain", async () => {
+  it("produces a signature that recovers to the buyer under USDC's Arc domain", async () => {
     const buyer = privateKeyToAccount(generatePrivateKey());
     let payload: { authorization: Record<string, string>; signature: Hex } | null = null;
     const { fetch } = mockBroker([requirement()], (p) => {
@@ -271,7 +271,7 @@ describe("payQuote", () => {
       validBefore: BigInt(a.validBefore!),
       nonce: a.nonce as Hex,
     };
-    const domain = { name: "USDC", version: "2", chainId: 10143, verifyingContract: cfg.usdc.address };
+    const domain = { name: "USDC", version: "2", chainId: 5042002, verifyingContract: cfg.usdc.address };
     expect(
       await verifyTypedData({ address: buyer.address, domain, types, primaryType: "TransferWithAuthorization", message, signature }),
     ).toBe(true);
@@ -380,7 +380,7 @@ describe("payQuote", () => {
   it("refuses a quote priced on another network", async () => {
     const buyer = privateKeyToAccount(generatePrivateKey());
     const err = await payQuote({
-      quote: { ...quote, network: MONAD_MAINNET },
+      quote: { ...quote, network: ARC_MAINNET },
       signer: buyer,
       network: NETWORK,
       brokerUrl: BROKER,

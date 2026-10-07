@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { verifyTypedData, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_TESTNET, jobIdHash, networkConfig, ratingTypedData, toJsonSafe } from "@xorv/protocol/web";
+import { ARC_TESTNET, jobIdHash, networkConfig, ratingTypedData, toJsonSafe } from "@xorv/protocol/web";
 import {
   RatingError,
   fetchRatingRequest,
@@ -19,7 +19,7 @@ import {
  * buyer's Privy wallet. Offline, and the signatures are real.
  */
 
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const cfg = networkConfig(NETWORK);
 const BROKER = "http://broker.test";
 const LEDGER = privateKeyToAccount(generatePrivateKey()).address;

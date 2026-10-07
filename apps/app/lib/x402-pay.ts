@@ -1,10 +1,10 @@
 /**
  * Paying a quote over x402 — the same code for every payer.
  *
- * On Monad the whole payment is one EIP-712 signature: the broker answers
+ * On Arc the whole payment is one EIP-712 signature: the broker answers
  * `402` with an `exact` USDC requirement, the buyer signs an EIP-3009
  * `TransferWithAuthorization` for exactly that amount to exactly that
- * provider, and the facilitator submits it and pays the MON gas. The buyer
+ * provider, and the facilitator submits it and pays the gas (in USDC). The buyer
  * needs USDC and nothing else, and the broker never holds the money.
  *
  * That makes this helper payer-agnostic: a Privy embedded wallet (via
@@ -14,7 +14,7 @@
  * wallet only ever signs — it never sees or holds anything else.
  *
  * Privy ships its own `useX402Fetch`, but it speaks x402 v1 over the legacy
- * `x402` package, which has no Monad network and no Monad USDC; it cannot pay
+ * `x402` package, which has no Arc network and no Arc USDC; it cannot pay
  * here. `@x402/fetch` v2 with protocol's `buyerX402Client` can.
  *
  * Kept free of React and of `window`, so tests drive it with a mocked fetch
@@ -199,7 +199,7 @@ export function describeRefusal(reason: string, status: number | null = 402): Pa
     return say("signature", "That payment authorization was already used. Request a new quote.");
   }
   if (/transaction_failed|simulation_failed|transfer_event|settle/i.test(code)) {
-    return say("settlement_failed", "The settlement transaction failed on Monad. Nothing was charged.");
+    return say("settlement_failed", "The settlement transaction failed on Arc. Nothing was charged.");
   }
   return new PaymentError("unknown", `The payment was refused: ${reason}`, { reason, status });
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_TESTNET, jobIdHash, networkConfig, ratingTypedData, toJsonSafe } from "@xorv/protocol/web";
+import { ARC_TESTNET, jobIdHash, networkConfig, ratingTypedData, toJsonSafe } from "@xorv/protocol/web";
 import {
   OnceSet,
   SlidingWindowLimiter,
@@ -23,7 +23,7 @@ import { GET as canRate, POST as rate } from "@/app/api/rate/route";
  * The broker is a stubbed global fetch; the demo key signs for real.
  */
 
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const cfg = networkConfig(NETWORK);
 const BROKER = "http://broker.test";
 const APP = "http://app.test";

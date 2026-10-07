@@ -9,7 +9,7 @@
  *
  * The flow is the same code the wallet path runs (`payQuote`), with a local
  * viem account as the signer: the same frozen-quote policy, the same refusal
- * decoding, a real EIP-3009 transfer settled on Monad. Because this route is
+ * decoding, a real EIP-3009 transfer settled on Arc. Because this route is
  * unauthenticated it is testnet-only, will not pay more than
  * `XORV_DEMO_MAX_USDC_UNITS` for any one job, and is bounded by
  * lib/server/demo-guard.ts: per-IP and deployment-wide rate limits, a rolling

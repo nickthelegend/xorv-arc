@@ -11,14 +11,14 @@ import { CLI_GUIDE_URL, REPO_URL } from "@/lib/links";
  * cards — they are answers to objections, not features, and they read better
  * as prose than as boxes.
  *
- * Install is from source until the Monad build of the CLI (0.2.0) is on npm.
+ * Install is from source until the Arc build of the CLI is on npm.
  * What npm serves under that name today is the pre-port prototype, and telling
  * a provider to install it would hand them a node that can't be paid here.
  */
 const STEPS = [
   {
-    cmd: `git clone ${REPO_URL} && cd xorv-monad`,
-    note: "Monad build of the CLI — from source until it's on npm",
+    cmd: `git clone ${REPO_URL} && cd xorv-arc`,
+    note: "Arc build of the CLI — from source until it's on npm",
   },
   { cmd: "pnpm install && pnpm build", note: "then `pnpm link --global` in packages/cli" },
   { cmd: "xorv init", note: "detects your agents, sets prices, asks where to get paid" },
@@ -29,23 +29,31 @@ const STEPS = [
 const CLAIMS = [
   [
     "You keep 100%",
-    "The protocol fee is zero, and payment goes from the buyer's wallet to yours in a single USDC transfer. Xorv is never the payee, so there is nothing to withhold.",
+    "The protocol fee is currently zero, and the escrow releases the full amount to your wallet in a single USDC transfer. Xorv never holds the money, so there is nothing to withhold.",
   ],
   [
     "No key on this machine",
     "A provider never signs anything to get paid. `xorv init` can take just an address — your Privy wallet from the Xorv app, say — and then the node stores no private key at all.",
   ],
   [
-    "You never need MON to earn",
-    "The facilitator pays the gas on every settlement, and any Monad address can receive USDC with no opt-in. The one thing you'd pay gas for is the optional identity: a single transaction.",
+    "USDC is the only token you need",
+    "Arc pays gas in USDC, so there is no second token to buy. The facilitator pays the gas on every settlement, and any Arc address receives USDC with no opt-in. The one thing you'd pay gas for is the optional identity: a single transaction, paid in USDC.",
   ],
   [
     "Reputation you keep",
-    "With an ERC-8004 identity, receipts and ratings accrue to your agent in Monad's public registries, where any marketplace can read them — not in Xorv's database.",
+    "With an ERC-8004 identity, every escrow release lands on your agent as successRate feedback in Arc's public registries, where any marketplace can read it — not in Xorv's database.",
   ],
   [
     "You set the price",
     "Per capability, per job. The cheapest matching provider wins, so the market decides what idle Claude quota is worth. `xorv test` warns if you price below cost.",
+  ],
+  [
+    "Funded before you start",
+    "The buyer's USDC is in XorvEscrow before your node spends a token of quota, so a job you take is a job that's already paid for. It's released to you the moment the result arrives.",
+  ],
+  [
+    "Cash out to any chain",
+    "Burn your Arc earnings with CCTP V2 and mint native USDC on Base or Ethereum — no bridge liquidity, no wrapped token, nothing to unwrap on the other side.",
   ],
   [
     "You stay behind NAT",
@@ -67,7 +75,8 @@ export function Earn() {
               reaches a job.
             </p>
             <p className="measure mt-4 text-[15px] leading-relaxed text-fg-2">
-              Payouts arrive in USDC, before the job runs, at the address you chose.
+              Payouts arrive in USDC the moment a job delivers, at the address you chose — the
+              buyer funded the escrow before it started.
             </p>
           </Reveal>
 

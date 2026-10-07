@@ -84,7 +84,7 @@ export function JobBrowser() {
       {matches.length === 0 ? (
         <Empty
           title={jobs.length === 0 ? "No jobs yet" : "No jobs match"}
-          hint={jobs.length === 0 ? "Post one from the board; it settles on Monad in about a second." : "Try another outcome, provider or search."}
+          hint={jobs.length === 0 ? "Post one from the board; it settles on Arc in about a second." : "Try another outcome, provider or search."}
         />
       ) : (
         <>

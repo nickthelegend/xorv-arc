@@ -112,7 +112,7 @@ export function Bento() {
         .from("[data-chip]", { opacity: 0, scale: 0.86, duration: 0.4, stagger: { each: 0.05, from: "center" }, ease: "power2.out" })
         .to("[data-chip-active]", { borderColor: "rgba(255,255,255,0.4)", color: "#fafafa", duration: 0.35 }, "-=0.15");
 
-      // 4 — settlement. The three states of a payment, in order.
+      // 4 — settlement. The states of an escrowed payment, in order.
       const settle = gsap.timeline({ scrollTrigger: once("[data-bento='settle']") });
       settle
         .from("[data-settle-row]", { opacity: 0, x: -8, duration: 0.4, stagger: 0.18, ease: "power2.out" })
@@ -127,7 +127,7 @@ export function Bento() {
       <Reveal>
         <SectionHeading
           title="What actually happens"
-          sub="Four mechanics, not four adjectives. The network routes on price and liveness, the money moves on-chain, and the record is public."
+          sub="Four mechanics, not four adjectives. The network routes on price and liveness, the money waits in an on-chain escrow, and the record is public."
         />
       </Reveal>
 
@@ -146,7 +146,7 @@ export function Bento() {
             className="h-full"
             visual={<EarningsVisual />}
             title="Earnings you can watch accrue"
-            body="Every job pays out before it runs, in full, in USDC, to the provider's own address. No payout schedule, no platform float, no key needed on the node."
+            body="Every job is funded before it runs and paid out the moment it delivers — in full, in USDC, to the provider's own address. No payout schedule, no platform float, no key needed on the node."
           />
         </Reveal>
 
@@ -163,8 +163,8 @@ export function Bento() {
           <Card
             className="h-full"
             visual={<SettleVisual />}
-            title="Settled, then receipted"
-            body="An EIP-3009 authorization the facilitator submits, so the buyer never needs MON — then a receipt event on XorvLedger, a few blocks later."
+            title="Escrowed, then released"
+            body="One EIP-3009 signature funds XorvEscrow, with the facilitator paying the gas in USDC. Delivery releases it to the provider with the result's hash; anything else refunds the buyer. Each move is tagged with the job id in Arc's Memo."
           />
         </Reveal>
       </div>
@@ -293,7 +293,8 @@ function SettleVisual() {
       {[
         ["402", "Payment Required"],
         ["sign", "buyer signs an EIP-3009 authorization"],
-        ["+gas", "facilitator submits, pays the MON"],
+        ["fund", "facilitator funds XorvEscrow, gas in USDC"],
+        ["done", "delivered — released to the provider"],
       ].map(([tag, label]) => (
         <div key={tag} data-settle-row className="flex items-center gap-3">
           <span className="mono w-[42px] shrink-0 text-right text-[10.5px] text-fg-4">{tag}</span>
@@ -312,7 +313,7 @@ function SettleVisual() {
       <div data-settle-tx className="flex items-center gap-2">
         <span className="h-1.5 w-1.5 rounded-full bg-live" />
         <span className="mono truncate text-[10.5px] text-fg-3">
-          USDC buyer → provider · 1 block · ~300 ms
+          USDC escrow → provider · final in &lt;1 s · memo xorv:release
         </span>
       </div>
     </div>

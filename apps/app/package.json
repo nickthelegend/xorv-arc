@@ -41,5 +41,5 @@
     "typescript": "^5",
     "vitest": "^3.2.4"
   },
-  "description": "Xorv job board — post AI jobs, pay per job in USDC over x402 on Monad from a Privy embedded wallet, rate the result on ERC-8004, watch it run live."
+  "description": "Xorv job board — post AI jobs, pay per job in USDC over x402 on Arc from a Privy embedded wallet (top up from Circle Gateway, or fund from Base/Ethereum over Chainlink CCIP), rate the result on ERC-8004, withdraw earnings over CCTP, watch it run live."
 }

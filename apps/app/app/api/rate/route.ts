@@ -35,7 +35,7 @@ import {
   verifyDemoReceipt,
   type DemoReceiptCheck,
 } from "@/lib/server/demo-guard";
-import { RatingError, isRelatedWalletRefusal, rateJob } from "@/lib/rating";
+import { RatingError, rateJob } from "@/lib/rating";
 import { errorMessage } from "@/lib/errors";
 
 export const runtime = "nodejs";
@@ -140,10 +140,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json({ ...rated, demo: true });
   } catch (err) {
-    // The broker's wash-rating guard: pass its refusal through as-is.
-    if (isRelatedWalletRefusal(err)) {
-      return NextResponse.json({ error: err.message, code: err.code, trustCheck: err.trustCheck }, { status: 403 });
-    }
     const status = err instanceof RatingError ? 409 : 502;
     return NextResponse.json({ error: errorMessage(err) }, { status });
   } finally {

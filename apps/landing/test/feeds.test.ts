@@ -14,6 +14,9 @@ const PROVIDER = "0x2222222222222222222222222222222222222222";
 const PAYMENT_TX = `0x${"ab".repeat(32)}`;
 const RECEIPT_TX = `0x${"cd".repeat(32)}`;
 const JOB_HASH = `0x${"ef".repeat(32)}`;
+const ESCROW = "0x3333333333333333333333333333333333333333";
+const REPUTATION = "0x4444444444444444444444444444444444444444";
+const MEMO = "0x5294E9927c3306DcBaDb03fe70b92e01cCede505";
 
 /** A receipt exactly as the broker's `legacyReceipt` serves it. */
 function receipt(overrides: Record<string, unknown> = {}, data: Record<string, unknown> = {}) {
@@ -22,7 +25,7 @@ function receipt(overrides: Record<string, unknown> = {}, data: Record<string, u
     sequence: "1200:3",
     blockNumber: 1200,
     txHash: RECEIPT_TX,
-    explorerUrl: `https://testnet.monadscan.com/tx/${RECEIPT_TX}`,
+    explorerUrl: `https://explorer.testnet.arc.io/tx/${RECEIPT_TX}`,
     at: 1_790_000_000_000,
     brokerJobId: "job_Ab3dEf9h",
     payload: {
@@ -44,9 +47,9 @@ function receipt(overrides: Record<string, unknown> = {}, data: Record<string, u
         payer: BUYER,
         providerAddress: PROVIDER,
         providerAccountId: PROVIDER,
-        asset: "0x534b2f3A21130d7a60830c2Df862319e593943A3",
+        asset: "0x3600000000000000000000000000000000000000",
         transactionId: PAYMENT_TX,
-        paymentUrl: `https://testnet.monadscan.com/tx/${PAYMENT_TX}`,
+        paymentUrl: `https://explorer.testnet.arc.io/tx/${PAYMENT_TX}`,
         ...data,
       },
     },
@@ -69,8 +72,8 @@ describe("parseReceipts", () => {
         ok: true,
         durationMs: 8400,
         at: 1_790_000_000_000,
-        explorerUrl: `https://testnet.monadscan.com/tx/${RECEIPT_TX}`,
-        paymentUrl: `https://testnet.monadscan.com/tx/${PAYMENT_TX}`,
+        explorerUrl: `https://explorer.testnet.arc.io/tx/${RECEIPT_TX}`,
+        paymentUrl: `https://explorer.testnet.arc.io/tx/${PAYMENT_TX}`,
       },
     ]);
   });
@@ -132,29 +135,43 @@ describe("parseReceipts", () => {
 describe("parseNetwork", () => {
   it("reads the fields the section shows", () => {
     const net = parseNetwork({
-      network: "eip155:10143",
-      chainId: 10143,
-      explorerUrl: "https://testnet.monadscan.com",
-      usdc: { address: "0x534b2f3A21130d7a60830c2Df862319e593943A3", url: "https://testnet.monadscan.com/token/0x534b" },
-      ledger: { address: PROVIDER, url: `https://testnet.monadscan.com/address/${PROVIDER}`, mode: "write" },
+      network: "eip155:5042002",
+      chainId: 5042002,
+      explorerUrl: "https://explorer.testnet.arc.io",
+      usdc: { address: "0x3600000000000000000000000000000000000000", url: "https://explorer.testnet.arc.io/token/0x3600000000000000000000000000000000000000" },
+      ledger: { address: PROVIDER, url: `https://explorer.testnet.arc.io/address/${PROVIDER}`, mode: "write" },
+      escrow: { address: ESCROW, url: `https://explorer.testnet.arc.io/address/${ESCROW}`, deadlineSeconds: 1800 },
+      arc: {
+        gasToken: "USDC",
+        finality: "deterministic, sub-second",
+        memo: { address: MEMO, url: `https://explorer.testnet.arc.io/address/${MEMO}`, enabled: true },
+        reputation: { address: REPUTATION, url: "javascript:alert(1)" },
+      },
       erc8004: { identity: "0x8004A818BFB912233c491871b3d84c89A494BD9e", reputation: "0x8004B663056A597Dffe9eCcC1965A193B7388713" },
       indexer: { url: "https://indexer.example/v1/graphql" },
       ai: { router: { by: "qwen", model: "qwen3.8-max" }, screener: null, verifier: { by: "kimi", model: "kimi-k3" } },
-      stats: { providersLive: 3, jobsCompleted: 12, paidUsdMicros: 1_420_000 },
+      stats: { providersLive: 3, jobsCompleted: 12, paidUsdMicros: 1_420_000, heldUsdMicros: 250_000 },
     });
     expect(net).toMatchObject({
-      network: "eip155:10143",
-      chainId: 10143,
+      network: "eip155:5042002",
+      chainId: 5042002,
       ledger: { address: PROVIDER },
+      escrow: { address: ESCROW, url: `https://explorer.testnet.arc.io/address/${ESCROW}` },
+      memo: { address: MEMO, url: `https://explorer.testnet.arc.io/address/${MEMO}` },
+      // A non-http link from the broker is dropped; the address still shows.
+      reputation: { address: REPUTATION, url: null },
       indexer: true,
       ai: { router: "qwen3.8-max", screener: null, verifier: "kimi-k3" },
-      stats: { providersLive: 3, jobsCompleted: 12, paidUsdMicros: 1_420_000 },
+      stats: { providersLive: 3, jobsCompleted: 12, paidUsdMicros: 1_420_000, heldUsdMicros: 250_000, refundedUsdMicros: 0 },
     });
   });
 
   it("returns null ledger and stats when the broker has neither", () => {
-    const net = parseNetwork({ network: "eip155:10143", ledger: null, indexer: null });
+    const net = parseNetwork({ network: "eip155:5042002", ledger: null, escrow: null, indexer: null });
     expect(net?.ledger).toBeNull();
+    expect(net?.escrow).toBeNull();
+    expect(net?.reputation).toBeNull();
+    expect(net?.memo).toBeNull();
     expect(net?.stats).toBeNull();
     expect(net?.indexer).toBe(false);
     expect(parseNetwork("not json")).toBeNull();
@@ -170,9 +187,9 @@ describe("parseLeaderboard", () => {
           rank: 1,
           label: "nivesh-macbook",
           address: PROVIDER,
-          addressUrl: `https://testnet.monadscan.com/address/${PROVIDER}`,
+          addressUrl: `https://explorer.testnet.arc.io/address/${PROVIDER}`,
           agentId: "42",
-          agentUrl: "https://testnet.monadscan.com/nft/0x8004A818BFB912233c491871b3d84c89A494BD9e/42",
+          agentUrl: "https://explorer.testnet.arc.io/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/42",
           live: true,
           jobsTotal: 9,
           jobsOk: 8,
@@ -209,7 +226,7 @@ describe("formatting", () => {
   });
 
   it("only lets http(s) URLs through", () => {
-    expect(safeUrl("https://monadscan.com/tx/0x1")).toBe("https://monadscan.com/tx/0x1");
+    expect(safeUrl("https://explorer.arc.io/tx/0x1")).toBe("https://explorer.arc.io/tx/0x1");
     expect(safeUrl("javascript:alert(1)")).toBeNull();
     expect(safeUrl(42)).toBeNull();
   });

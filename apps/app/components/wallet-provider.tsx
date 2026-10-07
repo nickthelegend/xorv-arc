@@ -6,11 +6,11 @@
  * **Privy** (when `NEXT_PUBLIC_PRIVY_APP_ID` is set) is the main path. A
  * visitor logs in with email, Google, a passkey or an existing wallet, and
  * anyone without a wallet gets an embedded EVM wallet created on login. That
- * wallet is not decoration: on Monad an x402 payment is an EIP-712 signature
- * (EIP-3009 `TransferWithAuthorization` over USDC), and so is a job rating —
- * exactly what an embedded wallet produces. So the account in the header is
- * the account that pays for jobs and the account that rates them, with no gas
- * and no browser extension.
+ * wallet is not decoration: on Arc an x402 payment is an EIP-712 signature
+ * (EIP-3009 `TransferWithAuthorization` over USDC), and so is a job rating and
+ * a Circle Gateway burn intent — exactly what an embedded wallet produces. So
+ * the account in the header is the account that pays for jobs, tops up from
+ * Gateway and rates them, with no gas and no browser extension.
  *
  * **Injected** (no Privy app id) falls back to `window.ethereum` through a viem
  * custom transport: same signer shape, same pay and rate code, the visitor's
@@ -20,11 +20,27 @@
  * and `getSigner()` returns a plain `{ address, signTypedData }` after putting
  * the wallet on the right chain — wallets refuse typed data whose domain
  * `chainId` differs from the one they are on.
+ *
+ * The few flows that send transactions themselves (a provider's CCTP
+ * withdrawal on Arc, minting it on the destination chain, a Gateway deposit on
+ * a source chain) use `getWalletClient(chain)`, which switches the wallet to
+ * that chain first. Gas on Arc is USDC; on Base/Ethereum it is ETH.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toViemAccount, useExportWallet, usePrivy, useWallets, type ConnectedWallet } from "@privy-io/react-auth";
-import { createWalletClient, custom, getAddress, type Address, type EIP1193Provider, type PublicClient } from "viem";
+import {
+  createWalletClient,
+  custom,
+  getAddress,
+  type Account,
+  type Address,
+  type Chain,
+  type EIP1193Provider,
+  type PublicClient,
+  type Transport,
+  type WalletClient,
+} from "viem";
 import { fetchBalances, publicClientFor, sameAddress, type AccountBalances } from "@xorv/protocol/web";
 import { APP_CHAIN, NETWORK, PUBLIC_RPC_URL } from "@/lib/network";
 import { errorMessage, isUserRejection } from "@/lib/errors";
@@ -35,6 +51,9 @@ import type { RatingSigner } from "@/lib/rating";
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim() ?? "";
 
 export type WalletMode = "privy" | "injected";
+
+/** A wallet client on a specific chain, with the visitor's account attached. */
+export type AppWalletClient = WalletClient<Transport, Chain, Account>;
 
 export interface WalletState {
   mode: WalletMode;
@@ -59,6 +78,8 @@ export interface WalletState {
   logout: () => Promise<void>;
   /** A signer on the app's chain. Throws when there is no wallet. */
   getSigner: () => Promise<PaymentSigner>;
+  /** A transaction-sending client on `chain` (switching the wallet to it first). Throws when there is no wallet. */
+  getWalletClient: (chain: Chain) => Promise<AppWalletClient>;
   /** Open Privy's key-export modal (embedded wallets only). */
   exportKey: (() => Promise<void>) | null;
 }
@@ -84,7 +105,8 @@ export function asRatingSigner(signer: PaymentSigner): RatingSigner {
 // ---------------------------------------------------------------------------
 
 /**
- * MON and USDC for the connected address, read straight from Monad.
+ * The connected address's USDC on Arc, both views (gas and ERC-20), read
+ * straight from Arc.
  *
  * Polled slowly (20 s) and refreshed on demand after a payment. State is keyed
  * by address so switching accounts never shows the previous one's balance.
@@ -165,6 +187,16 @@ function PrivyWalletProvider({ children }: { children: ReactNode }) {
     };
   }, [wallet]);
 
+  const getWalletClient = useCallback(
+    async (chain: Chain): Promise<AppWalletClient> => {
+      if (!wallet) throw new Error("Log in first — there's no wallet yet.");
+      if (wallet.chainId !== `eip155:${chain.id}`) await wallet.switchChain(chain.id);
+      const provider = (await wallet.getEthereumProvider()) as unknown as EIP1193Provider;
+      return createWalletClient({ account: getAddress(wallet.address), chain, transport: custom(provider) }) as unknown as AppWalletClient;
+    },
+    [wallet],
+  );
+
   const exportKey = useCallback(async () => {
     if (address) await exportWallet({ address });
   }, [address, exportWallet]);
@@ -186,9 +218,10 @@ function PrivyWalletProvider({ children }: { children: ReactNode }) {
       login: () => login(),
       logout: () => logout(),
       getSigner,
+      getWalletClient,
       exportKey: kind === "embedded" ? exportKey : null,
     }),
-    [ready, authenticated, walletsReady, address, kind, wallet, user, balances, balancesError, refreshBalances, login, logout, getSigner, exportKey],
+    [ready, authenticated, walletsReady, address, kind, wallet, user, balances, balancesError, refreshBalances, login, logout, getSigner, getWalletClient, exportKey],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -273,24 +306,33 @@ function InjectedWalletProvider({ children }: { children: ReactNode }) {
     setAddress(null);
   }, []);
 
-  const getSigner = useCallback(async (): Promise<PaymentSigner> => {
-    const eth = injectedProvider();
-    if (!eth || !address) throw new Error("Connect a wallet first.");
-    const client = createWalletClient({ account: address, chain: APP_CHAIN, transport: custom(eth) });
-    if ((await client.getChainId()) !== APP_CHAIN.id) {
-      try {
-        await client.switchChain({ id: APP_CHAIN.id });
-      } catch (err) {
-        // 4902: the wallet has never heard of Monad — add it (which also switches).
-        if (!hasCode(err, 4902)) throw err;
-        await client.addChain({ chain: APP_CHAIN });
+  const getWalletClient = useCallback(
+    async (chain: Chain): Promise<AppWalletClient> => {
+      const eth = injectedProvider();
+      if (!eth || !address) throw new Error("Connect a wallet first.");
+      const client = createWalletClient({ account: address, chain, transport: custom(eth) });
+      if ((await client.getChainId()) !== chain.id) {
+        try {
+          await client.switchChain({ id: chain.id });
+        } catch (err) {
+          // 4902: the wallet has never heard of this chain (Arc, usually) — add it (which also switches).
+          if (!hasCode(err, 4902)) throw err;
+          await client.addChain({ chain });
+        }
       }
-    }
+      return client as unknown as AppWalletClient;
+    },
+    [address],
+  );
+
+  const getSigner = useCallback(async (): Promise<PaymentSigner> => {
+    if (!address) throw new Error("Connect a wallet first.");
+    const client = await getWalletClient(APP_CHAIN);
     return {
       address,
       signTypedData: (message) => client.signTypedData({ ...message, account: address } as never),
     };
-  }, [address]);
+  }, [address, getWalletClient]);
 
   const value = useMemo<WalletState>(
     () => ({
@@ -309,9 +351,10 @@ function InjectedWalletProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       getSigner,
+      getWalletClient,
       exportKey: null,
     }),
-    [ready, available, address, connecting, error, balances, balancesError, refreshBalances, login, logout, getSigner],
+    [ready, available, address, connecting, error, balances, balancesError, refreshBalances, login, logout, getSigner, getWalletClient],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -330,4 +373,9 @@ export function useWallet(): WalletState {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error("useWallet must be used inside <WalletProvider>");
   return ctx;
+}
+
+/** The wallet, or null outside a <WalletProvider> (server-rendered panels, tests). */
+export function useOptionalWallet(): WalletState | null {
+  return useContext(Ctx);
 }

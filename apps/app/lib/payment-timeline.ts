@@ -49,13 +49,16 @@ export function paymentTimeline(job: Job): TimelineStep[] {
   const terminal = TERMINAL.has(job.status);
   const provider = job.providerLabel ?? (job.providerAddress ? shortHex(job.providerAddress) : "the provider");
   const amount = payment ? formatUsdc(payment.amount) : job.priceLabel ?? "";
+  const ccip = payment?.crossChain ?? null;
   const steps: TimelineStep[] = [];
 
   steps.push({
     key: "paid",
     title: held ? "Paid into XorvEscrow" : payment ? `Paid to ${provider}` : "Waiting for payment",
     detail: payment
-      ? held
+      ? ccip
+        ? `${amount} USDC from ${shortHex(ccip.requester)} on ${ccip.sourceChain ?? "another chain"}: CCTP moved the dollars, Chainlink CCIP carried the job, and XorvCcipReceiver funded the escrow on Arc.`
+        : held
         ? `${amount} USDC from ${shortHex(payment.payer)}, held by the contract until the job delivers. The buyer paid no gas.`
         : `${amount} USDC straight from ${shortHex(payment.payer)} to the provider. The buyer paid no gas.`
       : null,
@@ -132,7 +135,7 @@ export function paymentTimeline(job: Job): TimelineStep[] {
       steps.push({
         key: "settled",
         title: "Released on delivery",
-        detail: `Or refunded in full if the job fails. After ${new Date(held.deadline * 1000).toLocaleTimeString()} anyone can refund it, the Chainlink CRE keeper included.`,
+        detail: `Or refunded in full if the job fails. After ${new Date(held.deadline * 1000).toLocaleTimeString()} anyone can refund it, Xorv's refund keeper included.`,
         at: null,
         tx: null,
         state: "pending",
@@ -145,8 +148,8 @@ export function paymentTimeline(job: Job): TimelineStep[] {
     title: "Receipt on XorvLedger",
     detail: job.receiptTxHash
       ? job.status === "completed"
-        ? "The payment, the prompt's hash and the result's hash, public on Monad."
-        : "The payment and the outcome, public on Monad."
+        ? "The payment, the prompt's hash and the result's hash, public on Arc."
+        : "The payment and the outcome, public on Arc."
       : null,
     at: null,
     tx: job.receiptTxHash,

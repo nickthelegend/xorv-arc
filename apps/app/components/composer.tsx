@@ -14,6 +14,9 @@ import { PaymentError, classifyPaymentError, payQuote, payableQuote, type Paymen
 import { EASE, useEntrance } from "@/lib/motion";
 import { describeRouting, describeScreening, roleLabel } from "@/lib/ai";
 import { RoutingTrace } from "@/components/routing-trace";
+import { GatewayTopUp } from "@/components/gateway-topup";
+import { CcipPayPanel } from "@/components/ccip-pay";
+import { shortfallUnits } from "@/lib/arc";
 import { cn } from "@/lib/utils";
 import { usePrivateKeys } from "@/components/private-keys";
 import { LockGlyph } from "@/components/passkey-panel";
@@ -36,6 +39,12 @@ import { LockGlyph } from "@/components/passkey-panel";
  * answer to it before it leaves their machine, and after payment the job is
  * added to the buyer's encrypted history vault — the only place its prompt
  * stays readable to them, since public views redact it.
+ *
+ * Two Arc paths sit next to the plain payment. A buyer whose Arc wallet is
+ * short tops up from their Circle Gateway balance on any chain (one signed
+ * burn intent, minted on Arc by the broker) and then pays as usual. A buyer
+ * *agent* on Base or Ethereum can instead fund the job from there over
+ * Chainlink CCIP; the panel shows the exact call.
  */
 
 const ADAPTERS: ModelOption[] = [
@@ -176,8 +185,8 @@ export function Composer() {
 
   /**
    * Pay from the visitor's own wallet, in this tab. The only thing that leaves
-   * the wallet is one EIP-712 signature; the facilitator settles it on Monad
-   * and pays the gas.
+   * the wallet is one EIP-712 signature; the facilitator settles it on Arc
+   * and pays the gas (in USDC).
    */
   async function payFromWallet(): Promise<void> {
     if (!quote) return;
@@ -281,6 +290,20 @@ export function Composer() {
   }
   const offerDemo = demoReady && (walletAddress !== null || wallet.available);
 
+  // Short on Arc? Offer the Gateway top-up before the pay button, not after a refusal.
+  const shortUnits =
+    quote && walletAddress
+      ? wallet.balances
+        ? shortfallUnits(wallet.balances.usdcUnits, quote.usdcAmount)
+        : error?.kind === "insufficient_funds" && !error.demo
+          ? BigInt(quote.usdcAmount)
+          : 0n
+      : 0n;
+  const maxMicros = (() => {
+    const n = Math.round(Number(maxUsd.replace(/[$,\s]/g, "")) * 1_000_000);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+
   return (
     <div className="mx-auto max-w-2xl text-center">
       <motion.div {...rise(0)}>
@@ -308,8 +331,8 @@ export function Composer() {
 
       <motion.p {...rise(0.18)} className="mx-auto mt-3.5 max-w-md text-[14px] leading-relaxed text-fg-3">
         {info?.escrow
-          ? "Paid per job in USDC from your own wallet, settled on Monad in about a second, and held in escrow until the work is delivered: released to the person whose machine ran it, or refunded."
-          : "Paid per job in USDC from your own wallet, settled on Monad in about a second, straight to the person whose machine ran it."}
+          ? "Paid per job in USDC from your own wallet, final on Arc in under a second, and held in escrow until the work is delivered: released to the person whose machine ran it, or refunded."
+          : "Paid per job in USDC from your own wallet, final on Arc in under a second, straight to the person whose machine ran it."}
       </motion.p>
 
       {/* --- the input ------------------------------------------------------ */}
@@ -395,6 +418,15 @@ export function Composer() {
         />
       </motion.div>
 
+      <motion.div {...rise(0.285)}>
+        <CcipPayPanel
+          prompt={prompt}
+          adapter={model || null}
+          maxPriceUsdMicros={maxMicros}
+          enabled={Boolean(info?.arc?.ccip.receiver && info?.escrow)}
+        />
+      </motion.div>
+
       <motion.p {...rise(0.3)} className="mt-2.5 text-[11.5px] text-fg-4">
         ⌘↵ to quote · you see the provider and the price before anything is paid
       </motion.p>
@@ -475,6 +507,15 @@ export function Composer() {
                 </div>
               ) : null}
 
+              {shortUnits > 0n ? (
+                <GatewayTopUp
+                  shortUnits={shortUnits}
+                  onFunded={() => {
+                    setError(null);
+                  }}
+                />
+              ) : null}
+
               <button
                 type="button"
                 onClick={primary.onClick}
@@ -484,7 +525,7 @@ export function Composer() {
                 {busy === "signing"
                   ? "Approve the payment in your wallet…"
                   : busy === "settling"
-                    ? "Settling on Monad…"
+                    ? "Settling on Arc…"
                     : busy === "saving"
                       ? "Saving to your encrypted history…"
                       : primary.label}
@@ -547,8 +588,8 @@ export function Composer() {
                 >
                   Circle faucet ↗
                 </a>{" "}
-                (choose Monad Testnet){walletAddress ? <> for <span className="mono">{shortHex(walletAddress)}</span></> : null}
-                {demoReady ? ", or pay from the demo account." : "."}
+                (choose Arc Testnet){walletAddress ? <> for <span className="mono">{shortHex(walletAddress)}</span></> : null},
+                top up from Circle Gateway above{demoReady ? ", or pay from the demo account." : "."}
               </p>
             ) : null}
           </motion.div>

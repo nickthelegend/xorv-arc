@@ -4,7 +4,7 @@
  * Three sponsor models take a turn on every job: Hunyuan screens the prompt,
  * Qwen routes "Auto" requests (a tool-using agent that reads each
  * candidate's ERC-8004 reputation, XorvLedger receipts, Envio stats and
- * Nansen trust before it picks, and leaves a trace of every lookup), Kimi
+ * escrow outcomes on Arc before it picks, and leaves a trace of every lookup), Kimi
  * scores the result and writes it to ERC-8004. The protocol's wire types carry the essentials (`by`, `model`,
  * the verdict); the broker sends a little more — a display label, the
  * router's difficulty call and whether it fell back to price, each role's
@@ -156,7 +156,7 @@ export const TOOL_LABELS: Record<string, string> = {
   erc8004_reputation: "ERC-8004 reputation",
   recent_receipts: "XorvLedger receipts",
   indexer_provider_stats: "Envio indexer",
-  nansen_trust: "Nansen trust",
+  escrow_outcomes: "Escrow outcomes",
   select_provider: "Decision",
 };
 

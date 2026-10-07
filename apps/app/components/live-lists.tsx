@@ -13,16 +13,14 @@ import { Empty, Ext, Skeleton, Status } from "@/components/ui";
 import { jobOutcome } from "@/lib/payment-timeline";
 import { PrivateTag } from "@/components/passkey-panel";
 import { valueToStars } from "@/lib/rating";
-import { readTrust } from "@/lib/trust";
-import { TrustBadge, TrustSummary } from "@/components/trust";
 
 /**
  * Where a would-be provider learns to run a node. It installs from source
  * until `@xorv/cli@0.2.0` is on npm: what npm serves under that name today is
- * the Hedera prototype (0.1.0), which the Monad broker can neither register
+ * the Hedera prototype (0.1.0), which the Arc broker can neither register
  * nor pay — so the app never tells anyone to `npm i -g` it.
  */
-const PROVIDER_GUIDE_URL = "https://github.com/nickthelegend/xorv-monad/tree/main/packages/cli#readme";
+const PROVIDER_GUIDE_URL = "https://github.com/nickthelegend/xorv-arc/tree/main/packages/cli#readme";
 
 /** Match a live provider to its leaderboard row: by broker id when known, else by payout address. */
 function rowFor(provider: Provider, board: Leaderboard | null): LeaderboardRow | null {
@@ -40,8 +38,8 @@ function rowFor(provider: Provider, board: Leaderboard | null): LeaderboardRow |
  * `detailed` (the providers page) adds what a buyer weighs before trusting a
  * stranger's machine: the ERC-8004 identity, reputation from buyer ratings,
  * success rate and lifetime USDC earned — joined from the leaderboard, which
- * the Envio indexer serves when the broker has one — and the payout wallet's
- * Nansen trust signal, when the broker has Nansen on.
+ * the Envio indexer serves when the broker has one. The escrow settlement
+ * record (XorvReputation) is on each provider's own page.
  */
 export function ProviderList({ detailed = false }: { detailed?: boolean }) {
   const { data: providers, error } = usePoll<Provider[]>(useCallback(() => api.providers(), []));
@@ -88,7 +86,6 @@ export function ProviderList({ detailed = false }: { detailed?: boolean }) {
         const rank = detailed ? rowFor(p, board) : null;
         const jobs = p.stats.jobsCompleted + p.stats.jobsFailed;
         const successRate = rank?.successRate ?? (jobs > 0 ? p.stats.jobsCompleted / jobs : null);
-        const trust = readTrust(p.trust);
         return (
           <li
             key={p.id}
@@ -103,7 +100,6 @@ export function ProviderList({ detailed = false }: { detailed?: boolean }) {
                   {p.label}
                 </Link>
                 <Status status={p.status} />
-                {trust && !detailed ? <TrustBadge trust={trust} /> : null}
               </div>
               <p className="mt-1 truncate text-[12.5px] text-fg-3">
                 {p.capabilities.map((c) => c.displayName).join(" · ")}
@@ -139,7 +135,6 @@ export function ProviderList({ detailed = false }: { detailed?: boolean }) {
                   ) : null}
                 </p>
               ) : null}
-              {detailed && trust ? <TrustSummary trust={trust} providerHref={`/providers/${encodeURIComponent(p.id)}`} /> : null}
             </div>
             <div className="shrink-0 text-right">
               <p className="tnum text-[14px] font-medium text-fg">
@@ -169,7 +164,7 @@ export function JobList({ limit = 15 }: { limit?: number }) {
     return (
       <Empty
         title="No jobs yet"
-        hint="Post one above — it settles on Monad in about a second."
+        hint="Post one above — it settles on Arc in about a second."
       />
     );
   }

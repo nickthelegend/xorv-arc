@@ -45,7 +45,7 @@ export function EarningsPanel({ provider }: { provider: Provider }) {
     <section>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[13px] font-medium text-fg">Earnings</h2>
-        <span className="text-[11.5px] text-fg-4">every payout links to its transaction on Monad</span>
+        <span className="text-[11.5px] text-fg-4">every payout links to its transaction on Arc</span>
       </div>
       <Panel className="p-5">
         <div className="grid grid-cols-3 gap-4">

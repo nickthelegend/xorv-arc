@@ -22,7 +22,7 @@ export default function PageError({ error, reset }: { error: Error & { digest?: 
       <p className="text-[14px] font-medium text-fg">This page hit an error</p>
       <p className="measure mx-auto mt-1.5 text-[12.5px] leading-relaxed text-fg-3">
         Something on it failed to render. Nothing was paid or signed because of this; any payment you
-        already approved is settled on Monad and shows on the job&rsquo;s page.
+        already approved is settled on Arc and shows on the job&rsquo;s page.
       </p>
       {error.message ? <p className="mono mt-3 break-words text-[11.5px] text-fg-4">{error.message}</p> : null}
       <div className="mt-4 flex justify-center gap-2">

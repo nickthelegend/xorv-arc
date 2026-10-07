@@ -3,9 +3,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * The Qwen router's agent trace: every lookup it made before it chose a
- * provider — the candidates, an agent's ERC-8004 reputation on Monad, the
- * provider's XorvLedger receipts, its Envio indexer stats, its payout
- * wallet's Nansen trust — in the broker's own words, with explorer links
+ * provider — the candidates, an agent's ERC-8004 reputation on Arc, the
+ * provider's XorvLedger receipts, its Envio indexer stats, its escrow
+ * outcomes in XorvReputation — in the broker's own words, with explorer links
  * where an agent, a receipt or a wallet is involved.
  *
  * Renders nothing for a record without steps (the router didn't run, or an

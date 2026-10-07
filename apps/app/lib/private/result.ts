@@ -9,7 +9,7 @@
  *    server and opens nothing else;
  *  - neither → they see that it is sealed, and can still check that the
  *    ciphertext is exactly what the on-chain receipt committed to (the
- *    receipt read from Monad — lib/private/receipt-check.ts — not the
+ *    receipt read from Arc — lib/private/receipt-check.ts — not the
  *    broker's copy of the hash).
  *
  * Pure functions over the job and a keyring, so the decision is testable
@@ -111,7 +111,7 @@ export function envelopeSummary(result: string): {
  * Does `result` hash (keccak-256) to `resultHash`? What that proves depends
  * on where the hash came from: against the broker's own `job.resultHash` it
  * only shows the broker is self-consistent; against the `resultHash` in the
- * XorvLedger receipt on Monad (receipt-check.ts) it is how a private result
+ * XorvLedger receipt on Arc (receipt-check.ts) it is how a private result
  * stays accountable on-chain.
  */
 export function receiptMatchesCiphertext(result: string | null | undefined, resultHash: string | null | undefined): boolean {

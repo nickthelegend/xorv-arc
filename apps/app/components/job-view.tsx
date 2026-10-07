@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { RoutingTrace } from "@/components/routing-trace";
 import { PaymentTimeline } from "@/components/payment-timeline";
 import { SpeedReceipt } from "@/components/speed-receipt";
+import { MemoTags } from "@/components/memo-tags";
 import { jobOutcome } from "@/lib/payment-timeline";
 
 /**
@@ -308,6 +309,7 @@ export function JobView({
                   <span className="tnum">{job.payment.amount} units (6 dp)</span>
                 </Row>
                 <Row label="network">{job.payment.network === NETWORK ? NETWORK_LABEL : job.payment.network}</Row>
+                {job.payment.crossChain ? <CrossChainRows funding={job.payment.crossChain} /> : null}
                 {job.payment.escrow ? <EscrowRows escrow={job.payment.escrow} /> : null}
               </div>
 
@@ -356,10 +358,12 @@ export function JobView({
             </div>
           ) : (
             <p className="mt-2 text-[12.5px] leading-relaxed text-fg-3">
-              Settling on Monad — this usually takes about a second.
+              Settling on Arc — final in under a second.
             </p>
           )}
         </Panel>
+
+        <MemoTags job={job} />
 
         <RateJob job={job} onRated={(rating) => setJob((prev) => (prev ? { ...prev, rating } : prev))} />
 
@@ -380,7 +384,7 @@ export function JobView({
  * The broker serves both the envelope and `resultHash`, computed from the same
  * string, so matching those two only says the broker is self-consistent. The
  * claim that matters, "the receipt commits to this ciphertext", is checked
- * against the XorvLedger receipt itself, read from Monad (receipt-check.ts).
+ * against the XorvLedger receipt itself, read from Arc (receipt-check.ts).
  * Until that read succeeds, the page says only what it actually knows.
  */
 function ReceiptCommitment({ job, result, ledger }: { job: Job; result: string; ledger: string | null }) {
@@ -390,9 +394,9 @@ function ReceiptCommitment({ job, result, ledger }: { job: Job; result: string; 
   let text: string;
   let bad = false;
   if (check?.status === "match") {
-    text = "✓ the sealed envelope hashes to the resultHash in this job's XorvLedger receipt on Monad — the receipt commits to ciphertext only the buyer can open";
+    text = "✓ the sealed envelope hashes to the resultHash in this job's XorvLedger receipt on Arc — the receipt commits to ciphertext only the buyer can open";
   } else if (check?.status === "mismatch") {
-    text = "✕ the envelope served does not match the resultHash in this job's XorvLedger receipt on Monad";
+    text = "✕ the envelope served does not match the resultHash in this job's XorvLedger receipt on Arc";
     bad = true;
   } else if (!brokerMatches) {
     text = "✕ the envelope served does not hash to the value the broker reports";
@@ -566,6 +570,37 @@ function EscrowRows({ escrow }: { escrow: NonNullable<NonNullable<Job["payment"]
       ) : escrow.state === "funded" ? (
         <Row label="refundable after">
           <span className="tnum">{new Date(escrow.deadline * 1000).toLocaleTimeString()}</span>
+        </Row>
+      ) : null}
+    </>
+  );
+}
+
+/** A job funded from another chain: where from, by whom, and the CCIP message that carried it. */
+function CrossChainRows({ funding }: { funding: NonNullable<NonNullable<Job["payment"]>["crossChain"]> }) {
+  return (
+    <>
+      <Row label="funded from">
+        <span>
+          {funding.sourceChain ?? "another chain"} over Chainlink CCIP
+        </span>
+      </Row>
+      <Row label="CCIP message">
+        {funding.ccipExplorerUrl && funding.messageId ? (
+          <Ext href={funding.ccipExplorerUrl}>{shortHex(funding.messageId)} ↗</Ext>
+        ) : (
+          <span className="text-fg-4">not seen yet</span>
+        )}
+      </Row>
+      <Row label="requester">
+        <Ext href={explorerAddress(NETWORK, funding.requester)}>{shortHex(funding.requester)}</Ext>
+      </Row>
+      <Row label="via">
+        <Ext href={explorerAddress(NETWORK, funding.receiver)}>XorvCcipReceiver {shortHex(funding.receiver)}</Ext>
+      </Row>
+      {funding.refundForwardTx ? (
+        <Row label="refund forwarded">
+          <Ext href={explorerTx(NETWORK, funding.refundForwardTx)}>{shortHex(funding.refundForwardTx)} ↗</Ext>
         </Row>
       ) : null}
     </>

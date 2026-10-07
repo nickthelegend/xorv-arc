@@ -28,7 +28,6 @@ const provider = {
   stats: { jobsCompleted: 3, jobsFailed: 1, avgDurationMs: 4_000, earnedUsdcMicros: 30_000 },
   region: null,
   version: "0.2.0",
-  trust: null,
   capabilities: [{ id: "cap_1", adapter: "echo", displayName: "Echo", model: null, maxConcurrency: 1, priceUsdMicros: 10_000 }],
 } as unknown as Provider;
 

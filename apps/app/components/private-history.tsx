@@ -152,7 +152,7 @@ export function PrivateHistory() {
             <Seen who="The provider" what="Your prompt and the answer — they ran the job. The answer is encrypted on their machine before it is reported." />
             <Seen who="The broker" what="Your prompt (screening and routing need it). The answer only as a sealed envelope; your history only as ciphertext." />
             <Seen who="The public" what="That a private job happened, its price and provider. No prompt, no answer." />
-            <Seen who="Monad" what="The receipt: keccak256 of the sealed envelope, never the answer." />
+            <Seen who="Arc" what="The receipt: keccak256 of the sealed envelope, never the answer." />
           </dl>
         </Panel>
       </div>

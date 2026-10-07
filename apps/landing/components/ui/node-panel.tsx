@@ -68,7 +68,7 @@ const LINES: Line[] = [
       <>
         <Ok /> <span className="text-fg-2">ERC-8004 agent</span>{" "}
         <span className="text-fg">#42</span>{" "}
-        <span className="hidden text-fg-4 sm:inline">— receipts and ratings bind to it</span>
+        <span className="hidden text-fg-4 sm:inline">— settlements build its reputation</span>
       </>
     ),
     after: 380,
@@ -120,7 +120,7 @@ const LINES: Line[] = [
       <>
         <Ok /> <span className="text-fg-2">done in 8.4s — earned</span>{" "}
         <span className="tnum font-medium text-fg">$0.2500</span>{" "}
-        <span className="hidden text-fg-4 sm:inline">· paid before it ran</span>
+        <span className="hidden text-fg-4 sm:inline">· released from escrow</span>
       </>
     ),
   },

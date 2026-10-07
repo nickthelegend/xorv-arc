@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashTypedData, recoverTypedDataAddress, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { MONAD_TESTNET, jobIdHash, networkConfig, ratingTypedData } from "@xorv/protocol/web";
+import { ARC_TESTNET, jobIdHash, networkConfig, ratingTypedData } from "@xorv/protocol/web";
 import { jsonSafeSigner, toWalletTypedData, type TypedDataInput } from "@/lib/typed-data";
 import { payQuote, type PaymentSigner } from "@/lib/x402-pay";
 
@@ -17,7 +17,7 @@ import { payQuote, type PaymentSigner } from "@/lib/x402-pay";
  * over the original.
  */
 
-const NETWORK = MONAD_TESTNET;
+const NETWORK = ARC_TESTNET;
 const cfg = networkConfig(NETWORK);
 const BROKER = "http://broker.test";
 const LEDGER = "0x1111111111111111111111111111111111111111";

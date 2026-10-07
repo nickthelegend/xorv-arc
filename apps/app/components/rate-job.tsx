@@ -9,16 +9,13 @@ import { NETWORK } from "@/lib/network";
 import {
   RATING_STARS,
   RatingError,
-  isRelatedWalletRefusal,
   rateJob,
   starsToValue,
   valueToStars,
   type RatingReceipt,
 } from "@/lib/rating";
 import { errorMessage } from "@/lib/errors";
-import { readTrustCheck, refusalHeadline, type TrustCheck } from "@/lib/trust";
 import { Panel } from "@/components/ui";
-import { PoweredByNansen } from "@/components/trust";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,10 +35,9 @@ import { cn } from "@/lib/utils";
  * HttpOnly receipt and this asks about first; when someone else paid, this
  * says so instead of offering a button that can only fail.
  *
- * And only an independent buyer: before relaying, the broker asks Nansen
- * whether the buyer's and the provider's wallets are the same party (one
- * funded the other, a shared first funder, related wallets). If they are, the
- * rating is refused — that is shown here as what it is, not as an error.
+ * A rating is the buyer's opinion. The provider's *settlement* record (escrow
+ * releases vs. at-fault refunds) is written to the same ERC-8004 agent by
+ * XorvReputation, with no one's opinion in it: see the provider page.
  */
 export function RateJob({ job, onRated }: { job: Job; onRated: (rating: JobRating) => void }) {
   const wallet = useWallet();
@@ -52,7 +48,6 @@ export function RateJob({ job, onRated }: { job: Job; onRated: (rating: JobRatin
   const [busy, setBusy] = useState<"signing" | "relaying" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<RatingReceipt | null>(null);
-  const [refusal, setRefusal] = useState<TrustCheck | null>(null);
   const demoRating = useDemoRating(
     job.id,
     Boolean(job.status === "completed" && job.payment && demo?.configured && sameAddress(demo.address, job.payment.payer)),
@@ -71,7 +66,6 @@ export function RateJob({ job, onRated }: { job: Job; onRated: (rating: JobRatin
           <span className="tnum">{rated.value}</span>/100, recorded as ERC-8004 feedback
           {agentId ? ` for agent #${agentId}` : ""}.
         </p>
-        <IndependenceNote check={readTrustCheck(job.trustCheck)} />
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
           {rated.txHash ? <Link href={explorerTx(NETWORK, rated.txHash)}>Relay tx ↗</Link> : null}
           {agentId ? <Link href={explorerAgent(NETWORK, agentId)}>ERC-8004 feedback ↗</Link> : null}
@@ -80,13 +74,6 @@ export function RateJob({ job, onRated }: { job: Job; onRated: (rating: JobRatin
       </Panel>
     );
   }
-
-  // A refusal is remembered on the job, so it survives a reload.
-  const refused = refusal ?? (() => {
-    const check = readTrustCheck(job.trustCheck);
-    return check?.related ? check : null;
-  })();
-  if (refused) return <RatingRefused check={refused} />;
 
   if (job.status !== "completed" || !job.payment) return null;
 
@@ -156,20 +143,15 @@ export function RateJob({ job, onRated }: { job: Job; onRated: (rating: JobRatin
         const body = (await res.json().catch(() => ({}))) as RatingReceipt & {
           error?: string;
           code?: string;
-          trustCheck?: unknown;
         };
         if (!res.ok) {
-          throw new RatingError(body.error ?? `Rating failed (${res.status}).`, { code: body.code, trustCheck: body.trustCheck });
+          throw new RatingError(body.error ?? `Rating failed (${res.status}).`, { code: body.code });
         }
         result = body;
       }
       setReceipt(result);
       onRated({ value: result.value, txHash: result.txHash ?? "", feedbackURI: result.feedbackURI ?? "" });
     } catch (err) {
-      if (isRelatedWalletRefusal(err)) {
-        setRefusal(readTrustCheck(err.trustCheck) ?? { checkedAt: Date.now(), related: true, reasons: [], mode: "live", degraded: false });
-        return;
-      }
       setError(err instanceof RatingError && err.rejected ? err.message : errorMessage(err));
     } finally {
       setBusy(null);
@@ -256,47 +238,6 @@ function useDemoRating(jobId: string, ask: boolean): { canRate: boolean; message
     };
   }, [jobId, ask]);
   return ask && state?.jobId === jobId ? state : null;
-}
-
-/** A rating that passed the wash-rating guard says so. */
-function IndependenceNote({ check }: { check: TrustCheck | null }) {
-  if (!check || check.related) return null;
-  return (
-    <p className="mt-2 text-[11.5px] leading-relaxed text-fg-4">
-      {check.degraded
-        ? "Wallet independence could not be fully checked (a lookup failed), so the rating was relayed."
-        : "Buyer and provider checked as independent wallets."}{" "}
-      <PoweredByNansen />
-    </p>
-  );
-}
-
-/** The wash-rating guard said no. Calm, specific, and clear that nothing was recorded. */
-function RatingRefused({ check }: { check: TrustCheck }) {
-  return (
-    <Panel className="border-[var(--line-2)] p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[13px] font-medium text-fg">Rating refused</h2>
-        <PoweredByNansen />
-      </div>
-      <p className="mt-2 flex items-start gap-2 text-[12.5px] leading-relaxed text-fail">
-        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-fail" />
-        {refusalHeadline(check)}
-      </p>
-      {check.reasons.length ? (
-        <ul className="mt-1.5 space-y-0.5 pl-3.5 text-[12px] leading-relaxed text-fg-3">
-          {check.reasons.map((r, i) => (
-            <li key={`${r.kind}-${i}`}>{r.message}</li>
-          ))}
-        </ul>
-      ) : null}
-      <p className="mt-2.5 text-[12px] leading-relaxed text-fg-4">
-        The buyer&rsquo;s and the provider&rsquo;s wallets look like one party (related wallets, per Nansen). A rating
-        between them would let a provider buy its own reputation, so the broker only relays ratings from independent
-        buyers. Nothing was written to ERC-8004.
-      </p>
-    </Panel>
-  );
 }
 
 function Stars({ value, className }: { value: number; className?: string }) {

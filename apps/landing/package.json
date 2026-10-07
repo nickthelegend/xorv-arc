@@ -32,5 +32,5 @@
     "typescript": "^5",
     "vitest": "^3.2.4"
   },
-  "description": "Xorv marketing site — rent out idle AI capacity, get paid per job in USDC over x402 on Monad, with ERC-8004 identity and payment-backed reputation."
+  "description": "Xorv marketing site — rent out idle AI capacity, get paid per job in USDC over x402 on Arc, escrowed until delivery, with ERC-8004 identity and settlement-backed reputation."
 }
