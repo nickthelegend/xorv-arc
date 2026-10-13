@@ -31,6 +31,7 @@
     "privy:setup": "pnpm --filter @xorv/mcp privy:setup",
     "usdc": "pnpm --filter @xorv/broker usdc",
     "e2e:arc": "pnpm --filter @xorv/e2e e2e:arc",
+    "e2e:testnet": "pnpm --filter @xorv/e2e e2e:testnet",
     "broker:setup": "pnpm --filter @xorv/broker run setup",
     "fork": "bash scripts/arc-fork.sh",
     "deploy:testnet": "bash scripts/deploy.sh testnet",

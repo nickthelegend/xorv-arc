@@ -72,7 +72,12 @@ export const ROUTE_TIMEOUT_MS = ROUTE_BUDGET_MS;
 export const ROUTE_MAX_TURNS = 4;
 /** Reads per route; the terminal select_provider is not counted. */
 export const ROUTE_MAX_TOOL_CALLS = 6;
-export const ROUTE_TOOL_TIMEOUT_MS = 3_000;
+/**
+ * Per read tool. Measured on the public Arc testnet RPC: an uncached XorvLedger feed read (getLogs plus block
+ * timestamps) takes 1-2 s alone and, with three tools reading at once, regularly passed the old 3 s cap, so
+ * `recent_receipts` came back "timed out" on live jobs. The whole route is still cut against ROUTE_BUDGET_MS.
+ */
+export const ROUTE_TOOL_TIMEOUT_MS = 6_000;
 /** Reasoning tokens per turn when thinking is on. */
 export const ROUTE_THINKING_BUDGET = 256;
 /** Routing reads the head of a long prompt; that is where the task is. */
