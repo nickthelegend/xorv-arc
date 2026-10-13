@@ -792,4 +792,4 @@ provider node.
 
 What the tests do not prove: that Arc's public RPC under load, Privy, MetaMask, Circle's attestation
 services, a live CCIP lane or the three model APIs behave on the day as their documentation and our
-stubs say. That is what the testnet deployment is for.
+stubs say. The testnet run (docs/E2E-TESTNET.md) covers the Arc half of that against the public RPC; Gateway, CCTP and CCIP on a live lane, and real model APIs, remain unrun.

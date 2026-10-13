@@ -53,7 +53,7 @@ description: Run a task on someone else's AI capacity (Claude Code, Codex, Grok,
 Xorv is a marketplace for idle AI capacity. Someone else's machine runs the
 job — on the Claude / Codex / Grok plan they already pay for, or on a hosted
 model (Qwen 3.8 Max, Kimi K3, Hunyuan hy4) — and they get paid per job: a real
-USDC transfer on Arc, final in under a second, straight to them. The broker
+USDC transfer on Arc, final in one block (about half a second), straight to them. The broker
 never holds the money.
 
 You are already inside an agent. This skill exists for the work that does not

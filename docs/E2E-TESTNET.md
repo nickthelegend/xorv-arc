@@ -5,6 +5,19 @@
 Produced by `pnpm e2e:testnet`. Every value below was read back from Arc testnet (chain 5042002) or the running processes;
 every transaction hash is a real transaction, linked to the Arc explorer.
 
+## What is real and what is not
+
+- **Real, on Arc testnet (5042002)**: every transaction below, the x402/EIP-3009 funding into XorvEscrow, Arc Memo tags,
+  the release to the provider, the ERC-8004 registration and feedback, the XorvLedger receipt, the gasless rating, the
+  broker's `/api/network`, and the USDC balances. Nothing here is a fork.
+- **Mocked**: the model APIs. The screener, router and verifier roles, and the provider's `qwen` adapter, called a local
+  mock OpenAI-compatible server (`e2e/src/mock-llm.ts`) that answers by rule. So the AI job's answer and the **verification
+  score of 92 are the mock's, not a model's**. The provider's other capability, `echo`, is a labelled test capability.
+  No real Qwen, Kimi, Hunyuan or Claude call was made in this run. A broker started without the mock variables calls the
+  real endpoints, or leaves a role off when its key is unset.
+- **Not covered here** (each needs another chain): Circle Gateway, CCTP V2 withdrawals, Chainlink CCIP cross-chain jobs.
+  Deadline refunds, cancel and reassign were not run on testnet either.
+
 ## Environment
 
 | | |
@@ -169,8 +182,8 @@ every transaction hash is a real transaction, linked to the Arc explorer.
 | | Check | Detail |
 |---|---|---|
 | ✅ | AI job completed | completed |
-| ✅ | result came from the provider's qwen adapter (mock answer token) | ans-8aa220701f1373183591 |
-| ✅ | verification score | 92 |
+| ✅ | result came from the provider's qwen adapter (answered by the mock model server) | ans-8aa220701f1373183591 |
+| ✅ | verification score (the mock verifier model's, not a real model's) | 92 |
 
 ## Step log
 

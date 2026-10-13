@@ -2,7 +2,7 @@
 
 Everything here is a config switch away from testnet: the same contracts, script and services, with
 `mainnet` in place of `testnet`. **Nothing has been broadcast to mainnet** (this phase is testnet
-only, and the deployer is unfunded at the time of writing).
+only; the contracts are live on testnet, see `deployments/arc-testnet.json`).
 
 ## 1. Deploy the contracts (one command)
 

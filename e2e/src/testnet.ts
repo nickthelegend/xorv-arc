@@ -58,6 +58,24 @@ const CAPABILITIES: Capability[] = [
   { id: "qwen", adapter: "qwen", displayName: "Qwen 3.8 Max", model: "qwen3.8-max", priceUsdMicros: 40_000, maxConcurrency: 2 },
 ];
 
+// Printed at the top of docs/E2E-TESTNET.md so nobody reads the AI job as a real-model run.
+const MOCK_NOTE = [
+  "",
+  "",
+  "## What is real and what is not",
+  "",
+  "- **Real, on Arc testnet (5042002)**: every transaction below, the x402/EIP-3009 funding into XorvEscrow, Arc Memo tags,",
+  "  the release to the provider, the ERC-8004 registration and feedback, the XorvLedger receipt, the gasless rating, the",
+  "  broker's `/api/network`, and the USDC balances. Nothing here is a fork.",
+  "- **Mocked**: the model APIs. The screener, router and verifier roles, and the provider's `qwen` adapter, called a local",
+  "  mock OpenAI-compatible server (`e2e/src/mock-llm.ts`) that answers by rule. So the AI job's answer and the **verification",
+  "  score of 92 are the mock's, not a model's**. The provider's other capability, `echo`, is a labelled test capability.",
+  "  No real Qwen, Kimi, Hunyuan or Claude call was made in this run. A broker started without the mock variables calls the",
+  "  real endpoints, or leaves a role off when its key is unset.",
+  "- **Not covered here** (each needs another chain): Circle Gateway, CCTP V2 withdrawals, Chainlink CCIP cross-chain jobs.",
+  "  Deadline refunds, cancel and reassign were not run on testnet either.",
+].join("\n");
+
 const tx = (hash: string) => `[${hash}](${EXPLORER}/tx/${hash})`;
 const addr = (a: string) => `[${a}](${EXPLORER}/address/${a})`;
 
@@ -120,7 +138,7 @@ function finish(code: number): Promise<never> {
     });
     markdown = markdown
       .replace("# Xorv end-to-end run", "# Xorv end-to-end run on the public Arc testnet")
-      .replace(/Produced by .*\nforked chain or the running processes during the run; transaction hashes are local to that fork\./s, "Produced by `pnpm e2e:testnet`. Every value below was read back from Arc testnet (chain 5042002) or the running processes;\nevery transaction hash is a real transaction, linked to the Arc explorer.");
+      .replace(/Produced by .*\nforked chain or the running processes during the run; transaction hashes are local to that fork\./s, "Produced by `pnpm e2e:testnet`. Every value below was read back from Arc testnet (chain 5042002) or the running processes;\nevery transaction hash is a real transaction, linked to the Arc explorer." + MOCK_NOTE);
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, markdown);
     process.stderr.write(`\n${bold(report.summaryLine())}\n${dim(`report: ${path.relative(REPO, OUT)}`)}\n`);
@@ -409,13 +427,13 @@ async function main(): Promise<void> {
   });
 
   // 5. AI-routed job ---------------------------------------------------------------------------------------
-  await report.step("AI job: screener + router + provider's qwen adapter + verifier (all on the mock model server), escrowed and released", async (note) => {
+  await report.step("AI job: screener + router + provider's qwen adapter + verifier (all on the mock model server, no real model called), escrowed and released", async (note) => {
     const prompt = `Explain Arc testnet in two lines (testnet e2e ${Math.random().toString(36).slice(2, 8)})`;
     const quote = await api.post<QuoteResponse>("/api/quotes", { prompt, maxPriceUsdMicros: 100_000 });
     const paid = await payQuote({ quote, buyer, network: NETWORK });
     const done = await waitForJob(api, paid.jobId, 180_000);
     report.equal("AI job completed", done.status, "completed");
-    report.check("result came from the provider's qwen adapter (mock answer token)", Boolean(done.result?.includes(answerToken(prompt))), answerToken(prompt));
+    report.check("result came from the provider's qwen adapter (answered by the mock model server)", Boolean(done.result?.includes(answerToken(prompt))), answerToken(prompt));
     const job = await waitUntil("the escrow to be released", 120_000, async () => {
       const j = await getJob(api, paid.jobId);
       return j.payment?.escrow?.state === "released" ? j : null;
@@ -430,7 +448,7 @@ async function main(): Promise<void> {
     }, 500);
     const v = verified.verification as Record<string, any>;
     record("verifier: ERC-8004 giveFeedback (xorv-verified)", v.feedbackTxHash);
-    report.equal("verification score", v.score, VERIFIER_SCORE);
+    report.equal("verification score (the mock verifier model's, not a real model's)", v.score, VERIFIER_SCORE);
     note(`job ${paid.jobId}; score ${v.score}`);
   });
 

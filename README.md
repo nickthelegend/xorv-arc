@@ -44,23 +44,36 @@ earnings to any chain with **CCTP V2**.
 
 ## Arc stack
 
-Every row is exercised by real code; the "How verified" column says exactly how far. Nothing is
-deployed on a public network yet: the shared deployer is unfunded (see [Status](#status)).
+The contracts are deployed on Arc testnet (see [addresses](#contracts-and-addresses)). The "How verified"
+column says exactly how far each row went: **Live** = run on Arc testnet, with explorer links in
+[docs/E2E-TESTNET.md](docs/E2E-TESTNET.md); **Fork** = only on a local fork of Arc testnet or with Chainlink Local;
+**Not run** = needs funds on another chain. **Circle Gateway, CCTP withdrawals and Chainlink CCIP cross-chain jobs
+have not been run live**; every other row above has.
 
 | Piece | What it does in Xorv | Contract / file | How verified |
 |---|---|---|---|
-| **USDC gas + sub-second finality** | One token for everything. Buyers hold USDC only and sign typed data; the broker's facilitator, keeper and relayer pay gas in USDC (≈ 0.01 USDC of gas per job). Releases are final on inclusion. | `packages/protocol/src/chains.ts` (native USDC 18-dec / ERC-20 6-dec), `x402.ts` | Arc-fork e2e: buyer nonce stays 0, balances checked in both views |
-| **x402 in USDC** | Per-request payment for each job: `escrow` scheme (EIP-3009 `receiveWithAuthorization` into XorvEscrow, nonce bound to the job) and `exact`. The broker self-hosts the facilitator (Arc has no public one). | `packages/protocol/src/{x402,x402-client,escrow}.ts`, `services/broker/src/app.ts` | 284 protocol + 300 broker tests; Arc-fork e2e pays through Circle's real FiatToken (`"USDC"`/`"2"`) |
-| **XorvEscrow** | Holds each job's USDC: release on delivery, refund on failure/cancel/deadline, reassign to another provider. Per-job cap (100 USDC), fee capped at 5 % (0 live), owner can never move escrowed funds. | [`contracts/src/XorvEscrow.sol`](contracts/src/XorvEscrow.sol) | 62 unit + 4 invariant Foundry tests; Arc testnet fork tests with real USDC |
-| **ERC-8004 (headline)** | Every provider is an agent in Arc's Identity Registry. **XorvReputation** writes each escrow release (100) and at-fault refund (0) to the Reputation Registry (`successRate` / `xorv-escrow`, feedbackHash = job id); XorvLedger relays buyer ratings (`starred`); the Kimi verifier writes `xorv-verified`. The Qwen router reads all of it to pick providers. | [`contracts/src/XorvReputation.sol`](contracts/src/XorvReputation.sol), `packages/contracts/contracts/XorvLedger.sol`, `services/broker/src/{arc,ratings}.ts`, `services/indexer` | 18 unit tests; fork tests against the **real** Arc testnet registries; Arc-fork e2e: register → bind → release writes value 100 from XorvReputation, rating 95 from XorvLedger |
-| **Circle Gateway** | A buyer's unified USDC balance on Base, Ethereum, Arbitrum, OP, Polygon, Avalanche or Arc; one EIP-712 burn intent, Circle attests, the broker calls `GatewayMinter.gatewayMint` on Arc, then the buyer pays. | `packages/protocol/src/gateway.ts`, `services/broker/src/arc.ts` (`/api/gateway*`), app top-up panel | Unit tests (intent built and checked field by field, forged signature refused before Circle); **live against Circle's testnet Gateway API** (balances; a correctly signed intent refused only for the empty balance). Spending a real balance is user-run |
-| **Chainlink CCIP (+ CCTP)** | A buyer agent on Base/Ethereum calls `XorvCcipSender.postJob`: CCTP V2 burns the USDC to `XorvCcipReceiver` on Arc, CCIP carries the job; the receiver (allowlisted selector + sender, failed messages stored for retry) funds the escrow and the broker runs the job. `settle` releases it over CCIP too. Fees in native coin. | [`contracts/src/ccip/`](contracts/src/ccip), `services/broker/src/keeper.ts`, [`scripts/ccip-send.mjs`](scripts/ccip-send.mjs) | 21 **Chainlink Local** tests; 4 fork tests against Chainlink's real Arc testnet router (lanes to Base/Ethereum Sepolia, native-USDC fee quote, onlyRouter); Arc-fork e2e (router impersonated on the fork) runs a CCIP-funded job to release. Live sends are user-run |
-| **CCTP V2 withdrawals** | Providers burn their Arc earnings with `depositForBurn` and mint native USDC on Base/Ethereum (Iris attestation, `receiveMessage`). | `packages/protocol/src/cctp.ts`, CLI `xorv withdraw`, app provider page | Fork test and Arc-fork e2e burn through the real `TokenMessengerV2` (DepositForBurn to domain 6); the attestation + mint are user-run |
-| **Arc Memo** | Every escrow fund/release/refund/cancel/reassign and every x402 transfer goes through Arc's Memo predeploy, `memoId` = job id, memo `xorv:<action>`. Anyone can reconcile Xorv's USDC flows by job without our database. | `packages/protocol/src/{memo,x402}.ts` | Arc-fork e2e reads the `Memo` events on the funding, release and refund |
-| **Refund keeper** (replaces Chainlink CRE) | Follows every `JobFunded`; refunds jobs past their deadline from a key that is not the attester (no fault on the provider); forwards CCIP refunds to the requester. CRE is testnet-only on Arc, so this keeps mainnet trust-minimal: the refund is permissionless. | `services/broker/src/keeper.ts` | Broker tests; Arc-fork e2e: orphaned CCIP job refunded by the keeper key and forwarded |
+| **USDC gas + sub-second finality** | One token for everything. Buyers hold USDC only and sign typed data; the broker's facilitator, keeper and relayer pay gas in USDC (≈ 0.01 USDC of gas per job). Releases are final on inclusion. | `packages/protocol/src/chains.ts` (native USDC 18-dec / ERC-20 6-dec), `x402.ts` | **Live** (testnet): the buyer's nonce stays 0 and the facilitator pays gas in USDC; Arc blocks measured at about 0.5 s, and a payment takes 2 to 3 s from send to receipt. Also on the Arc fork e2e |
+| **x402 in USDC** | Per-request payment for each job: `escrow` scheme (EIP-3009 `receiveWithAuthorization` into XorvEscrow, nonce bound to the job) and `exact`. The broker self-hosts the facilitator (Arc has no public one). | `packages/protocol/src/{x402,x402-client,escrow}.ts`, `services/broker/src/app.ts` | **Live**: two jobs paid through the `escrow` scheme on testnet. Fork: Circle's real FiatToken (`"USDC"`/`"2"`). 281 protocol (+3 skipped without anvil) and 300 broker tests |
+| **XorvEscrow** | Holds each job's USDC: release on delivery, refund on failure/cancel/deadline, reassign to another provider. Per-job cap (100 USDC), fee capped at 5 % (0 live), owner can never move escrowed funds. | [`contracts/src/XorvEscrow.sol`](contracts/src/XorvEscrow.sol) | **Live**: funded and released on testnet, twice. Local: 62 unit + 4 invariant Foundry tests; fork tests with real USDC. Refund and cancel paths are fork/unit-tested only, not run on testnet |
+| **ERC-8004 (headline)** | Every provider is an agent in Arc's Identity Registry. **XorvReputation** writes each escrow release (100) and at-fault refund (0) to the Reputation Registry (`successRate` / `xorv-escrow`, feedbackHash = job id); XorvLedger relays buyer ratings (`starred`); the Kimi verifier writes `xorv-verified`. The Qwen router reads all of it to pick providers. | [`contracts/src/XorvReputation.sol`](contracts/src/XorvReputation.sol), `packages/contracts/contracts/XorvLedger.sol`, `services/broker/src/{arc,ratings}.ts`, `services/indexer` | **Live**: provider registered in the real Identity Registry, bound, release written as value 100 by XorvReputation, rating 95 relayed by XorvLedger, verifier feedback written (its score came from a mock model, see AI roles). Also 18 unit tests and fork tests against the real registries |
+| **Circle Gateway** | A buyer's unified USDC balance on Base, Ethereum, Arbitrum, OP, Polygon, Avalanche or Arc; one EIP-712 burn intent, Circle attests, the broker calls `GatewayMinter.gatewayMint` on Arc, then the buyer pays. | `packages/protocol/src/gateway.ts`, `services/broker/src/arc.ts` (`/api/gateway*`), app top-up panel | **Not run live** (needs a deposit on another chain). Unit tests (intent built and checked field by field, forged signature refused before Circle); the fork e2e called Circle's testnet Gateway API (balances; a correctly signed intent refused only for the empty balance). No deposit, no mint |
+| **Chainlink CCIP (+ CCTP)** | A buyer agent on Base/Ethereum calls `XorvCcipSender.postJob`: CCTP V2 burns the USDC to `XorvCcipReceiver` on Arc, CCIP carries the job; the receiver (allowlisted selector + sender, failed messages stored for retry) funds the escrow and the broker runs the job. `settle` releases it over CCIP too. Fees in native coin. | [`contracts/src/ccip/`](contracts/src/ccip), `services/broker/src/keeper.ts`, [`scripts/ccip-send.mjs`](scripts/ccip-send.mjs) | **XorvCcipReceiver is deployed on Arc testnet; no cross-chain message has been sent or received.** 21 Chainlink Local tests; 4 fork tests against Chainlink's real Arc testnet router (lanes to Base/Ethereum Sepolia, native-USDC fee quote, onlyRouter); fork e2e with the router impersonated. Live sends are user-run |
+| **CCTP V2 withdrawals** | Providers burn their Arc earnings with `depositForBurn` and mint native USDC on Base/Ethereum (Iris attestation, `receiveMessage`). | `packages/protocol/src/cctp.ts`, CLI `xorv withdraw`, app provider page | **Not run live.** Fork test and fork e2e burn through the real `TokenMessengerV2` (DepositForBurn to domain 6); the attestation and the mint on the destination chain are user-run |
+| **Arc Memo** | Every escrow fund/release/refund/cancel/reassign and every x402 transfer goes through Arc's Memo predeploy, `memoId` = job id, memo `xorv:<action>`. Anyone can reconcile Xorv's USDC flows by job without our database. | `packages/protocol/src/{memo,x402}.ts` | **Live**: the fund and release of both testnet jobs carry `memoId` = job id and `xorv:fund` / `xorv:release`, read back from the receipts. Refund/cancel Memo tags: fork only |
+| **Refund keeper** (replaces Chainlink CRE) | Follows every `JobFunded`; refunds jobs past their deadline from a key that is not the attester (no fault on the provider); forwards CCIP refunds to the requester. CRE is testnet-only on Arc, so this keeps mainnet trust-minimal: the refund is permissionless. | `services/broker/src/keeper.ts` | Started on testnet (reported on `/api/network`), but **no deadline refund has run live**; fork e2e: orphaned CCIP job refunded by the keeper key and forwarded. Broker tests |
 | **Envio indexer** | HyperSync on `arc-testnet` / `arc`: ledger, escrow, XorvReputation outcomes, CCIP intents, ERC-8004 feedback classified by client. | `services/indexer` | 69 tests (Envio test indexer); not deployed |
 | **USYC** | **Not used.** Escrowed USDC is held for minutes and must be releasable or refundable in the same block; parking it in a permissioned, NAV-priced fund would break that and needs Circle allowlisting of the escrow. A fee treasury could use it later. | — | — |
 | **Data Feeds / StableFX / EURC** | **Not used.** Jobs are priced and paid in USDC; there is no FX or price input on the payment path. | — | — |
+
+**AI roles: what has and has not run.** The broker has three optional model roles: a Hunyuan screen, a Qwen router
+and a Kimi verifier. Each switches on only when its API key is set (`/api/network` reports `off` and the variable to set
+otherwise), and a job runs without them. The role code runs in the test suites and in the testnet run, but **against a
+local mock model server** (`e2e/src/mock-llm.ts`, answers by rule): no recorded run in this repo called a real model API,
+so the verifier score (92) and the router's choice in [docs/E2E-TESTNET.md](docs/E2E-TESTNET.md) are the mock's, not a
+model's judgement. The same goes for the provider's `qwen` adapter in that run. In the app and the broker started without
+the mock variables, nothing is mocked: the roles call Qwen / Kimi / Hunyuan at their real endpoints with your keys, and
+providers sell whatever their adapters drive (`claude-code`, `codex`, `qwen`, `kimi`, ... on the provider's own plan or
+API key). The `echo` adapter used in the demos and the testnet check is a labelled test capability.
 
 ## How it works
 
@@ -68,7 +81,7 @@ deployed on a public network yet: the shared deployer is unfunded (see [Status](
  buyer: web app (Privy) · xorv run · MCP agent · mm xorv          buyer agent on Base / Ethereum
    │ POST /api/quotes                                                 │ XorvCcipSender.postJob
    ▼                                                                  │   ├─ CCTP V2 burn → XorvCcipReceiver (USDC)
- broker ── Hunyuan screens · Qwen routes (reads ERC-8004 + escrow     │   └─ CCIP message (the job)
+ broker ── Hunyuan screens · Qwen routes (when keys are set; reads ERC-8004 + escrow│   └─ CCIP message (the job)
    │       outcomes + receipts) ── frozen quote                       ▼
    │ 402 → buyer signs EIP-3009 (USDC, no gas)          XorvCcipReceiver (Arc) ── fundDirect ──┐
    ▼                                                                                            │
@@ -94,7 +107,10 @@ the buyer before signing; pay first, then work, with free reassignment if a prov
 
 | | Arc testnet (5042002) | Arc mainnet (5042) |
 |---|---|---|
-| XorvLedger / XorvEscrow / XorvReputation / XorvCcipReceiver | not deployed yet: `deployments/arc-testnet.json` | not deployed: `deployments/arc-mainnet.json` |
+| XorvEscrow | [`0x2827…c9eA`](https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA) | not deployed: `deployments/arc-mainnet.json` |
+| XorvReputation | [`0xe9cC…Fd89`](https://explorer.testnet.arc.io/address/0xe9cCAa186AA7D8dC8CD8c05F964a05E83296Fd89) | not deployed |
+| XorvLedger | [`0x035c…0Cbc`](https://explorer.testnet.arc.io/address/0x035c1f8CD3330EDd547230D578037Ebee4020Cbc) | not deployed |
+| XorvCcipReceiver | [`0x61d6…27B0`](https://explorer.testnet.arc.io/address/0x61d6eC91320be18A4D0499b872307fA781f427B0) | not deployed |
 | USDC (gas + payments) | `0x3600000000000000000000000000000000000000` | same |
 | ERC-8004 Identity / Reputation | `0x8004A818BFB912233c491871b3d84c89A494BD9e` / `0x8004B663056A597Dffe9eCcC1965A193B7388713` | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` / `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
 | Memo | `0x5294E9927c3306DcBaDb03fe70b92e01cCede505` | same |
@@ -122,11 +138,17 @@ ARC_ANVIL=arc-anvil ARC_FORGE=arc-forge pnpm demo        # app on http://localho
 ARC_ANVIL=arc-anvil ARC_FORGE=arc-forge pnpm e2e:arc
 ```
 
-Against Arc testnet: deploy (`XORV_BROKER_ADDRESS=0x… pnpm deploy:testnet`, writes
-`deployments/arc-testnet.json`), copy the addresses into `.env` (see [.env.example](.env.example)),
+Against Arc testnet, the contracts are already deployed (`deployments/arc-testnet.json`; to redeploy:
+`XORV_BROKER_ADDRESS=0x… pnpm deploy:testnet`). Copy the addresses into `.env` (see [.env.example](.env.example)),
 then `pnpm broker:start`, `pnpm app`, and on a provider machine
 `xorv init && xorv identity register && xorv identity bind && xorv start`.
 Faucet: <https://faucet.circle.com> ("Arc Testnet"); that USDC is also your gas.
+
+```bash
+# The check behind docs/E2E-TESTNET.md: real transactions on the public testnet, no fork (needs a gitignored
+# env file with funded testnet keys, see e2e/src/testnet.ts; costs about 0.15 USDC). The model APIs are mocked.
+pnpm build && pnpm e2e:testnet
+```
 
 ### Tests
 
@@ -134,16 +156,17 @@ Faucet: <https://faucet.circle.com> ("Arc Testnet"); that USDC is also your gas.
 |---|---|---:|
 | Solidity (escrow, reputation, CCIP via Chainlink Local) | `cd contracts && forge test` | 105 |
 | Solidity on an Arc testnet fork (real USDC, ERC-8004, CCIP router, CCTP) | `cd contracts && ARC_FORK_TESTS=1 arc-forge test --network arc` | +10 |
-| `@xorv/protocol` | `pnpm --filter @xorv/protocol test` | 284 |
-| `@xorv/broker` | `pnpm --filter @xorv/broker test` | 300 |
+| `@xorv/protocol` | `pnpm --filter @xorv/protocol test` | 281 (+3 skipped without anvil) |
+| `@xorv/broker` | `pnpm --filter @xorv/broker test` | 300 (+1 skipped) |
 | `@xorv/cli` (incl. `xorv withdraw`, `xorv identity bind`) | `pnpm --filter @xorv/cli test` | 300 |
 | `@xorv/mcp` (incl. `xorv_ccip_quote`) | `pnpm --filter @xorv/mcp test` | 93 |
 | `@xorv/mm-plugin` | `pnpm --filter @xorv/mm-plugin test` | 74 |
 | XorvLedger (Hardhat, real ERC-8004 v2 code) | `pnpm --filter @xorv/contracts test` | 48 |
-| `xorv-app` / `xorv-landing` | `pnpm --filter xorv-app test` | 148 / 24 |
+| `xorv-app` / `xorv-landing` | `pnpm --filter xorv-app test` | 153 / 24 |
 | Indexer | `cd services/indexer && pnpm check` | 69 |
 | Arc-fork end to end: escrow, Memo, ERC-8004, CCIP, keeper, CCTP, Gateway | `pnpm e2e:arc` | 68 on-chain checks |
-| Arc-fork end to end: CLI, MCP, private jobs, AI roles | `pnpm e2e` | 195 on-chain checks |
+| Arc-fork end to end: CLI, MCP, private jobs, AI roles (mock model server) | `pnpm e2e` | 195 on-chain checks |
+| **Public Arc testnet end to end** (no fork; AI roles on a mock model server) | `pnpm e2e:testnet` | 46 checks, 10 transactions: [docs/E2E-TESTNET.md](docs/E2E-TESTNET.md) |
 
 ## Deploy to mainnet
 
@@ -157,11 +180,20 @@ XORV_CONFIRM_MAINNET=1 XORV_BROKER_ADDRESS=0x… pnpm deploy:mainnet
 
 ## Status
 
-- Contracts, broker, protocol, indexer and the Arc-fork end to end are done and green.
-- **Not yet on a public network**: the shared deployer `0x0648…1FBd` holds 0 USDC on Arc testnet and
-  mainnet, so `pnpm deploy:testnet` is the one remaining step; nothing is faked in its place.
-- User-run with funds: a live CCIP send from Base Sepolia (`scripts/ccip-send.mjs`), a Gateway top-up
-  from a real deposit, a CCTP withdraw's mint on the destination chain.
+- **Deployed and checked on Arc testnet (5042002)**: XorvLedger, XorvEscrow, XorvReputation and XorvCcipReceiver
+  (6 transactions, about 0.20 USDC, `deployments/arc-testnet.json`); then `pnpm e2e:testnet` ran the core loop with
+  real transactions: x402 into the escrow (Memo-tagged), release to a provider with an ERC-8004 agent, the outcome
+  written to the Reputation Registry, a ledger receipt, a gasless rating, 46/46 checks, every transaction linked in
+  [docs/E2E-TESTNET.md](docs/E2E-TESTNET.md). The app was exercised against that deployment: see
+  [docs/JUDGE-REPORT.md](docs/JUDGE-REPORT.md) and `docs/screens/testnet/`.
+- **Not run live, because each needs funds on another chain**: Circle Gateway deposits and mints, CCTP V2
+  withdrawals, and Chainlink CCIP cross-chain jobs. They are built, unit-tested and exercised on a fork or with
+  Chainlink Local (table above); `scripts/ccip-send.mjs` is the user-run live send.
+- **Mocked in the testnet run**: the three model APIs (screener, router, verifier) and the provider's `qwen` adapter
+  answered from a local mock server, and the demo providers sell the `echo` test capability. No real model was called.
+- **Not on mainnet**: nothing has been broadcast to Arc mainnet ([MAINNET.md](MAINNET.md) has the one-command deploy).
+  The contracts are unaudited.
+- Not deployed: the Envio indexer (`services/indexer`).
 
 ## Repository map
 
