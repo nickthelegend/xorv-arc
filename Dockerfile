@@ -69,7 +69,6 @@ COPY --from=build /app/services/broker/dist services/broker/dist
 RUN mkdir -p /data && chown node:node /data
 ENV XORV_DB=/data/xorv-arc.db \
     XORV_BROKER_PORT=8402
-VOLUME ["/data"]
 
 USER node
 EXPOSE 8402

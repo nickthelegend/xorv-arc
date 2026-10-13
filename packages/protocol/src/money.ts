@@ -29,7 +29,9 @@ export const USDC_DECIMALS = 6;
 
 /** Parse a human price like "$0.01", "0.01" or 0.01 into micro-USD. */
 export function parseUsd(input: string | number): number {
-  const raw = typeof input === "number" ? input : Number(String(input).replace(/[$,\s]/g, ""));
+  const cleaned = typeof input === "number" ? null : String(input).replace(/[$,\s]/g, "");
+  if (cleaned === "") throw new Error(`invalid price: ${String(input)}`);
+  const raw = typeof input === "number" ? input : Number(cleaned);
   if (!Number.isFinite(raw) || raw < 0) {
     throw new Error(`invalid price: ${String(input)}`);
   }

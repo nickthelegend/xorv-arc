@@ -33,6 +33,9 @@ describe("parseUsd", () => {
 
   it("rejects anything that isn't a non-negative number", () => {
     expect(() => parseUsd("abc")).toThrow(/invalid price/);
+    for (const empty of ["", " ", "$", " , $"]) {
+      expect(() => parseUsd(empty)).toThrow(/invalid price/);
+    }
     expect(() => parseUsd(-1)).toThrow(/invalid price/);
     expect(() => parseUsd(Number.NaN)).toThrow(/invalid price/);
     expect(() => parseUsd(Number.POSITIVE_INFINITY)).toThrow(/invalid price/);
