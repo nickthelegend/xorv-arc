@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job } from "@/lib/api";
-import { jobOutcome, offsetLabel, paymentTimeline } from "@/lib/payment-timeline";
+import { jobOutcome, offsetLabel, paymentTimeline, utcTime } from "@/lib/payment-timeline";
 
 const T0 = 1_760_000_000_000;
 const ESCROW = "0x9a6f27d9bfdd9abd20600d8e7ea3fff6ceeab377";
@@ -137,5 +137,15 @@ describe("offsetLabel", () => {
     expect(offsetLabel(T0 + 45_000, T0)).toBe("+45 s");
     expect(offsetLabel(T0 + 600_000, T0)).toBe("+10 min");
     expect(offsetLabel(null, T0)).toBeNull();
+  });
+});
+
+describe("the refund deadline's clock", () => {
+  it("reads in UTC unless the caller passes a formatter, so server and browser agree", () => {
+    expect(utcTime(Date.UTC(2026, 9, 13, 2, 15, 28))).toBe("02:15:28 UTC");
+    const running = { ...job(), status: "running", completedAt: null, resultHash: null } as unknown as Job;
+    const funded = withEscrow(running, { state: "funded", releaseTx: undefined });
+    expect(paymentTimeline(funded)[3]!.detail).toMatch(/After \d\d:\d\d:\d\d UTC anyone can refund it/);
+    expect(paymentTimeline(funded, { formatTime: () => "LOCAL" })[3]!.detail).toContain("After LOCAL anyone");
   });
 });

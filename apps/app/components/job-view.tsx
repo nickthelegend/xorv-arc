@@ -93,6 +93,8 @@ export function JobView({
   const logRef = useRef<HTMLDivElement | null>(null);
 
   const terminal = job ? TERMINAL.has(job.status) : false;
+  // Decided once, at load: a job watched live keeps its log open when it finishes.
+  const [logOpenAtLoad] = useState(() => !terminal);
   const now = useClock(Boolean(job?.startedAt) && !job?.completedAt && !terminal);
   const info = useNetworkInfo();
   const verifierOn = Boolean(info?.ai.verifier);
@@ -158,7 +160,7 @@ export function JobView({
   const paymentTx = job.payment?.txHash ?? settlementTx ?? null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-6">
         <div>
           <div className="flex items-center justify-between gap-3">
@@ -222,16 +224,20 @@ export function JobView({
 
         <AiChecks job={job} />
 
-        <section>
-          <div className="mb-2.5 flex items-center justify-between">
-            <h2 className="text-[13px] font-medium text-fg">Execution log</h2>
+        {/* Open while the job runs; a finished job's log starts folded, so the page leads with the result and the money. */}
+        <details open={logOpenAtLoad} className="group">
+          <summary className="mb-2.5 flex cursor-pointer list-none items-center justify-between">
+            <h2 className="text-[13px] font-medium text-fg">
+              Execution log{" "}
+              <span className="text-[12px] font-normal text-fg-4 group-open:hidden">· {events.length} events, tap to show</span>
+            </h2>
             {streaming ? (
               <span className="inline-flex items-center gap-1.5 text-[11.5px] text-fg-3">
                 <span className="breathe h-1.5 w-1.5 rounded-full bg-live" />
                 streaming
               </span>
             ) : null}
-          </div>
+          </summary>
           <Panel className="p-4">
             <div ref={logRef} className="mono max-h-72 space-y-1 overflow-auto text-[12px]">
               {events.length === 0 ? (
@@ -258,7 +264,7 @@ export function JobView({
               )}
             </div>
           </Panel>
-        </section>
+        </details>
       </div>
 
       <div className="space-y-6">
@@ -569,7 +575,7 @@ function EscrowRows({ escrow }: { escrow: NonNullable<NonNullable<Job["payment"]
         </Row>
       ) : escrow.state === "funded" ? (
         <Row label="refundable after">
-          <span className="tnum">{new Date(escrow.deadline * 1000).toLocaleTimeString()}</span>
+          <span className="tnum" suppressHydrationWarning>{new Date(escrow.deadline * 1000).toLocaleTimeString()}</span>
         </Row>
       ) : null}
     </>

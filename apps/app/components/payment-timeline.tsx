@@ -5,6 +5,7 @@ import { explorerAddress, explorerTx, shortHex } from "@xorv/protocol/web";
 import type { Job } from "@/lib/api";
 import { NETWORK } from "@/lib/network";
 import { EASE, useEntrance } from "@/lib/motion";
+import { useTimeFormat } from "@/lib/hooks";
 import { offsetLabel, paymentTimeline, type StepState } from "@/lib/payment-timeline";
 import { Ext, Panel } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,8 @@ import { cn } from "@/lib/utils";
  */
 export function PaymentTimeline({ job }: { job: Job }) {
   const animate = useEntrance();
-  const steps = paymentTimeline(job);
+  const formatTime = useTimeFormat();
+  const steps = paymentTimeline(job, { formatTime });
   const start = job.payment?.settledAt ?? null;
   const escrow = job.payment?.escrow ?? null;
 
@@ -73,7 +75,7 @@ export function PaymentTimeline({ job }: { job: Job }) {
                       {step.title}
                     </p>
                     <span className="mono tnum text-[11px] text-fg-4">
-                      {step.key === "paid" && step.at ? new Date(step.at).toLocaleTimeString() : offset ?? ""}
+                      {step.key === "paid" && step.at ? formatTime(step.at) : offset ?? ""}
                     </span>
                   </div>
                   {step.detail ? <p className="mt-0.5 text-[12px] leading-relaxed text-fg-3">{step.detail}</p> : null}

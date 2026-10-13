@@ -43,7 +43,14 @@ export function offsetLabel(at: number | null, from: number | null): string | nu
   return ms < 10_000 ? `+${(ms / 1000).toFixed(1)} s` : ms < 120_000 ? `+${Math.round(ms / 1000)} s` : `+${Math.round(ms / 60_000)} min`;
 }
 
-export function paymentTimeline(job: Job): TimelineStep[] {
+export function paymentTimeline(
+  job: Job,
+  opts: {
+    /** How a clock time reads. The component passes a hydration-safe one; the default is UTC. */
+    formatTime?: (ms: number) => string;
+  } = {},
+): TimelineStep[] {
+  const formatTime = opts.formatTime ?? utcTime;
   const payment = job.payment;
   const held = payment?.escrow ?? null;
   const terminal = TERMINAL.has(job.status);
@@ -135,7 +142,7 @@ export function paymentTimeline(job: Job): TimelineStep[] {
       steps.push({
         key: "settled",
         title: "Released on delivery",
-        detail: `Or refunded in full if the job fails. After ${new Date(held.deadline * 1000).toLocaleTimeString()} anyone can refund it, Xorv's refund keeper included.`,
+        detail: `Or refunded in full if the job fails. After ${formatTime(held.deadline * 1000)} anyone can refund it, Xorv's refund keeper included.`,
         at: null,
         tx: null,
         state: "pending",
@@ -157,4 +164,9 @@ export function paymentTimeline(job: Job): TimelineStep[] {
   });
 
   return steps;
+}
+
+/** A clock time in UTC: the same on the server and in every browser. */
+export function utcTime(ms: number): string {
+  return `${new Date(ms).toISOString().slice(11, 19)} UTC`;
 }
