@@ -1,7 +1,31 @@
 {
-  "network": "testnet",
+  "blockNumber": 67016507,
+  "broker": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
   "chainId": 5042002,
-  "status": "not deployed",
-  "blocker": "the shared deployer 0x0648aDF1967692A0c991d7715b0b588452321FBd holds 0 USDC on Arc testnet; `scripts/deploy.sh testnet` (2026-10-08) simulated fine and stopped at broadcast: insufficient funds (estimated 11,995,143 gas, at most 0.72 USDC at the 60 gwei max fee; 9,221,076 gas / 0.20 USDC actually used on an Arc testnet fork)",
-  "broker": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F"
+  "contracts": {
+    "XorvCcipReceiver": "0x61d6eC91320be18A4D0499b872307fA781f427B0",
+    "XorvEscrow": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+    "XorvLedger": "0x035c1f8CD3330EDd547230D578037Ebee4020Cbc",
+    "XorvReputation": "0xe9cCAa186AA7D8dC8CD8c05F964a05E83296Fd89"
+  },
+  "deployer": "0x0648aDF1967692A0c991d7715b0b588452321FBd",
+  "external": {
+    "ccipChainSelector": "3034092155422581607",
+    "ccipRouter": "0xdE4E7FED43FAC37EB21aA0643d9852f75332eab8",
+    "cctpDomain": 26,
+    "cctpMessageTransmitterV2": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+    "cctpTokenMessengerV2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+    "erc8004IdentityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "erc8004ReputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+    "erc8004ValidationRegistry": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+    "gatewayMinter": "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B",
+    "gatewayWallet": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+    "memo": "0x5294E9927c3306DcBaDb03fe70b92e01cCede505",
+    "usdc": "0x3600000000000000000000000000000000000000"
+  },
+  "maxJobAmount": 100000000,
+  "network": "testnet",
+  "owner": "0x0648aDF1967692A0c991d7715b0b588452321FBd",
+  "status": "deployed",
+  "timestamp": 1791908663
 }
