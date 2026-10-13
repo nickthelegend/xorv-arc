@@ -16,7 +16,7 @@ import {
   type GatewayMintResult,
 } from "@/lib/arc";
 import { errorMessage, isUserRejection } from "@/lib/errors";
-import { APP_CHAIN, CHAIN_CONFIG, NETWORK, REMOTE_CHAINS, remoteByChainId, remoteViemChain } from "@/lib/network";
+import { APP_CHAIN, CHAIN_CONFIG, IS_TESTNET, NETWORK, REMOTE_CHAINS, remoteByChainId, remoteViemChain } from "@/lib/network";
 import { cn } from "@/lib/utils";
 
 type Busy = "loading" | "intent" | "signing" | "minting" | null;
@@ -115,7 +115,7 @@ export function GatewayTopUp({ shortUnits, onFunded }: { shortUnits: bigint; onF
       </div>
       <p className="mt-1 text-[12px] leading-relaxed text-fg-3">
         Fund once on any chain, pay per job on Arc. Sign one burn intent — no gas, no chain switch — and Circle mints that
-        much of your Gateway balance to this wallet on Arc in about a second.
+        much of your Gateway balance to this wallet on Arc.{IS_TESTNET ? " Not yet exercised end to end on testnet: it needs a USDC deposit on another chain." : ""}
       </p>
 
       {minted ? (

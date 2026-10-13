@@ -27,7 +27,7 @@ import {
   type PendingWithdrawal,
 } from "@/lib/cctp-withdraw";
 import { errorMessage, isUserRejection } from "@/lib/errors";
-import { APP_CHAIN, CHAIN_CONFIG, NETWORK, PUBLIC_RPC_URL, REMOTE_CHAINS, remoteByChainId, remoteViemChain } from "@/lib/network";
+import { APP_CHAIN, CHAIN_CONFIG, IS_TESTNET, NETWORK, PUBLIC_RPC_URL, REMOTE_CHAINS, remoteByChainId, remoteViemChain } from "@/lib/network";
 import { Ext, Panel, Row } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +61,7 @@ export function WithdrawPanel({ payout }: { payout: string }) {
       <p className="measure mt-1.5 text-[12.5px] leading-relaxed text-fg-3">
         Earnings arrive as USDC on Arc. CCTP burns them here and Circle mints the same amount of native USDC on the
         destination: no bridge pool, no wrapped token.
+        {IS_TESTNET ? " Not yet exercised end to end on testnet: the burn is covered on a fork, and the mint on the destination chain is user-run." : ""}
       </p>
       {mine && wallet ? (
         <WithdrawForm key={wallet.address} address={wallet.address!} />

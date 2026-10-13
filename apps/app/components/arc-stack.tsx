@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { explorerAddress, explorerToken, shortHex, type ArcStackInfo, type NetworkInfo } from "@xorv/protocol/web";
-import { NETWORK } from "@/lib/network";
+import { IS_TESTNET, NETWORK } from "@/lib/network";
 import { Ext, Panel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +47,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           name="USDC gas"
           state="on"
           what="Arc meters gas in USDC, so buyers and providers hold one token. The facilitator and the escrow's attester pay it; a buyer never does."
+          proof={{ live: true, text: "buyers sent no transaction; the facilitator paid the gas in USDC (docs/E2E-TESTNET.md)." }}
         >
           <Ext href={explorerToken(NETWORK, info.usdc.address)}>USDC {shortHex(info.usdc.address)} ↗</Ext>
         </Item>
@@ -55,6 +56,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           name="Deterministic finality"
           state="on"
           what={`${capitalize(arc.finality)}: a payment's receipt is final, so a job starts the moment its escrow funds, with no confirmations to wait out.`}
+          proof={{ live: true, text: "blocks measured at about 0.5 s; payment to receipt measured at 2 to 3 s end to end." }}
         >
           <span className="text-fg-3">see the live strip above</span>
         </Item>
@@ -63,6 +65,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           name="Memo"
           state={arc.memo.enabled ? "on" : "off"}
           what="Every escrow fund, release and refund, and every direct x402 transfer, goes through Arc's Memo with the job's id as memoId, so any USDC movement can be traced to its job on chain."
+          proof={{ live: true, text: "fund and release carry the job id and xorv:fund / xorv:release." }}
         >
           <Ext href={arc.memo.url || explorerAddress(NETWORK, arc.memo.address)}>Memo {shortHex(arc.memo.address)} ↗</Ext>
         </Item>
@@ -72,6 +75,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           state={arc.reputation ? "on" : "off"}
           offText="not configured"
           what="Each provider is an ERC-8004 agent. XorvReputation counts escrow releases and at-fault refunds and writes them to the agent as feedback tagged successRate: reputation from settlement, not reviews."
+          proof={{ live: true, text: "agent registered, bound, release written as successRate feedback, rating relayed." }}
         >
           <span className="flex flex-wrap justify-end gap-x-2">
             {arc.reputation ? <Ext href={arc.reputation.url}>XorvReputation {shortHex(arc.reputation.address)} ↗</Ext> : null}
@@ -87,6 +91,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           what={`Fund once on any chain, pay per job on Arc: a buyer short on Arc signs one burn intent (no gas, no chain switch) and the broker mints their Gateway USDC on Arc. Sources: ${arc.gateway.sources
             .map((s) => s.name)
             .join(", ")}.`}
+          proof={{ live: false, text: "needs a USDC deposit on another chain. Contracts and API calls are unit-tested; no deposit or mint has been run." }}
         >
           <span className="flex flex-wrap justify-end gap-x-2">
             {addr(arc.gateway.wallet, "wallet")}
@@ -100,6 +105,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           what={`Providers take earnings home: burn USDC on Arc (domain ${arc.cctp.domain}), Circle attests, native USDC is minted on ${arc.cctp.destinations
             .map((d) => d.name)
             .join(" or ")}. No bridge liquidity, no wrapped token.`}
+          proof={{ live: false, text: "needs a destination chain. A burn and the Iris attestation are covered on a fork only; no testnet withdrawal has been run." }}
         >
           {addr(arc.cctp.tokenMessengerV2, "TokenMessengerV2")}
         </Item>
@@ -109,6 +115,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
           state={arc.ccip.receiver ? "on" : "off"}
           offText="no receiver"
           what={`Buyer agents on ${arc.ccip.sources.map((s) => s.name).join(" or ") || "other chains"} post a job with XorvCcipSender.postJob: CCTP moves the USDC, CCIP carries the job, and XorvCcipReceiver funds the escrow here. Refunds go back to the requester.`}
+          proof={{ live: false, text: "XorvCcipReceiver is deployed on Arc; no cross-chain send has been run. Covered by Chainlink Local and fork tests." }}
         >
           <span className="flex flex-wrap justify-end gap-x-2">
             {arc.ccip.receiver ? <Ext href={arc.ccip.receiver.url}>receiver {shortHex(arc.ccip.receiver.address)} ↗</Ext> : null}
@@ -125,6 +132,7 @@ export function ArcStackPanel({ info }: { info: NetworkInfo }) {
               ? `Refunds every escrowed job still held past its deadline (${Math.round(info.escrow.deadlineSeconds / 60)} min after the quote). Anyone may call refund; this broker does it so nobody has to.`
               : "Refunds escrowed jobs past their deadline. This broker pays providers directly, so there is nothing to refund."
           }
+          proof={{ live: false, text: "the keeper runs, but no deadline refund has been executed on testnet. Refunds are covered on a fork." }}
         >
           {arc.keeper.address ? addr(arc.keeper.address) : <span className="text-fg-4">—</span>}
         </Item>
@@ -142,12 +150,15 @@ function Item({
   state,
   offText = "off",
   what,
+  proof,
   children,
 }: {
   name: string;
   state: "on" | "off";
   offText?: string;
   what: string;
+  /** How far this piece has been exercised on the public testnet; shown on testnet only. */
+  proof?: { live: boolean; text: string };
   children: ReactNode;
 }) {
   return (
@@ -159,6 +170,11 @@ function Item({
           {state === "off" ? <span className="text-[11px] text-fg-4">· {offText}</span> : null}
         </p>
         <p className="mt-0.5 pl-3.5 text-[11.5px] leading-relaxed text-fg-4">{what}</p>
+        {proof && IS_TESTNET ? (
+          <p className={cn("mt-1 pl-3.5 text-[11px] leading-relaxed", proof.live ? "text-live" : "text-fg-3")}>
+            {proof.live ? "Exercised live on Arc testnet" : "Not exercised live"} · {proof.text}
+          </p>
+        ) : null}
       </div>
       <div className={cn("mono pl-3.5 text-[11.5px] text-fg-3 sm:pl-0 sm:text-right", state === "off" && "opacity-60")}>{children}</div>
     </li>

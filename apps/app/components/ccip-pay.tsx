@@ -6,7 +6,7 @@ import { explorerAddress, formatUsdc, shortHex, xorvCcipSenderAbi, type CcipQuot
 import { api, type Quote } from "@/lib/api";
 import { postJobArgs, postJobCast } from "@/lib/arc";
 import { errorMessage } from "@/lib/errors";
-import { NETWORK, remoteByChainId, remoteViemChain } from "@/lib/network";
+import { IS_TESTNET, NETWORK, remoteByChainId, remoteViemChain } from "@/lib/network";
 import { cn } from "@/lib/utils";
 
 /**
@@ -77,6 +77,12 @@ export function CcipPayPanel({
             A refund goes back to the requester. Asking for terms reserves the provider until the escrow deadline; nothing is
             charged.
           </p>
+          {IS_TESTNET ? (
+            <p className="mt-2 text-fg-4">
+              Not yet exercised on testnet: a cross-chain send needs funds on Base or Ethereum Sepolia. XorvCcipReceiver is deployed on
+              Arc; the flow is covered by Chainlink Local and fork tests.
+            </p>
+          ) : null}
           {!enabled ? (
             <p className="mt-2 text-fg-4">This broker has no CCIP receiver configured, so it takes no cross-chain jobs.</p>
           ) : !quote ? (

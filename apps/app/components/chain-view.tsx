@@ -290,7 +290,7 @@ export function BlockView({ number }: { number: string }) {
         <ul className="border-t border-[var(--line)]">
           {(block.transactions as Hex[]).map((h) => (
             <li key={h} className="border-b border-[var(--line)] py-2">
-              <Link href={`/chain/tx/${h}`} className="mono text-[12px] text-fg-2 hover:text-fg hover:underline">
+              <Link href={`/chain/tx/${h}`} className="mono block break-all text-[12px] text-fg-2 hover:text-fg hover:underline">
                 {h}
               </Link>
             </li>

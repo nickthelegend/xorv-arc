@@ -364,7 +364,7 @@ export function JobView({
             </div>
           ) : (
             <p className="mt-2 text-[12.5px] leading-relaxed text-fg-3">
-              Settling on Arc — final in under a second.
+              Settling on Arc — one block, about half a second, to final.
             </p>
           )}
         </Panel>

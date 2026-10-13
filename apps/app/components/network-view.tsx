@@ -298,7 +298,7 @@ function AiRoles({ info }: { info: NetworkInfo }) {
     <Panel className="p-5">
       <h2 className="text-[13px] font-medium text-fg">AI roles</h2>
       <p className="measure mt-1.5 text-[12.5px] leading-relaxed text-fg-3">
-        Three models take a turn on every job. A role that is slow or down never blocks one: the router falls back
+        Up to three models take a turn on a job, each only when its API key is set on the broker. A role that is slow or down never blocks one: the router falls back
         to the price matcher and the verifier simply skips.
       </p>
       <div className="mt-3 border-t border-[var(--line)]">

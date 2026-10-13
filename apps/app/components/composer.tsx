@@ -349,8 +349,8 @@ export function Composer() {
 
       <motion.p {...rise(0.18)} className="mx-auto mt-3.5 max-w-md text-[14px] leading-relaxed text-fg-3">
         {info?.escrow
-          ? "Paid per job in USDC from your own wallet, final on Arc in under a second, and held in escrow until the work is delivered: released to the person whose machine ran it, or refunded."
-          : "Paid per job in USDC from your own wallet, final on Arc in under a second, straight to the person whose machine ran it."}
+          ? "Paid per job in USDC from your own wallet, each Arc transaction final in about half a second, and held in escrow until the work is delivered: released to the person whose machine ran it, or refunded."
+          : "Paid per job in USDC from your own wallet, each Arc transaction final in about half a second, straight to the person whose machine ran it."}
       </motion.p>
 
       {/* --- the input ------------------------------------------------------ */}

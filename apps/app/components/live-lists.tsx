@@ -164,7 +164,7 @@ export function JobList({ limit = 15 }: { limit?: number }) {
     return (
       <Empty
         title="No jobs yet"
-        hint="Post one above — it settles on Arc in about a second."
+        hint="Post one above — it settles on Arc in a few seconds."
       />
     );
   }
