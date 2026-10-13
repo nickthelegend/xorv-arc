@@ -118,6 +118,9 @@ the buyer before signing; pay first, then work, with free reassignment if a prov
 | Gateway Wallet / Minter | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` / `0x0022222ABE238Cc2C7Bb1f21003F0a260052475B` | `0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE` / `0x2222222d7164433c4C09B0b0D809a9b52C04C205` |
 | CCIP router (selector) | `0xdE4E7FED43FAC37EB21aA0643d9852f75332eab8` (3034092155422581607) | `0xB79791184973589c38e114D43Eb8E4588C283A18` (6370580034781731079) |
 
+XorvEscrow and XorvReputation have verified source on the explorer; XorvCcipReceiver and XorvLedger are deployed but not yet
+source-verified (the explorer rate-limited the verification calls).
+
 All of these live in one table, [`packages/protocol/src/chains.ts`](packages/protocol/src/chains.ts)
 (TypeScript) and [`contracts/script/ArcConfig.sol`](contracts/script/ArcConfig.sol) (Solidity).
 

@@ -109,5 +109,8 @@ was not changed. The Arc fork e2e suites were not re-run (no chain behaviour cha
   makes it cost real USDC but it is not sybil-resistant.
 - The broker is a single operator (escrow attester, facilitator, ledger writer); it can never pay anyone but the job's
   provider or the buyer, but it is not decentralised.
-- Contracts unaudited; the Envio indexer is not deployed. XorvCcipReceiver and XorvLedger explorer source verification
-  was rate-limited by the explorer at the time of this pass (see the final line of the run notes in the commit).
+- Contracts unaudited; the Envio indexer is not deployed.
+- Explorer source verification: XorvEscrow and XorvReputation are verified; XorvCcipReceiver and XorvLedger are not yet.
+  The explorer's verification endpoint answered "Too many requests" for over 40 minutes of retries. Retry with
+  `forge verify-contract <addr> <path>:<Name> --chain-id 5042002 --verifier blockscout --verifier-url https://explorer.testnet.arc.io/api/ --guess-constructor-args`
+  from `contracts/` (or `XORV_VERIFY=1 pnpm deploy:testnet`).

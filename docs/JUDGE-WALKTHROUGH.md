@@ -5,7 +5,7 @@ Everything below is on **Arc testnet (5042002)**. Nothing is on mainnet. Read
 
 ## 1. Check the chain, no setup (3 minutes)
 
-1. Contracts, all on `explorer.testnet.arc.io` (XorvEscrow and XorvReputation have verified source):
+1. Contracts, all on `explorer.testnet.arc.io` (XorvEscrow and XorvReputation have verified source; XorvCcipReceiver and XorvLedger are deployed but their source is not yet verified on the explorer):
    [XorvEscrow](https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA),
    [XorvReputation](https://explorer.testnet.arc.io/address/0xe9cCAa186AA7D8dC8CD8c05F964a05E83296Fd89),
    [XorvLedger](https://explorer.testnet.arc.io/address/0x035c1f8CD3330EDd547230D578037Ebee4020Cbc),
