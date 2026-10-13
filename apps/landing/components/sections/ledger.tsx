@@ -98,7 +98,7 @@ export function Ledger() {
       <Reveal>
         <SectionHeading
           title="Every job leaves a receipt"
-          sub="Every job's USDC is funded, released or refunded by XorvEscrow on Arc, tagged with its job id, and recorded as an event — public, final in under a second and indexed by Envio. You don't have to trust the broker's database; read the contracts yourself."
+          sub="Every job's USDC is funded, released or refunded by XorvEscrow on Arc, tagged with its job id, and recorded as an event — public, final in one block and readable straight from Arc's RPC. You don't have to trust the broker's database; read the contracts yourself."
         />
       </Reveal>
 

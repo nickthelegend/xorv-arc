@@ -53,7 +53,7 @@ const CLAIMS = [
   ],
   [
     "Cash out to any chain",
-    "Burn your Arc earnings with CCTP V2 and mint native USDC on Base or Ethereum — no bridge liquidity, no wrapped token, nothing to unwrap on the other side.",
+    "Burn your Arc earnings with CCTP V2 and mint native USDC on Base or Ethereum — no bridge liquidity, no wrapped token, nothing to unwrap on the other side. Built and fork-tested; not yet run on Arc testnet.",
   ],
   [
     "You stay behind NAT",

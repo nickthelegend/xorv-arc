@@ -24,7 +24,7 @@ const SITE = (
 ).replace(/\/+$/, "");
 const TITLE = "Xorv — rent out your idle AI capacity, get paid per job in USDC on Arc";
 const DESCRIPTION =
-  "Xorv is a decentralized AI capacity network on Arc, Circle's stablecoin chain. Rent out the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or Hunyuan capacity you already pay for and get paid per job in USDC over x402 — held in an on-chain escrow that pays you on delivery and refunds the buyer otherwise, final in under a second, with USDC as the only token anyone holds. ERC-8004 identities carry reputation written from escrow settlement, not from reviews.";
+  "Xorv is a decentralized AI capacity network on Arc, Circle's stablecoin chain. Rent out the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or Hunyuan capacity you already pay for and get paid per job in USDC over x402 — held in an on-chain escrow that pays you on delivery and refunds the buyer otherwise, each transaction final in about half a second, with USDC as the only token anyone holds. ERC-8004 identities carry reputation written from escrow settlement, not from reviews.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),

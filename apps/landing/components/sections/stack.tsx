@@ -35,7 +35,7 @@ const ARC: Item[] = [
     name: "Arc",
     role: "chain",
     href: ARC_URL,
-    body: "Circle's stablecoin chain. Gas is paid in USDC, so buyers and providers hold one token, and finality is deterministic and sub-second — a funded escrow is final the block it lands in, with no reorg to wait out.",
+    body: "Circle's stablecoin chain. Gas is paid in USDC, so buyers and providers hold one token, and blocks land about every half second and are final on inclusion — a funded escrow is final the block it lands in, with no reorg to wait out. Measured on testnet, a payment takes 2 to 3 seconds from the broker sending it to holding its receipt.",
   },
   {
     name: "x402 + XorvEscrow",
@@ -65,19 +65,19 @@ const ARC: Item[] = [
     name: "Circle Gateway",
     role: "funding",
     href: GATEWAY_URL,
-    body: "Fund once on any chain, pay per job on Arc. A buyer deposits USDC on Base, Ethereum, Arbitrum, Avalanche, OP, Polygon or Arc; when their Arc wallet is short, one signed burn intent — no gas, no chain switch — is minted on Arc in about a second.",
+    body: "Fund once on any chain, pay per job on Arc. A buyer deposits USDC on Base, Ethereum, Arbitrum, Avalanche, OP, Polygon or Arc; when their Arc wallet is short, one signed burn intent — no gas, no chain switch — is minted on Arc. Not yet exercised on testnet: it needs a USDC deposit on another chain; the signing and API calls are unit-tested.",
   },
   {
     name: "CCTP V2",
     role: "withdrawals",
     href: CCTP_URL,
-    body: "Providers burn their Arc earnings with TokenMessengerV2 and mint native USDC on Base or Ethereum. No bridge liquidity, no wrapped token — the same USDC on the other side.",
+    body: "Providers burn their Arc earnings with TokenMessengerV2 and mint native USDC on Base or Ethereum. No bridge liquidity, no wrapped token — the same USDC on the other side. Not yet exercised on testnet: the burn is covered on a fork and the mint on the destination chain is user-run.",
   },
   {
     name: "Chainlink CCIP",
     role: "cross-chain jobs",
     href: CCIP_URL,
-    body: "An agent on Base or Ethereum calls XorvCcipSender.postJob. CCTP moves the USDC, CCIP carries the job to XorvCcipReceiver on Arc, which funds XorvEscrow — and a refund is forwarded back to the chain it came from.",
+    body: "An agent on Base or Ethereum calls XorvCcipSender.postJob. CCTP moves the USDC, CCIP carries the job to XorvCcipReceiver on Arc, which funds XorvEscrow — and a refund is forwarded back to the chain it came from. XorvCcipReceiver is deployed on Arc testnet, but no cross-chain send has been run; the flow is covered by Chainlink Local and fork tests.",
   },
   {
     name: "Refund keeper",
@@ -89,13 +89,13 @@ const ARC: Item[] = [
     name: "Envio",
     role: "indexer",
     href: "https://envio.dev",
-    body: "HyperIndex follows Xorv's contracts and the ERC-8004 registries over Arc's HyperSync and derives earnings, success rate and reputation per provider. It powers the live stats and the leaderboard further down this page.",
+    body: "HyperIndex can follow Xorv's contracts and the ERC-8004 registries over Arc's HyperSync and derive earnings, success rate and reputation per provider. The indexer is in the repo with its tests but is not deployed: the stats and leaderboard further down this page are read from the broker and Arc's RPC.",
   },
   {
     name: "Privy",
     role: "wallets",
     href: "https://privy.io",
-    body: "The app's embedded wallet signs each x402 payment and each gasless rating right in the browser — sign in with email, Google or a passkey, no extension. Agents buying over MCP pay from a Privy server wallet held to a spending policy.",
+    body: "With a Privy app id configured, the app's embedded wallet signs each x402 payment and each gasless rating right in the browser — sign in with email, Google or a passkey, no extension. Without one, the app offers an injected wallet and a testnet demo account. Agents buying over MCP pay from a Privy server wallet held to a spending policy.",
   },
   {
     name: "Mera",
@@ -202,8 +202,8 @@ export function Stack() {
 
       <Reveal delay={0.1}>
         <p className="measure mx-auto mt-10 text-center text-[13.5px] leading-relaxed text-fg-3">
-          The three AI roles are switched on per broker and fail open: a model that is down or slow
-          degrades a job to the plain price matcher, and never blocks a quote or a result.
+          The three AI roles are switched on per broker, each only when its API key is set, and fail open: a model that is down or slow
+          degrades a job to the plain price matcher, and never blocks a quote or a result. The public testnet run exercised the role code against a local mock model server; no real model API was called.
         </p>
       </Reveal>
     </Section>

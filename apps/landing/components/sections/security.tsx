@@ -20,7 +20,7 @@ import { Section, SectionHeading } from "@/components/ui/kit";
  * the rest. A security section with no limits section is a sales page.
  */
 
-/** Real output. Left exactly as the terminal produced it. */
+/** What the macOS seatbelt profile answers; the sandbox tests assert the first, second and last. */
 const TRANSCRIPT = [
   { cmd: "cat ~/.xorv/config.json", err: "Operation not permitted", note: "the payout private key" },
   { cmd: "ls ~/.ssh", err: "Operation not permitted" },
@@ -50,7 +50,7 @@ export function Security() {
       <Reveal>
         <SectionHeading
           title="Strangers run code on your machine. Your keys never enter the room."
-          sub="Every job is spawned inside an OS-level sandbox — not a scratch directory with good intentions. This is a real transcript from a paid job that tried to read them."
+          sub="Every job is spawned inside an OS-level sandbox — not a scratch directory with good intentions. Below, what the macOS sandbox answers a hostile prompt. The sandbox tests assert the payout-key, ~/.ssh and write-escape refusals against a real seatbelt profile; the AWS and keychain lines are the same profile's refusals, not separately tested."
         />
       </Reveal>
 
@@ -61,7 +61,7 @@ export function Security() {
             <div className="flex items-center gap-2.5 border-b border-[var(--line)] pb-4">
               <span className="h-2 w-2 rounded-full bg-[var(--fg-4)]" aria-hidden />
               <span className="mono text-[11px] uppercase tracking-[0.14em] text-fg-4">
-                job_AyyZcTv6J2ev · hostile prompt
+                macOS seatbelt · hostile prompt
               </span>
             </div>
 

@@ -66,7 +66,7 @@ export function Hero() {
           Xorv rents it out. One command, and the Claude Code, Codex, Qwen 3.8 Max, Kimi K3 or
           Hunyuan capacity you already pay for starts taking jobs — paid per job in USDC over x402
           on Arc. The buyer&rsquo;s USDC waits in an on-chain escrow, goes to your wallet the moment
-          the job delivers and back to them if it doesn&rsquo;t, final in under a second. Providers
+          the job delivers and back to them if it doesn&rsquo;t, each Arc transaction final in about half a second. Providers
           can carry an ERC-8004 identity whose reputation is written by settlement, not reviews.
         </motion.p>
 
@@ -78,7 +78,7 @@ export function Hero() {
         </motion.div>
 
         <motion.p {...rise(0.32)} className="mono mt-7 text-[12.5px] text-fg-4">
-          USDC · EIP-3009 · sub-second finality · USDC is the only token you hold
+          USDC · EIP-3009 · ~0.5 s blocks, final on inclusion · USDC is the only token you hold
         </motion.p>
       </div>
 

@@ -137,7 +137,7 @@ export function Bento() {
             className="h-full"
             visual={<RoutingVisual />}
             title="Routed to the cheapest live node"
-            body="Providers prove liveness by heartbeat, not by a status page. Qwen 3.8 Max picks the model when you don't; the matcher sorts on price, then track record, then load."
+            body="Providers prove liveness by heartbeat, not by a status page. With a Qwen key on the broker, Qwen 3.8 Max picks the model when you don't; the matcher sorts on price, then track record, then load."
           />
         </Reveal>
 
@@ -218,6 +218,7 @@ function RoutingVisual() {
         <circle data-packet cx="168" cy="92" r="3" fill="#fafafa" opacity="0" />
         <circle data-winner cx="168" cy="92" r="9" fill="none" stroke="#4ade80" strokeWidth="1" opacity="1" />
       </svg>
+      <span className="absolute bottom-3 right-4 text-[10px] text-fg-4">illustration</span>
     </div>
   );
 }
@@ -229,7 +230,7 @@ function EarningsVisual() {
     <div data-bento="earnings" className="absolute inset-0 flex flex-col justify-end p-6">
       <div className="rounded-xl border border-[var(--line)] bg-black p-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-[11px] text-fg-4">Last 7 days</span>
+          <span className="text-[11px] text-fg-4">Last 7 days · illustration</span>
           <span data-earn-total className="tnum text-[13px] font-medium text-fg">
             $4.9100
           </span>

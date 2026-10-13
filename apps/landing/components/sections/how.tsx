@@ -13,7 +13,7 @@ const STEPS = [
   {
     n: "01",
     title: "Someone posts a job",
-    body: "A prompt, an optional model, a price ceiling — from the app, a script, an agent, or another chain over Chainlink CCIP. Hunyuan hy4 screens the prompt, Qwen 3.8 Max picks a model when the buyer didn't, and the matcher takes the cheapest live provider that can run it — liveness proven by heartbeat, not by a status page.",
+    body: "A prompt, an optional model, a price ceiling — from the app, a script, an agent, or another chain over Chainlink CCIP. On a broker with the API keys set, Hunyuan hy4 screens the prompt and Qwen 3.8 Max picks a model when the buyer didn't; either way the matcher takes the cheapest live provider that can run it — liveness proven by heartbeat, not by a status page.",
   },
   {
     n: "02",
@@ -23,12 +23,12 @@ const STEPS = [
   {
     n: "03",
     title: "The buyer signs once, and pays no gas",
-    body: "One EIP-712 signature over an EIP-3009 authorization — a message, not a transaction — whose nonce commits to the job and its deadline. The broker's facilitator submits it and pays the gas, in USDC, so the buyer only ever holds USDC. Short on Arc? Circle Gateway tops the wallet up from any chain with one more signature.",
+    body: "One EIP-712 signature over an EIP-3009 authorization — a message, not a transaction — whose nonce commits to the job and its deadline. The broker's facilitator submits it and pays the gas, in USDC, so the buyer only ever holds USDC. Short on Arc? Circle Gateway is built to top the wallet up from another chain with one more signature (not yet exercised on testnet).",
   },
   {
     n: "04",
     title: "The money waits, then the job runs",
-    body: "The USDC lands in XorvEscrow, final in under a second — Arc has no reorgs and no confirmation wait. The broker never takes custody. Then the job is dispatched to the provider's node and streams back live.",
+    body: "The USDC lands in XorvEscrow, final in one block, about half a second — Arc has no reorgs and no confirmation wait. The broker never takes custody. Then the job is dispatched to the provider's node and streams back live.",
   },
   {
     n: "05",
@@ -76,7 +76,7 @@ export function How() {
           Payment is locked <em className="not-italic text-fg-2">before</em> the job runs and
           released only after it delivers. The provider knows the money is there before spending
           real quota on a stranger&rsquo;s prompt, and the buyer knows it can only go to work that
-          arrived — on Arc that costs a single sub-second, final block. The authorization is bound
+          arrived — on Arc that costs a single ~0.5 s block, final on inclusion. The authorization is bound
           to one job and expires with the quote, so it can&rsquo;t be replayed or cashed late. A
           failed job is reassigned to another provider at no extra charge.
         </p>
