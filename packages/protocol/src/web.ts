@@ -24,6 +24,7 @@ export * from "./explorer.js";
 export * from "./evm.js";
 export * from "./ledger.js";
 export * from "./erc8004.js";
+export { XORV_ESCROW_ABI } from "./xorv-escrow.abi.js";
 export * from "./x402-client.js";
 export * from "./sealed.js";
 export * from "./vault.js";

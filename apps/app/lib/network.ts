@@ -14,6 +14,7 @@
  */
 
 import { defineChain, type Chain } from "viem";
+import { viewerPath } from "@/lib/chain-viewer";
 import {
   DEFAULT_NETWORK,
   isLocalRpc,
@@ -71,6 +72,17 @@ export const NETWORK_LABEL = `Arc ${CHAIN_CONFIG.label}`;
 
 /** Whether this app's contracts and payments run on a local chain; its timings are never Arc's. */
 export const IS_LOCAL_CHAIN = isLocalRpc(PUBLIC_RPC_URL);
+
+/**
+ * An explorer link, rewritten for where it can actually be seen: on a local
+ * fork no public explorer has the fork's transactions, so they open in the
+ * app's own viewer (/chain/...), and anything it has no page for (null) shows
+ * as text. Links to the real network (the live strip) pass `live`.
+ */
+export function explorerHref(href: string, live = false): string | null {
+  if (live || !IS_LOCAL_CHAIN || !href.startsWith(CHAIN_CONFIG.explorerUrl)) return href;
+  return viewerPath(CHAIN_CONFIG.explorerUrl, href);
+}
 
 /**
  * The RPC the live strip reads Arc's head and gas price from. Always the real

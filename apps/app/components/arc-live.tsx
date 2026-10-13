@@ -235,15 +235,15 @@ export function ArcLiveStrip() {
         {recent.map((block) => (
           <li
             key={String(block.number)}
-            className="mono rounded-md border border-live/50 bg-live/10 px-2 py-1 text-[11px] text-live"
+            className="mono rounded-md border border-live/50 bg-live/10 px-2.5 py-1 text-[12.5px] text-live"
             title={`#${block.number} · ${block.txs} tx · final`}
           >
-            <Ext href={explorerBlock(NETWORK, block.number)}>…{String(block.number).slice(-5)}</Ext>
+            <Ext live href={explorerBlock(NETWORK, block.number)}>…{String(block.number).slice(-5)}</Ext>
             <span className="ml-1 opacity-70">{block.txs}tx</span>
           </li>
         ))}
       </ol>
-      <p className="mt-2 text-[11px] text-fg-4">
+      <p className="mt-2 text-[12px] text-fg-3">
         Every chip is final the moment it appears. Interval from block timestamps (1 s resolution, so it is measured
         over a window); cost = gas price × gas, paid in USDC by whoever sends the transaction — for a job, the
         broker&rsquo;s attester, never the buyer.
@@ -256,7 +256,7 @@ function Figure({ value, label }: { value: string; label: string }) {
   return (
     <div>
       <p className="tnum text-[20px] font-semibold tracking-[-0.02em] text-fg">{value}</p>
-      <p className="text-[11.5px] text-fg-4">{label}</p>
+      <p className="text-[12px] text-fg-3">{label}</p>
     </div>
   );
 }
