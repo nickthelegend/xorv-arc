@@ -87,3 +87,19 @@ transactions (46 checks, 10 transactions, [docs/E2E-TESTNET.md](docs/E2E-TESTNET
 
 Testnet deploy (already done, `deployments/arc-testnet.json`): `XORV_BROKER_ADDRESS=0x… pnpm deploy:testnet`;
 mainnet: [MAINNET.md](MAINNET.md).
+
+<!-- MAINNET-ADDRESSES -->
+## Addresses — live mainnet and testnet
+
+Mainnet **5042: Live**, deployed 2026-10-14. [All mainnet addresses and transaction receipts](docs/MAINNET-DEPLOYMENT.md).
+Testnet **5042002: Live**; [testnet deployment](deployments/arc-testnet.json) and [testnet evidence](docs/E2E-TESTNET.md).
+
+- XorvCcipReceiver: [0xE4de2F7828d580954f8Ea36713Cf40766b37eDe1](https://explorer.arc.io/address/0xE4de2F7828d580954f8Ea36713Cf40766b37eDe1).
+- XorvEscrow: [0x6EF98A57FC25e237d25CB59B5F24a964E07e6412](https://explorer.arc.io/address/0x6EF98A57FC25e237d25CB59B5F24a964E07e6412).
+- XorvLedger: [0xc9980A3A07A6CBBfc528cf10ccf3285EF0978c3f](https://explorer.arc.io/address/0xc9980A3A07A6CBBfc528cf10ccf3285EF0978c3f).
+- XorvReputation: [0x1C2c20852A68b92ed7d95DD372575eD99728158F](https://explorer.arc.io/address/0x1C2c20852A68b92ed7d95DD372575eD99728158F).
+
+Mainnet smoke: [Smoke: fund 0.01 USDC x402 job](https://explorer.arc.io/tx/0x9a03ba343ebb24dd3f1192140c6797b56f866e756f23fffb9a70df4d4977df86).
+
+Mainnet smoke: [Smoke: release escrow and ERC-8004 reputation](https://explorer.arc.io/tx/0x35e45b72d704a59e2082c06975265c53bcc0af8ab058e6ce02f3db68b24ab8ab).
+<!-- /MAINNET-ADDRESSES -->

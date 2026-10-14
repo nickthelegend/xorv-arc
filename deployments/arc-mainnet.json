@@ -1,1 +1,31 @@
-{"network":"mainnet","chainId":5042,"status":"not deployed"}
+{
+  "blockNumber": 25937948,
+  "broker": "0x7D39aDd0821572E6F97fD4051fc24728330B9545",
+  "chainId": 5042,
+  "contracts": {
+    "XorvCcipReceiver": "0xE4de2F7828d580954f8Ea36713Cf40766b37eDe1",
+    "XorvEscrow": "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
+    "XorvLedger": "0xc9980A3A07A6CBBfc528cf10ccf3285EF0978c3f",
+    "XorvReputation": "0x1C2c20852A68b92ed7d95DD372575eD99728158F"
+  },
+  "deployer": "0x0648aDF1967692A0c991d7715b0b588452321FBd",
+  "external": {
+    "ccipChainSelector": "6370580034781731079",
+    "ccipRouter": "0xB79791184973589c38e114D43Eb8E4588C283A18",
+    "cctpDomain": 26,
+    "cctpMessageTransmitterV2": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+    "cctpTokenMessengerV2": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+    "erc8004IdentityRegistry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+    "erc8004ReputationRegistry": "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
+    "erc8004ValidationRegistry": "0x8004Cc8439f36fd5F9F049D9fF86523Df6dAAB58",
+    "gatewayMinter": "0x2222222d7164433c4C09B0b0D809a9b52C04C205",
+    "gatewayWallet": "0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE",
+    "memo": "0x5294E9927c3306DcBaDb03fe70b92e01cCede505",
+    "usdc": "0x3600000000000000000000000000000000000000"
+  },
+  "maxJobAmount": 100000000,
+  "network": "mainnet",
+  "owner": "0x0648aDF1967692A0c991d7715b0b588452321FBd",
+  "status": "deployed",
+  "timestamp": 1791988929
+}

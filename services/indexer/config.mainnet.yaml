@@ -76,21 +76,21 @@ chains:
         # From deployments/arc-mainnet.json (scripts/deploy.sh). Keep the start block at or
         # before the deploy block: the constructor's BrokerSet is how the indexer learns
         # which address is the trusted verifier (ENVIO_XORV_VERIFIER_ADDRESSES covers a later start).
-        address: "${ENVIO_XORV_LEDGER_ADDRESS:-0x0000000000000000000000000000000000000000}"
-        start_block: ${ENVIO_XORV_LEDGER_START_BLOCK:-null}
+        address: "0xc9980A3A07A6CBBfc528cf10ccf3285EF0978c3f"
+        start_block: 25937948
       - name: XorvEscrow
         # Zero indexes nothing.
-        address: "${ENVIO_XORV_ESCROW_ADDRESS:-0x0000000000000000000000000000000000000000}"
-        start_block: ${ENVIO_XORV_ESCROW_START_BLOCK:-null}
+        address: "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412"
+        start_block: 25937948
       - name: XorvReputation
-        address: "${ENVIO_XORV_REPUTATION_ADDRESS:-0x0000000000000000000000000000000000000000}"
-        start_block: ${ENVIO_XORV_ESCROW_START_BLOCK:-null}
+        address: "0x1C2c20852A68b92ed7d95DD372575eD99728158F"
+        start_block: 25937948
       - name: XorvCcipReceiver
-        address: "${ENVIO_XORV_CCIP_RECEIVER_ADDRESS:-0x0000000000000000000000000000000000000000}"
-        start_block: ${ENVIO_XORV_ESCROW_START_BLOCK:-null}
+        address: "0xE4de2F7828d580954f8Ea36713Cf40766b37eDe1"
+        start_block: 25937948
       - name: IdentityRegistry
         address: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
-        start_block: ${ENVIO_ERC8004_START_BLOCK:-null}
+        start_block: 25937948
       - name: ReputationRegistry
         address: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63"
-        start_block: ${ENVIO_ERC8004_START_BLOCK:-null}
+        start_block: 25937948

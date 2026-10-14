@@ -1,0 +1,12 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Xorv Arc mainnet provider",
+  "description": "Production provider identity. Mainnet settlement smoke used scripted output; hosted model transport is not yet validated.",
+  "active": false,
+  "registrations": [
+    {
+      "agentId": "2428",
+      "agentRegistry": "eip155:5042:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+    }
+  ]
+}
