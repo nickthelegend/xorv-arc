@@ -2,7 +2,7 @@
   "name": "xorv",
   "version": "0.2.0",
   "private": true,
-  "description": "Xorv \u2014 a decentralized AI capacity network on Arc. Rent out your idle Claude/Codex/Qwen/Kimi capacity and get paid per job in USDC over x402, through an on-chain escrow that writes every outcome to ERC-8004 reputation; fund from any chain with Circle Gateway or Chainlink CCIP, withdraw anywhere with CCTP V2.",
+  "description": "Xorv — a decentralized AI capacity network on Arc. Rent out your idle Claude/Codex/Qwen/Kimi capacity and get paid per job in USDC over x402, through an on-chain escrow that writes every outcome to ERC-8004 reputation; fund from any chain with Circle Gateway or Chainlink CCIP, withdraw anywhere with CCTP V2.",
   "license": "MIT",
   "author": "Nivesh Gajengi <niveshgajengi@gmail.com>",
   "homepage": "https://github.com/nickthelegend/xorv-arc#readme",
@@ -36,7 +36,8 @@
     "fork": "bash scripts/arc-fork.sh",
     "deploy:testnet": "bash scripts/deploy.sh testnet",
     "deploy:mainnet": "bash scripts/deploy.sh mainnet",
-    "test:contracts": "cd contracts && forge test"
+    "test:contracts": "cd contracts && forge test",
+    "dryrun:mainnet": "node --import ./scripts/dryrun-loader.mjs scripts/dryrun-mainnet.mjs"
   },
   "keywords": [
     "x402",
