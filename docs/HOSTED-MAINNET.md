@@ -18,3 +18,11 @@ The previous production artifacts were retained at `https://xorv-arc-testnet.ver
 This migration performs reads only: no wallet connection, signature, deposit, payment, withdrawal or chain broadcast. Mainnet contract/deployment transaction evidence is recorded separately in the repository. Local executors remain an on-demand demo requirement, not an always-on hosting service provisioned here.
 
 Verified: 6 routes returned HTTP 200 with no rendered testnet wording, wrong Arc explorer link or uncaught page exception. Network APIs and RPC reported chain 5042; expected mainnet contract bytecode was present. Screenshots and machine-readable results are saved beside this report.
+
+## Final hosted polish — 2026-10-15
+
+Original public mainnet video job is served from a verified deployment archive, including its result and payment/release/ledger/rating receipts. The result hash and escrow release event were checked. Historical reads persist across deployments; hosted execution stays offline. No new model calls. Pre-existing broker/protocol WIP is preserved and excluded from the deployed checkout.
+
+Re-run: `node scripts/e2e-browser-hosted-mainnet.mjs` and `node scripts/e2e-browser-hosted-proof.mjs`.
+
+No mainnet broadcasts or paid API calls. Live mainnet reads and DB writes only; fork transactions and complete wallet sign-ins: Not run.

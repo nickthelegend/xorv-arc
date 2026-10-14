@@ -1,0 +1,61 @@
+{
+  "chainId": 5042,
+  "verifiedAt": "2026-10-14T20:31:23.544Z",
+  "source": "Original public video recording; payment, release, ledger and rating receipts verified. Execution remains offline.",
+  "jobs": [
+    {
+      "id": "job_pmJeBSOfBpIQ",
+      "private": false,
+      "title": null,
+      "prompt": "Explain, in three short numbered steps, how a buyer can pay for an AI job with USDC escrow on Arc and how the provider earns reputation. Use fewer than 70 words.",
+      "adapter": null,
+      "status": "completed",
+      "createdAt": 1791999889036,
+      "assignedAt": 1791999889037,
+      "startedAt": 1791999889042,
+      "completedAt": 1791999896718,
+      "providerId": "prv_5Lyjh5jn0GjW",
+      "providerLabel": "Kimi K3 · real model",
+      "providerAddress": "0xcF02b47057aBd1e5D0D97bAE34D2BB890F47137D",
+      "providerAgentId": "2449",
+      "priceUsdMicros": 10000,
+      "priceLabel": "$0.0100",
+      "payment": {
+        "asset": "usdc",
+        "assetAddress": "0x3600000000000000000000000000000000000000",
+        "amount": "10000",
+        "network": "eip155:5042",
+        "txHash": "0xf446f300a6b6acd6880b475c28bfc6f567545cec145ed88c9bb4721b1241d434",
+        "authorizationNonce": "0x0eaf60786056e40f44ab8a2b46960a7984c97dbdbf2edc59bd22ed7539aa4284",
+        "payer": "0xEbC3d6add3cE58aAD587F9a34A1701903f326788",
+        "settledAt": 1791999886590,
+        "explorerUrl": "https://explorer.arc.io/tx/0xf446f300a6b6acd6880b475c28bfc6f567545cec145ed88c9bb4721b1241d434",
+        "payTo": "0xcF02b47057aBd1e5D0D97bAE34D2BB890F47137D",
+        "scheme": "escrow",
+        "escrow": {
+          "address": "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
+          "jobId": "0xd328638cacd189f7f312e869f2e2fa136591635b9f73324f8f9b0837d8bf8e05",
+          "deadline": 1792001652,
+          "state": "released",
+          "provider": "0xcF02b47057aBd1e5D0D97bAE34D2BB890F47137D",
+          "explorerUrl": "https://explorer.arc.io/address/0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
+          "releaseTx": "0x41a54bf45cdf70d8c21ad27ce3d9f6248781e80bae595f748b8b3b3b313fd18a",
+          "resultHash": "0x52ca6b99a8de68f03950e8299cfd5aca85b972f7ba8559cf065212f853b2c84b",
+          "settledAt": 1791999907065
+        }
+      },
+      "result": "1. **Fund the escrow:** The buyer posts the AI job and locks the agreed USDC amount into a smart contract escrow on Arc, where it stays until work is verified.\n\n2. **Deliver and verify:** The provider completes the job and submits results. Once the buyer (or an automated verifier/oracle) confirms the work meets requirements, the escrow releases USDC directly to the provider's wallet.\n\n3. **Earn reputation:** Successful settlement is recorded on-chain, building the provider's verifiable track record. Buyers can also leave ratings, and consistent successful jobs raise the provider's reputation score, attracting future work.\n\n(67 words)",
+      "resultHash": "0x52ca6b99a8de68f03950e8299cfd5aca85b972f7ba8559cf065212f853b2c84b",
+      "error": null,
+      "receiptTxHash": "0x7b6be411120fd1d8c6353b7275d63bd229bc2dd3ce90d0496227413f4aab6501",
+      "routing": null,
+      "screening": null,
+      "verification": null,
+      "rating": {
+        "value": 100,
+        "txHash": "0xdcef3e16ff2479a2d20ae308f35a2bc896f959aeb6a407a0799d6f33fc9e99ca"
+      },
+      "eventCount": 12
+    }
+  ]
+}

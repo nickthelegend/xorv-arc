@@ -1,3 +1,4 @@
+import archive from "../../../../../deployments/hosted-jobs-mainnet.json";
 import { JobView } from "@/components/job-view";
 import { PageHeader } from "@/components/ui";
 import { api, type Job } from "@/lib/api";
@@ -19,7 +20,9 @@ export default async function JobPage({
   // event stream never connects; the client takes over from there.
   let initial: Job | null = null;
   try {
-    initial = await api.job(id);
+    initial = process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" && process.env.NEXT_PUBLIC_XORV_NETWORK === "eip155:5042"
+      ? (archive.jobs.find(job => job.id === id) as unknown as Job | undefined) ?? null
+      : await api.job(id);
   } catch {
     initial = null;
   }

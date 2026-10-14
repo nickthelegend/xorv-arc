@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import testnet from '../../../../../deployments/arc-testnet.json';
 import mainnet from '../../../../../deployments/arc-mainnet.json';
+import archive from '../../../../../deployments/hosted-jobs-mainnet.json';
 const isMainnet = process.env.NEXT_PUBLIC_XORV_NETWORK === 'eip155:5042';
 const deployment = isMainnet ? mainnet : testnet;
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,12 @@ export async function GET(request: NextRequest) {
   stats:{providersLive:0,providersConnected:0,capacity:0},
  });
  if(route === '/api/providers') return NextResponse.json({...common,providers:[]});
- if(route === '/api/jobs') return NextResponse.json({...common,jobs:[]});
+ const jobs = isMainnet ? archive.jobs : [];
+ if(route === '/api/jobs') return NextResponse.json({...common,source:'verified-video-archive',jobs});
+ if(route.startsWith('/api/jobs/')) {
+  const job=jobs.find(j=>j.id===route.slice('/api/jobs/'.length));
+  return job ? NextResponse.json({...common,source:'verified-video-archive',job}) : NextResponse.json({error:'Archived job not found'},{status:404});
+ }
  if(route === '/api/leaderboard') return NextResponse.json({...common,source:'unavailable',providers:[]});
  if(route === '/api/ledger') return NextResponse.json({...common,source:'unavailable',events:[]});
  return NextResponse.json({...common,error:offline},{status:503});

@@ -7,7 +7,8 @@
       "/providers",
       "/network",
       "/chain",
-      "/private"
+      "/private",
+      "/jobs/job_pmJeBSOfBpIQ"
     ],
     "name": "xorv",
     "contract": "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
