@@ -64,7 +64,7 @@ export function ProviderList({ detailed = false }: { detailed?: boolean }) {
   if (providers.length === 0) {
     return (
       <Empty
-        title="No providers online"
+        title={process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? "Provider broker offline" : "No providers online"}
         hint={
           <>
             Run one on any machine with Claude Code, Codex, Qwen Code or a Qwen / Kimi / Hunyuan API key:
@@ -163,8 +163,8 @@ export function JobList({ limit = 15 }: { limit?: number }) {
   if (jobs.length === 0) {
     return (
       <Empty
-        title="No jobs yet"
-        hint="Post one above — it settles on Arc in a few seconds."
+        title={process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? "Job history unavailable" : "No jobs yet"}
+        hint={process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? "Start the local broker to browse and execute jobs." : "Post one above — it settles on Arc in a few seconds."}
       />
     );
   }

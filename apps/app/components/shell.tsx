@@ -168,7 +168,7 @@ function NetworkFoot() {
           )}
         />
         <span className="text-[12px] text-fg-3">
-          {down ? "broker offline" : info ? `${info.stats.providersLive} provider(s) live` : "connecting…"}
+          {process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? "execution offline" : down ? "broker offline" : info ? `${info.stats.providersLive} provider(s) live` : "connecting…"}
         </span>
       </div>
       <LiveHeartbeat />
