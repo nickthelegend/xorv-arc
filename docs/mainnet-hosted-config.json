@@ -1,0 +1,18 @@
+[
+  {
+    "base": "https://xorv-arc.vercel.app",
+    "routes": [
+      "/",
+      "/jobs",
+      "/providers",
+      "/network",
+      "/chain",
+      "/private"
+    ],
+    "name": "xorv",
+    "contract": "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
+    "networkApi": "https://xorv-arc.vercel.app/api/network",
+    "requireVisible": true,
+    "requireExplorer": true
+  }
+]

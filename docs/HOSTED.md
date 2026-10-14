@@ -1,3 +1,5 @@
+Current production: **Arc mainnet**. See [mainnet hosting and browser checks](HOSTED-MAINNET.md). The report below is historical testnet evidence.
+
 # XORV — Vercel / Live testnet
 
 LEAD: RUN THESE

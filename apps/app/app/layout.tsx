@@ -24,7 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={inter.variable}>
       <body className="antialiased">
         <Providers>
-          <Shell>{process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? <p role="status" className="mb-6 rounded-lg border border-white/20 p-4 text-sm">Live Arc testnet explorer · job execution is offline. Start the local broker and a provider to run jobs. You can draft a prompt and inspect deployed contracts here; no hosted payment is taken.</p> : null}{children}</Shell>
+          <Shell>{process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? <p role="status" className="mb-6 rounded-lg border border-white/20 p-4 text-sm">Live Arc {process.env.NEXT_PUBLIC_XORV_NETWORK === "eip155:5042" ? "mainnet" : "testnet"} explorer · job execution is offline. Start the local broker and a provider to run jobs. You can draft a prompt and inspect deployed contracts here; no hosted payment is taken.</p> : null}{children}</Shell>
         </Providers>
       </body>
     </html>

@@ -1,0 +1,83 @@
+{
+  "at": "2026-10-14T15:35:41.536Z",
+  "base": "https://xorv-arc.vercel.app",
+  "readOnly": true,
+  "results": [
+    {
+      "route": "/",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "route": "/jobs",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "route": "/providers",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "route": "/network",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "route": "/chain",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "route": "/private",
+      "status": 200,
+      "bodyPresent": true,
+      "testnetWording": [],
+      "wrongExplorerLinks": [],
+      "pageErrors": [],
+      "ok": true
+    },
+    {
+      "networkApi": "https://xorv-arc.vercel.app/api/network",
+      "status": 200,
+      "chainId": 5042,
+      "ok": true
+    },
+    {
+      "rpc": "https://rpc.mainnet.arc.io",
+      "chainId": 5042,
+      "contract": "0x6EF98A57FC25e237d25CB59B5F24a964E07e6412",
+      "codeBytes": 11244,
+      "ok": true
+    },
+    {
+      "mainnetVisible": true,
+      "explorerLinks": 6,
+      "ok": true
+    },
+    {
+      "mobileOverflow": false,
+      "ok": true
+    }
+  ]
+}

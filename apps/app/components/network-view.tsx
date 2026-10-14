@@ -42,7 +42,7 @@ export function NetworkView() {
   const { data: ratings } = usePoll(useCallback(() => api.ledger("ratings", 8), []), 15_000);
   const { data: board } = usePoll<Leaderboard>(useCallback(() => api.leaderboard(), []), 30_000);
 
-  if (process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1") return <div className="space-y-6"><ArcLiveStrip /><Panel className="p-5"><h2>Live testnet contracts</h2><p className="my-3">The broker is offline. Job history and provider reputation summaries require its indexer; they are not reported as zero activity on the network.</p>{info?.ledger ? <p><Ext href={info.ledger.url}>XorvLedger · {info.ledger.address}</Ext></p> : null}{info?.escrow ? <p><Ext href={info.escrow.url}>XorvEscrow · {info.escrow.address}</Ext></p> : null}<p className="mt-3">Use the Chain page to inspect current blocks, receipts and contract balances directly from Arc testnet.</p></Panel></div>;
+  if (process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1") return <div className="space-y-6"><ArcLiveStrip /><Panel className="p-5"><h2>Live Arc contracts</h2><p className="my-3">The broker is offline. Job history and provider reputation summaries require its indexer; they are not reported as zero activity on the network.</p>{info?.ledger ? <p><Ext href={info.ledger.url}>XorvLedger · {info.ledger.address}</Ext></p> : null}{info?.escrow ? <p><Ext href={info.escrow.url}>XorvEscrow · {info.escrow.address}</Ext></p> : null}<p className="mt-3">Use the Chain page to inspect current blocks, receipts and contract balances directly from the configured Arc network.</p></Panel></div>;
   if (error && !info) return <Empty title="Can't reach the broker" hint="The network page reads everything through it." />;
 
   const indexed = Boolean(info?.indexer);

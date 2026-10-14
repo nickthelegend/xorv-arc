@@ -1,6 +1,6 @@
 # Xorv on Arc: DoraHacks Arc Microgrants submission
 
-Live: https://xorv-arc.vercel.app (Arc testnet)
+Live: https://xorv-arc.vercel.app (Arc mainnet, chain 5042)
 
 
 > **This build supersedes the earlier Kazuo-on-Arc testnet build** (`nickthelegend/kazuo-arc`, x402
@@ -103,3 +103,7 @@ Mainnet smoke: [Smoke: fund 0.01 USDC x402 job](https://explorer.arc.io/tx/0x9a0
 
 Mainnet smoke: [Smoke: release escrow and ERC-8004 reputation](https://explorer.arc.io/tx/0x35e45b72d704a59e2082c06975265c53bcc0af8ab058e6ce02f3db68b24ab8ab).
 <!-- /MAINNET-ADDRESSES -->
+
+## Production network
+
+Live: https://xorv-arc.vercel.app (Arc mainnet, chain 5042). [Hosted mainnet checks](docs/HOSTED-MAINNET.md). Hosted mode is read-only; job execution requires the on-demand local broker and provider. No mainnet transactions were sent during the hosting migration. Historical **Live (testnet)** and **Fork** results below are separate evidence, not production smoke results.
