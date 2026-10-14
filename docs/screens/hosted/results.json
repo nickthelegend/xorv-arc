@@ -1,0 +1,138 @@
+{
+  "at": "2026-10-14T14:55:14.090Z",
+  "base": "https://xorv-arc.vercel.app",
+  "results": [
+    {
+      "route": "/",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "route": "/jobs",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "route": "/providers",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "route": "/network",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "route": "/chain",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "route": "/private",
+      "status": 200,
+      "consoleErrors": [],
+      "badImages": [],
+      "bodyPresent": true,
+      "ok": true
+    },
+    {
+      "draftPrompt": true,
+      "ok": true
+    },
+    {
+      "api": "/api/network",
+      "status": 200,
+      "ok": true,
+      "data": {
+        "mode": "read-only",
+        "available": false,
+        "reason": "Start the local broker and a provider to run live jobs. Hosted execution is disabled.",
+        "network": "eip155:5042002",
+        "chainId": 5042002,
+        "label": "testnet",
+        "explorerUrl": "https://explorer.testnet.arc.io",
+        "usdc": {
+          "address": "0x3600000000000000000000000000000000000000",
+          "symbol": "USDC",
+          "decimals": 6
+        },
+        "facilitator": {
+          "mode": "self",
+          "description": "Start the local broker and a provider to run live jobs. Hosted execution is disabled.",
+          "address": null,
+          "available": false
+        },
+        "ledger": {
+          "address": "0x035c1f8CD3330EDd547230D578037Ebee4020Cbc",
+          "url": "https://explorer.testnet.arc.io/address/0x035c1f8CD3330EDd547230D578037Ebee4020Cbc"
+        },
+        "escrow": {
+          "address": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+          "url": "https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+          "deadlineSeconds": 300
+        },
+        "erc8004": {
+          "identity": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          "reputation": "0x8004B663056A597Dffe9eCcC1965A193B7388713"
+        },
+        "indexer": null,
+        "ai": {
+          "router": null,
+          "screener": null,
+          "verifier": null
+        },
+        "stats": {
+          "providersLive": 0,
+          "providersConnected": 0,
+          "capacity": 0
+        }
+      }
+    },
+    {
+      "api": "/api/providers",
+      "status": 200,
+      "ok": true,
+      "data": {
+        "mode": "read-only",
+        "available": false,
+        "reason": "Start the local broker and a provider to run live jobs. Hosted execution is disabled.",
+        "providers": []
+      }
+    },
+    {
+      "api": "/api/jobs",
+      "status": 200,
+      "ok": true,
+      "data": {
+        "mode": "read-only",
+        "available": false,
+        "reason": "Start the local broker and a provider to run live jobs. Hosted execution is disabled.",
+        "jobs": []
+      }
+    },
+    {
+      "liveTestnetContract": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+      "codeBytes": 11244,
+      "ok": true
+    },
+    {
+      "mobileOverflow": false,
+      "ok": true
+    }
+  ]
+}

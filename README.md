@@ -1,6 +1,6 @@
 <div align="center">
 
-Live: https://app-production-909f.up.railway.app (Arc testnet)
+Live: https://xorv-arc.vercel.app (Arc testnet)
 
 
 <img src="brand/xorv-logo.svg" alt="Xorv" width="260" />

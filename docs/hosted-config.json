@@ -1,0 +1,18 @@
+{
+  "base": "https://xorv-arc.vercel.app",
+  "routes": [
+    "/",
+    "/jobs",
+    "/providers",
+    "/network",
+    "/chain",
+    "/private"
+  ],
+  "api": [
+    "/api/network",
+    "/api/providers",
+    "/api/jobs"
+  ],
+  "contract": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+  "draftPrompt": true
+}

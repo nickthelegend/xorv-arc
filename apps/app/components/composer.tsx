@@ -408,7 +408,7 @@ export function Composer() {
           <button
             type="button"
             onClick={getQuote}
-            disabled={busy !== null || prompt.trim().length === 0}
+            disabled={process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" || busy !== null || prompt.trim().length === 0}
             aria-label="Get a quote"
             className={cn(
               "ml-auto flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",

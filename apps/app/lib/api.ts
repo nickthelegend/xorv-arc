@@ -35,7 +35,7 @@ import {
 export { NETWORK } from "@/lib/network";
 export { formatAgo, formatDuration };
 
-export const BROKER_URL = (process.env.NEXT_PUBLIC_XORV_BROKER_URL?.trim() || "http://localhost:8402").replace(
+export const BROKER_URL = (process.env.NEXT_PUBLIC_XORV_BROKER_URL?.trim() || (process.env.NEXT_PUBLIC_XORV_READ_ONLY === "1" ? "" : "http://localhost:8402")).replace(
   /\/+$/,
   "",
 );

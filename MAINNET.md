@@ -86,7 +86,7 @@ in ETH there (≈ $0.10–0.50); a Gateway demo needs a USDC deposit on a source
 
 ## 3. Services
 
-| Service | Run | Env (in Vercel / Railway) |
+| Service | Run | Env (Vercel frontend / local broker) |
 |---|---|---|
 | **Broker** (`services/broker`, Docker image in `Dockerfile`) | `pnpm broker:start` or `docker compose up` | `XORV_NETWORK=eip155:5042`, `XORV_OPERATOR_KEY` (broker address), `XORV_FACILITATOR=self`, `XORV_KEEPER_KEY`, `XORV_LEDGER_ADDRESS`, `XORV_LEDGER_FROM_BLOCK`, `XORV_ESCROW_ADDRESS`, `XORV_REPUTATION_ADDRESS`, `XORV_CCIP_RECEIVER_ADDRESS`, `XORV_CCIP_SENDERS` (if any), `XORV_PUBLIC_URL` (its public https URL; baked into agent and feedback URIs), `XORV_APP_URL`, `XORV_CORS_ORIGINS`, optional `XORV_INDEXER_URL`, AI keys (`DASHSCOPE_API_KEY`, `MOONSHOT_API_KEY`, `TOKENHUB_API_KEY`), optional `XORV_MONGO_URI` |
 | **Refund keeper** | inside the broker (every 15 s sweep) | `XORV_KEEPER=on`, `XORV_KEEPER_KEY` |
