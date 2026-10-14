@@ -34,8 +34,7 @@ COPY services/broker/package.json services/broker/
 
 # --- build: full install, protocol compiled before the broker ---------------
 FROM base AS build
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @xorv/broker...
+RUN pnpm install --frozen-lockfile --filter @xorv/broker...
 COPY tsconfig.base.json ./
 COPY packages/protocol packages/protocol
 COPY services/broker services/broker
@@ -45,8 +44,7 @@ RUN pnpm --filter @xorv/protocol build && pnpm --filter @xorv/broker build
 
 # --- prod-deps: the runtime closure only (no tsc, tsx, vitest, @types) ------
 FROM base AS prod-deps
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod --filter @xorv/broker...
+RUN pnpm install --frozen-lockfile --prod --filter @xorv/broker...
 
 # --- runtime ----------------------------------------------------------------
 FROM ${NODE_IMAGE}
@@ -70,7 +68,9 @@ RUN mkdir -p /data && chown node:node /data
 ENV XORV_DB=/data/xorv-arc.db \
     XORV_BROKER_PORT=8402
 
-USER node
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 docker/broker-entrypoint.sh /usr/local/bin/broker-entrypoint
+ENTRYPOINT ["broker-entrypoint"]
 EXPOSE 8402
 
 # Follows XORV_BROKER_PORT, so moving the port doesn't mark a healthy broker

@@ -1,0 +1,342 @@
+[
+  {
+    "route": "/health",
+    "status": 200,
+    "body": {
+      "ok": true,
+      "at": 1791970277461
+    }
+  },
+  {
+    "route": "/api/network",
+    "status": 200,
+    "body": {
+      "network": "eip155:5042002",
+      "chainId": 5042002,
+      "label": "testnet",
+      "explorerUrl": "https://explorer.testnet.arc.io",
+      "usdc": {
+        "address": "0x3600000000000000000000000000000000000000",
+        "symbol": "USDC",
+        "decimals": 6,
+        "name": "USDC",
+        "version": "2",
+        "url": "https://explorer.testnet.arc.io/token/0x3600000000000000000000000000000000000000"
+      },
+      "facilitator": {
+        "mode": "self",
+        "description": "self-hosted (in-process)",
+        "address": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
+        "url": null,
+        "available": true,
+        "error": null
+      },
+      "operator": {
+        "address": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
+        "url": "https://explorer.testnet.arc.io/address/0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F"
+      },
+      "ledger": {
+        "address": "0x035c1f8CD3330EDd547230D578037Ebee4020Cbc",
+        "url": "https://explorer.testnet.arc.io/address/0x035c1f8CD3330EDd547230D578037Ebee4020Cbc",
+        "mode": "write",
+        "fromBlock": "67016507"
+      },
+      "erc8004": {
+        "identity": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+        "reputation": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+        "validation": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272"
+      },
+      "indexer": null,
+      "escrow": {
+        "address": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+        "url": "https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+        "deadlineSeconds": 1800
+      },
+      "arc": {
+        "gasToken": "USDC",
+        "finality": "deterministic, sub-second",
+        "memo": {
+          "address": "0x5294E9927c3306DcBaDb03fe70b92e01cCede505",
+          "url": "https://explorer.testnet.arc.io/address/0x5294E9927c3306DcBaDb03fe70b92e01cCede505",
+          "enabled": true
+        },
+        "reputation": {
+          "address": "0xe9cCAa186AA7D8dC8CD8c05F964a05E83296Fd89",
+          "url": "https://explorer.testnet.arc.io/address/0xe9cCAa186AA7D8dC8CD8c05F964a05E83296Fd89"
+        },
+        "gateway": {
+          "wallet": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+          "minter": "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B",
+          "sources": [
+            {
+              "domain": 6,
+              "name": "Base Sepolia"
+            },
+            {
+              "domain": 0,
+              "name": "Ethereum Sepolia"
+            },
+            {
+              "domain": 3,
+              "name": "Arbitrum Sepolia"
+            },
+            {
+              "domain": 1,
+              "name": "Avalanche Fuji"
+            },
+            {
+              "domain": 2,
+              "name": "OP Sepolia"
+            },
+            {
+              "domain": 7,
+              "name": "Polygon Amoy"
+            },
+            {
+              "domain": 26,
+              "name": "Arc Testnet"
+            }
+          ],
+          "enabled": true
+        },
+        "cctp": {
+          "tokenMessengerV2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+          "domain": 26,
+          "destinations": [
+            {
+              "name": "Base Sepolia",
+              "chainId": 84532,
+              "domain": 6
+            },
+            {
+              "name": "Ethereum Sepolia",
+              "chainId": 11155111,
+              "domain": 0
+            }
+          ]
+        },
+        "ccip": {
+          "router": "0xdE4E7FED43FAC37EB21aA0643d9852f75332eab8",
+          "chainSelector": "3034092155422581607",
+          "receiver": {
+            "address": "0x61d6eC91320be18A4D0499b872307fA781f427B0",
+            "url": "https://explorer.testnet.arc.io/address/0x61d6eC91320be18A4D0499b872307fA781f427B0"
+          },
+          "sources": [
+            {
+              "name": "Base Sepolia",
+              "chainId": 84532,
+              "selector": "10344971235874465080"
+            },
+            {
+              "name": "Ethereum Sepolia",
+              "chainId": 11155111,
+              "selector": "16015286601757825753"
+            }
+          ]
+        },
+        "keeper": {
+          "enabled": true,
+          "address": "0x4E03441892e8EBe4F35018bE59C83a64bDE40319"
+        }
+      },
+      "published": {
+        "registrations": 1,
+        "heartbeats": 1,
+        "receipts": 0,
+        "ratings": 0
+      },
+      "pendingReceipts": 0,
+      "lastPublishError": null,
+      "ai": {
+        "router": null,
+        "screener": null,
+        "verifier": null
+      },
+      "aiRoles": {
+        "screener": {
+          "enabled": false,
+          "provider": "hunyuan",
+          "label": "Hunyuan hy4",
+          "model": "hy4-preview",
+          "timeoutMs": 8000,
+          "reason": "no API key \u2014 set XORV_HUNYUAN_API_KEY or TOKENHUB_API_KEY",
+          "stats": null,
+          "failMode": "open",
+          "reasoning": "low"
+        },
+        "router": {
+          "enabled": false,
+          "provider": "qwen",
+          "label": "Qwen 3.8 Max",
+          "model": "qwen3.8-max",
+          "timeoutMs": 15000,
+          "reason": "no API key \u2014 set XORV_QWEN_API_KEY or DASHSCOPE_API_KEY",
+          "stats": null,
+          "agent": {
+            "maxTurns": 4,
+            "maxToolCalls": 6,
+            "thinking": true,
+            "thinkingBudget": 256
+          }
+        },
+        "verifier": {
+          "enabled": false,
+          "provider": "kimi",
+          "label": "Kimi K3",
+          "model": "kimi-k3",
+          "timeoutMs": 20000,
+          "reason": "no API key \u2014 set XORV_KIMI_API_KEY or MOONSHOT_API_KEY",
+          "stats": null,
+          "feedback": {
+            "onChain": false,
+            "address": null,
+            "reputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+            "tag1": "xorv-verified",
+            "published": 0,
+            "failed": 0,
+            "lastError": null,
+            "reason": "the verifier is off"
+          }
+        }
+      },
+      "feeBps": 0,
+      "epoch": 1791970236525,
+      "stats": {
+        "providersLive": 1,
+        "providersConnected": 1,
+        "capacity": 1,
+        "jobsTotal": 1,
+        "jobsCompleted": 1,
+        "paidUsdMicros": 0,
+        "heldUsdMicros": 1000,
+        "refundedUsdMicros": 0,
+        "settleMedianMs": 964,
+        "releaseMedianMs": null,
+        "timingSamples": 1,
+        "timingChain": "arc"
+      },
+      "heartbeatIntervalMs": 15000
+    }
+  },
+  {
+    "route": "/api/providers",
+    "status": 200,
+    "body": {
+      "providers": [
+        {
+          "id": "prv_r3NG3ZBrY0zA",
+          "label": "Echo (test; no AI model)",
+          "address": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+          "addressUrl": "https://explorer.testnet.arc.io/address/0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+          "agentId": null,
+          "agentUrl": null,
+          "endpoint": "http://localhost:34999",
+          "status": "online",
+          "connected": true,
+          "activeJobs": 0,
+          "capabilities": [
+            {
+              "id": "echo",
+              "adapter": "echo",
+              "displayName": "Echo (test)",
+              "model": null,
+              "priceUsdMicros": 1000,
+              "maxConcurrency": 2
+            }
+          ],
+          "lastHeartbeatAt": 1791970269831,
+          "registeredAt": 1791970238916,
+          "uptimeSeconds": 31,
+          "version": "0.2.0",
+          "region": null,
+          "stats": {
+            "jobsCompleted": 1,
+            "jobsFailed": 0,
+            "earnedUsdcMicros": 1000,
+            "avgDurationMs": 668
+          },
+          "registryTxHash": "0x8c948b6350420801702c254f4fc046b87f82e0c42b115e6c881d9fd1b626a8d7"
+        }
+      ]
+    }
+  },
+  {
+    "route": "/api/jobs",
+    "status": 200,
+    "body": {
+      "jobs": [
+        {
+          "id": "job_-zKrlXA5IgUy",
+          "private": false,
+          "title": null,
+          "prompt": "Hosted Arc testnet smoke: Echo test, not an AI model.",
+          "adapter": "echo",
+          "status": "completed",
+          "createdAt": 1791970276236,
+          "assignedAt": 1791970276237,
+          "startedAt": 1791970276246,
+          "completedAt": 1791970276913,
+          "providerId": "prv_r3NG3ZBrY0zA",
+          "providerLabel": "Echo (test; no AI model)",
+          "providerAddress": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+          "providerAgentId": null,
+          "priceUsdMicros": 1000,
+          "priceLabel": "$0.0010",
+          "payment": {
+            "asset": "usdc",
+            "assetAddress": "0x3600000000000000000000000000000000000000",
+            "amount": "1000",
+            "network": "eip155:5042002",
+            "txHash": "0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+            "payer": "0xa07dc14797A8F968E2e9831666e751E63e5c171e",
+            "settledAt": 1791970276235,
+            "explorerUrl": "https://explorer.testnet.arc.io/tx/0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+            "payTo": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+            "scheme": "escrow",
+            "escrow": {
+              "address": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+              "jobId": "0x80f0a668e7d48025b66b21dff5ee289f8a07297ac9868901eacb3811370bd8fa",
+              "deadline": 1791972074,
+              "state": "released",
+              "provider": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+              "explorerUrl": "https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+              "releaseTx": "0x159488358edba18fd608125ebd53ce8216261ac6586c02adf6e5baae050e3ead",
+              "resultHash": "0xf8bc665ccaed42bdcc37273d7698a49e228af96e7a183058ebe6b593354ac12e",
+              "settledAt": 1791970277671,
+              "settleTiming": {
+                "blockNumber": 67138206,
+                "gasUsed": "226046",
+                "gasPaidWei": "5651150000000000",
+                "gasPayer": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
+                "confirmMs": 758,
+                "finalMs": 813,
+                "sendMode": "async",
+                "chain": "arc"
+              }
+            },
+            "timing": {
+              "blockNumber": 67138203,
+              "gasUsed": "227090",
+              "gasPaidWei": "5677250000000000",
+              "gasPayer": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
+              "confirmMs": 964,
+              "finalMs": 1031,
+              "sendMode": "async",
+              "chain": "arc"
+            }
+          },
+          "result": "Echo from a Xorv provider node.\n\nYou asked (10 words):\n> Hosted Arc testnet smoke: Echo test, not an AI model.\n\nThis job was matched to a live provider, paid for with a real USDC\ntransfer over x402 on Arc, and executed here. Swap this capability for\nclaude-code, codex, grok, qwen, kimi, hunyuan or an OpenAI-compatible\nendpoint to sell actual model capacity \u2014 the payment path is identical.",
+          "resultHash": "0xf8bc665ccaed42bdcc37273d7698a49e228af96e7a183058ebe6b593354ac12e",
+          "error": null,
+          "receiptTxHash": null,
+          "routing": null,
+          "screening": null,
+          "verification": null,
+          "rating": null,
+          "eventCount": 5
+        }
+      ]
+    }
+  }
+]

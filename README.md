@@ -1,5 +1,8 @@
 <div align="center">
 
+Live: https://app-production-909f.up.railway.app (Arc testnet)
+
+
 <img src="brand/xorv-logo.svg" alt="Xorv" width="260" />
 
 **A decentralized AI capacity network, settled on Arc.**

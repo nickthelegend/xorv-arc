@@ -1,0 +1,161 @@
+{
+  "checkedAt": "2026-10-14T09:31:17.776Z",
+  "quote": {
+    "quoteId": "qte_ObTxBZV6K6ct",
+    "payUrl": "https://broker-production-d2c4.up.railway.app/api/jobs/qte_ObTxBZV6K6ct",
+    "network": "eip155:5042002",
+    "priceUsdMicros": 1000,
+    "priceLabel": "$0.0010",
+    "usdcAmount": "1000",
+    "expiresAt": 1791970574777,
+    "provider": {
+      "id": "prv_r3NG3ZBrY0zA",
+      "label": "Echo (test; no AI model)",
+      "address": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+      "addressUrl": "https://explorer.testnet.arc.io/address/0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+      "agentId": null,
+      "capability": "Echo (test)",
+      "adapter": "echo",
+      "model": null,
+      "stats": {
+        "jobsCompleted": 0,
+        "jobsFailed": 0,
+        "earnedUsdcMicros": 0,
+        "avgDurationMs": 0
+      }
+    },
+    "accepts": [
+      {
+        "scheme": "escrow",
+        "network": "eip155:5042002",
+        "asset": "0x3600000000000000000000000000000000000000",
+        "amount": "1000",
+        "payTo": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+        "maxTimeoutSeconds": 300,
+        "extra": {
+          "name": "USDC",
+          "version": "2",
+          "escrow": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+          "jobId": "0x80f0a668e7d48025b66b21dff5ee289f8a07297ac9868901eacb3811370bd8fa",
+          "deadline": 1791972074,
+          "provider": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87"
+        }
+      },
+      {
+        "scheme": "exact",
+        "network": "eip155:5042002",
+        "asset": "0x3600000000000000000000000000000000000000",
+        "amount": "1000",
+        "payTo": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+        "maxTimeoutSeconds": 300,
+        "extra": {
+          "name": "USDC",
+          "version": "2"
+        }
+      }
+    ],
+    "escrow": {
+      "address": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+      "jobId": "0x80f0a668e7d48025b66b21dff5ee289f8a07297ac9868901eacb3811370bd8fa",
+      "deadline": 1791972074,
+      "explorerUrl": "https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA"
+    },
+    "ccip": null,
+    "routing": null,
+    "screening": null
+  },
+  "paid": {
+    "jobId": "job_-zKrlXA5IgUy",
+    "txHash": "0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+    "payer": "0xa07dc14797A8F968E2e9831666e751E63e5c171e",
+    "explorerUrl": "https://explorer.testnet.arc.io/tx/0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+    "demo": true
+  },
+  "job": {
+    "id": "job_-zKrlXA5IgUy",
+    "private": false,
+    "title": null,
+    "prompt": "Hosted Arc testnet smoke: Echo test, not an AI model.",
+    "adapter": "echo",
+    "status": "completed",
+    "createdAt": 1791970276236,
+    "assignedAt": 1791970276237,
+    "startedAt": 1791970276246,
+    "completedAt": 1791970276913,
+    "providerId": "prv_r3NG3ZBrY0zA",
+    "providerLabel": "Echo (test; no AI model)",
+    "providerAddress": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+    "providerAgentId": null,
+    "priceUsdMicros": 1000,
+    "priceLabel": "$0.0010",
+    "payment": {
+      "asset": "usdc",
+      "assetAddress": "0x3600000000000000000000000000000000000000",
+      "amount": "1000",
+      "network": "eip155:5042002",
+      "txHash": "0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+      "payer": "0xa07dc14797A8F968E2e9831666e751E63e5c171e",
+      "settledAt": 1791970276235,
+      "explorerUrl": "https://explorer.testnet.arc.io/tx/0x89f5ceb8b5bbe7af4d4f9ab527cd333b4bcd75f18aca145c6cb8e50db7e80669",
+      "payTo": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+      "scheme": "escrow",
+      "escrow": {
+        "address": "0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+        "jobId": "0x80f0a668e7d48025b66b21dff5ee289f8a07297ac9868901eacb3811370bd8fa",
+        "deadline": 1791972074,
+        "state": "released",
+        "provider": "0x7eB3ca3Cb4712f7d833C6B86cB8E9B5f1fa77E87",
+        "explorerUrl": "https://explorer.testnet.arc.io/address/0x2827Bb9B8109d602fa617f043A10E47Ef5aEc9eA",
+        "releaseTx": "0x159488358edba18fd608125ebd53ce8216261ac6586c02adf6e5baae050e3ead",
+        "resultHash": "0xf8bc665ccaed42bdcc37273d7698a49e228af96e7a183058ebe6b593354ac12e",
+        "settledAt": 1791970277671
+      },
+      "timing": {
+        "blockNumber": 67138203,
+        "gasUsed": "227090",
+        "gasPaidWei": "5677250000000000",
+        "gasPayer": "0xE52CdC89762203459690B5B142EE6Fe3Dc5C1d2F",
+        "confirmMs": 964,
+        "finalMs": 1031,
+        "sendMode": "async",
+        "chain": "arc"
+      }
+    },
+    "result": "Echo from a Xorv provider node.\n\nYou asked (10 words):\n> Hosted Arc testnet smoke: Echo test, not an AI model.\n\nThis job was matched to a live provider, paid for with a real USDC\ntransfer over x402 on Arc, and executed here. Swap this capability for\nclaude-code, codex, grok, qwen, kimi, hunyuan or an OpenAI-compatible\nendpoint to sell actual model capacity — the payment path is identical.",
+    "resultHash": "0xf8bc665ccaed42bdcc37273d7698a49e228af96e7a183058ebe6b593354ac12e",
+    "error": null,
+    "receiptTxHash": null,
+    "routing": null,
+    "screening": null,
+    "verification": null,
+    "rating": null,
+    "eventCount": 5,
+    "events": [
+      {
+        "at": 1791970276245,
+        "kind": "status",
+        "text": "echo adapter engaged"
+      },
+      {
+        "at": 1791970276245,
+        "kind": "status",
+        "text": "reading the prompt"
+      },
+      {
+        "at": 1791970276467,
+        "kind": "status",
+        "text": "composing a reply"
+      },
+      {
+        "at": 1791970276688,
+        "kind": "status",
+        "text": "finishing up"
+      },
+      {
+        "at": 1791970276909,
+        "kind": "message",
+        "text": "Echo from a Xorv provider node.\n\nYou asked (10 words):\n> Hosted Arc testnet smoke: Echo test, not an AI model.\n\nThis job was matched to a live provider, paid for with a real USDC\ntransfer over x402 on Arc, and executed here. Swap this capability for\nclaude-code, codex, grok, qwen, kimi, hunyuan or an OpenAI-compatible\nendpoint to sell actual model capacity — the payment path is identical."
+      }
+    ]
+  }
+}

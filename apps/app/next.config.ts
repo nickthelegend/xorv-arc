@@ -8,6 +8,6 @@ import type { NextConfig } from "next";
  * code that produced it was packaged — so the demo route (`/api/pay`) and the
  * browser wallet path run the same `payQuote`, bundled the ordinary way.
  */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = { output: "standalone" };
 
 export default nextConfig;
